@@ -14,6 +14,7 @@ export default function Lookup() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Project | null>(null);
   const [copied, setCopied] = useState(false);
+  const [toast, setToast] = useState<{ message: string; show: boolean }>({ message: '', show: false });
   const showToast = (message: string) => {
     setToast({ message, show: true });
     setTimeout(() => setToast({ message: '', show: false }), 3000);
@@ -224,11 +225,11 @@ export default function Lookup() {
                     
                     {/* Meta Row */}
                     <div className="flex flex-wrap items-center gap-4 py-6 border-y-2 border-soy-bottle/5 mb-8 text-[11px] font-black uppercase tracking-wider italic">
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">Ã¢Â­Â</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">Ã°ÂÂÂ´</span> {result.forks}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">Ã°ÂÂÂ</span> {(result as any).openIssues || 0} OPEN</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">Ã°ÂÂÂ</span> {(result as any).lastCommit ? new Date((result as any).lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">Ã°ÂÂÂ</span> {result.license}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ÃÂ¢ÃÂ­ÃÂ</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ÃÂ°ÃÂÃÂÃÂ´</span> {result.forks}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ÃÂ°ÃÂÃÂÃÂ</span> {(result as any).openIssues || 0} OPEN</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ÃÂ°ÃÂÃÂÃÂ</span> {(result as any).lastCommit ? new Date((result as any).lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ÃÂ°ÃÂÃÂÃÂ</span> {result.license}</div>
                     </div>
 
                     {/* 5 Pillars Breakdown */}
@@ -304,7 +305,7 @@ export default function Lookup() {
                       {isWatching(result.owner, result.name) ? (
                         <>
                           <EyeOff size={20} />
-                          <span>Ã¢ÂÂ WATCHING | UNWATCH</span>
+                          <span>ÃÂ¢ÃÂÃÂ WATCHING | UNWATCH</span>
                         </>
                       ) : (
                         <>
