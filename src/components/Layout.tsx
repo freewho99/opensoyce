@@ -53,9 +53,9 @@ export default function Layout() {
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
 
-  // Search state
   const [query, setQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [focused, setFocused] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -73,11 +73,7 @@ export default function Layout() {
     const q = query.trim();
     if (!q) return;
     trackEvent('header_search', { query: q });
-    if (isRepo(q)) {
-      navigate(`/lookup?q=${encodeURIComponent(q)}`);
-    } else {
-      navigate(`/lookup?q=${encodeURIComponent(q)}`);
-    }
+    navigate(`/lookup?q=${encodeURIComponent(q)}`);
     setQuery('');
     setShowDropdown(false);
     inputRef.current?.blur();
@@ -89,11 +85,11 @@ export default function Layout() {
     navigate(path);
   };
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setShowDropdown(false);
+        setFocused(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -124,6 +120,7 @@ export default function Layout() {
 
       {/* Top Header */}
       <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label z-50 flex items-center px-5 gap-4">
+
         {/* Logo */}
         <div onClick={handleLogoClick} className="cursor-pointer flex-shrink-0">
           <Link to="/" className="flex items-center gap-2 group">
@@ -134,22 +131,38 @@ export default function Layout() {
           </Link>
         </div>
 
-        {/* Search bar — center */}
+        {/* Search — brutalist center bar */}
         <div ref={searchRef} className="flex-1 max-w-lg mx-auto relative">
           <form onSubmit={handleSearch} className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-soy-bottle/40 pointer-events-none" />
+            <Search
+              size={12}
+              strokeWidth={2.5}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-soy-bottle/50 pointer-events-none"
+            />
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={e => { setQuery(e.target.value); setShowDropdown(true); }}
-              onFocus={() => setShowDropdown(true)}
-              placeholder="Search projects, pages... (owner/repo to analyze)"
-              className="w-full bg-soy-bottle/5 border border-soy-bottle/20 pl-8 pr-10 py-1.5 text-[11px] font-bold uppercase tracking-widest placeholder:normal-case placeholder:font-normal placeholder:tracking-normal placeholder:text-soy-bottle/35 focus:outline-none focus:border-soy-bottle/50 focus:bg-white transition-colors"
+              onFocus={() => { setShowDropdown(true); setFocused(true); }}
+              placeholder="owner/repo or search pages..."
+              className={[
+                'w-full pl-8 pr-9 py-[7px]',
+                'text-[11px] font-black uppercase tracking-widest',
+                'border-2 bg-transparent',
+                'placeholder:normal-case placeholder:font-normal placeholder:tracking-normal placeholder:text-soy-bottle/40',
+                'focus:outline-none transition-colors duration-150',
+                focused
+                  ? 'border-soy-bottle bg-white'
+                  : 'border-soy-bottle/50 hover:border-soy-bottle/80',
+              ].join(' ')}
             />
             {query && (
-              <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 text-soy-bottle/40 hover:text-soy-red transition-colors">
-                <ArrowRight size={13} />
+              <button
+                type="submit"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-soy-bottle/60 hover:text-soy-red transition-colors"
+              >
+                <ArrowRight size={13} strokeWidth={2.5} />
               </button>
             )}
           </form>
@@ -162,31 +175,32 @@ export default function Layout() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.1 }}
-                className="absolute top-full left-0 right-0 mt-1 bg-soy-label border-2 border-soy-bottle/80 shadow-lg z-[100] overflow-hidden"
+                className="absolute top-full left-0 right-0 mt-0.5 bg-soy-label border-2 border-soy-bottle shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] z-[100] overflow-hidden"
               >
-                {/* If looks like a repo slug, show analyze option */}
                 {isRepo(query.trim()) && (
                   <button
                     onClick={() => handlePageSelect(`/lookup?q=${encodeURIComponent(query.trim())}`)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-soy-red hover:text-white transition-colors group border-b border-soy-bottle/10"
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-soy-red hover:text-white transition-colors group border-b-2 border-soy-bottle/20"
                   >
-                    <Search size={12} className="flex-shrink-0 text-soy-red group-hover:text-white" />
+                    <Search size={11} strokeWidth={2.5} className="flex-shrink-0 text-soy-red group-hover:text-white" />
                     <div className="text-left">
                       <div className="text-[10px] font-black uppercase tracking-widest">Analyze {query.trim()}</div>
                       <div className="text-[9px] opacity-60 normal-case font-normal tracking-normal">Run full OpenSoyce score</div>
                     </div>
-                    <ArrowRight size={11} className="ml-auto opacity-40 group-hover:opacity-100" />
+                    <ArrowRight size={11} strokeWidth={2.5} className="ml-auto opacity-50 group-hover:opacity-100" />
                   </button>
                 )}
 
-                {/* Page matches */}
-                {pageMatches.length > 0 && pageMatches.map(p => (
+                {pageMatches.length > 0 && pageMatches.map((p, i) => (
                   <button
                     key={p.path}
                     onClick={() => handlePageSelect(p.path)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-soy-bottle/5 hover:text-soy-red transition-colors group border-b border-soy-bottle/5 last:border-0"
+                    className={[
+                      'w-full flex items-center gap-3 px-4 py-2.5 hover:bg-soy-bottle/8 hover:text-soy-red transition-colors group',
+                      i < pageMatches.length - 1 ? 'border-b border-soy-bottle/10' : '',
+                    ].join(' ')}
                   >
-                    <ArrowRight size={11} className="flex-shrink-0 opacity-30 group-hover:opacity-100 group-hover:text-soy-red" />
+                    <ArrowRight size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-25 group-hover:opacity-100 group-hover:text-soy-red" />
                     <div className="text-left">
                       <div className="text-[10px] font-black uppercase tracking-widest">{p.label}</div>
                       <div className="text-[9px] opacity-50 normal-case font-normal tracking-normal">{p.hint}</div>
@@ -194,18 +208,17 @@ export default function Layout() {
                   </button>
                 ))}
 
-                {/* No matches — offer lookup */}
                 {pageMatches.length === 0 && !isRepo(query.trim()) && (
                   <button
                     onClick={() => handlePageSelect(`/lookup?q=${encodeURIComponent(query.trim())}`)}
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-soy-bottle/5 hover:text-soy-red transition-colors group"
                   >
-                    <Search size={12} className="flex-shrink-0 opacity-40 group-hover:text-soy-red group-hover:opacity-100" />
+                    <Search size={11} strokeWidth={2.5} className="flex-shrink-0 opacity-40 group-hover:text-soy-red group-hover:opacity-100" />
                     <div className="text-left">
-                      <div className="text-[10px] font-black uppercase tracking-widest">Search for &ldquo;{query}&rdquo;</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest">Search &ldquo;{query}&rdquo;</div>
                       <div className="text-[9px] opacity-50 normal-case font-normal tracking-normal">Look up on Lookup page</div>
                     </div>
-                    <ArrowRight size={11} className="ml-auto opacity-40 group-hover:opacity-100" />
+                    <ArrowRight size={11} strokeWidth={2.5} className="ml-auto opacity-40 group-hover:opacity-100" />
                   </button>
                 )}
               </motion.div>
@@ -294,11 +307,7 @@ export default function Layout() {
           <NavLink to="/settings" className={navLinkClass}>
             <Settings size={13} strokeWidth={2.5} /><span>Settings</span>
           </NavLink>
-          <a
-            href="mailto:support@opensoyce.com"
-            className={bottomLinkClass}
-            onClick={() => trackEvent('support_click', { source: 'nav' })}
-          >
+          <a href="mailto:support@opensoyce.com" className={bottomLinkClass} onClick={() => trackEvent('support_click', { source: 'nav' })}>
             <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
           </a>
         </div>
@@ -314,23 +323,12 @@ export default function Layout() {
               exit={{ opacity: 0, scale: 0.8 }}
               className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center text-white text-center p-8"
             >
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                className="text-8xl mb-12"
-              >
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="text-8xl mb-12">
                 🧪
               </motion.div>
-              <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">
-                YOU FOUND THE SECRET SAUCE
-              </h2>
-              <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">
-                THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY
-              </p>
-              <button
-                onClick={() => setShowSecretOverlay(false)}
-                className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase tracking-widest hover:bg-white hover:text-soy-red transition-colors"
-              >
+              <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">YOU FOUND THE SECRET SAUCE</h2>
+              <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY</p>
+              <button onClick={() => setShowSecretOverlay(false)} className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase tracking-widest hover:bg-white hover:text-soy-red transition-colors">
                 CLOSE
               </button>
             </motion.div>
@@ -347,9 +345,7 @@ export default function Layout() {
                   <div className="bg-soy-bottle p-1"><Sauce size={20} className="text-white" /></div>
                   <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
                 </div>
-                <p className="text-sm font-medium opacity-70 max-w-sm mb-6">
-                  OpenSoyce is the trust and discovery layer for the open-source ecosystem.
-                </p>
+                <p className="text-sm font-medium opacity-70 max-w-sm mb-6">OpenSoyce is the trust and discovery layer for the open-source ecosystem.</p>
                 <div className="flex gap-4">
                   <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors">
                     <Github size={20} />
