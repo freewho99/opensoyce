@@ -116,7 +116,7 @@ export default function Layout() {
           </div>
 
           {/* Right Nav */}
-          <div className="hidden md:flex items-center gap-6 text-xs font-bold uppercase tracking-widest ml-auto">
+          <div className="hidden md:flex items-center gap-6 text-xs font-bold uppercase tracking-widest ml-auto pl-6 border-l-2 border-soy-bottle">
             <NavLink to="/watchlist" className={navLinkClass}>
               Watchlist {watchlist.length > 0 && <span className="ml-1 bg-soy-red text-white px-1.5 py-0.5 rounded-sm tabular-nums">[{watchlist.length}]</span>}
             </NavLink>
