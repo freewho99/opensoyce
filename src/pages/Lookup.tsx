@@ -14,26 +14,7 @@ export default function Lookup() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Project | null>(null);
   const [copied, setCopied] = useState(false);
-  const [hasToken, setHasToken] = useState<boolean | null>(null);
-  const [toast, setToast] = useState<{message: string, show: boolean}>({message: '', show: false});
-  
-  const resultsRef = React.useRef<HTMLDivElement>(null);
-  const { isWatching, addToWatchlist, removeFromWatchlist } = useWatchlist();
-
-  // Parse input
-  const parts = input.split('/');
-  const owner = parts[0]?.trim() || '';
-  const repo = parts[1]?.trim() || '';
-  const isValid = input.includes('/') && owner && repo;
-
-  React.useEffect(() => {
-    fetch('/api/config')
-      .then(res => res.json())
-      .then(data => setHasToken(data.hasGithubToken))
-      .catch(() => setHasToken(false));
-  }, []);
-
-  const showToast = (message: string) => {
+  st showToast = (message: string) => {
     setToast({ message, show: true });
     setTimeout(() => setToast({ message: '', show: false }), 3000);
   };
@@ -145,12 +126,7 @@ export default function Lookup() {
         <h1 className="text-5xl font-bold uppercase italic tracking-tighter mb-4">Repo Lookup</h1>
         <p className="text-xl font-medium opacity-60">Import any GitHub project and generate its OpenSoyce Nutrition Label instantly.</p>
         
-        {hasToken === false && (
-          <div className="mt-4 p-3 bg-amber-50 border-l-4 border-amber-500 text-amber-700 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-            <AlertCircle size={14} />
-            <span>Note: Add GITHUB_TOKEN to .env to enable high-rate live data. Currently running in demo/limited mode.</span>
-          </div>
-        )}
+        
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
@@ -248,11 +224,11 @@ export default function Lookup() {
                     
                     {/* Meta Row */}
                     <div className="flex flex-wrap items-center gap-4 py-6 border-y-2 border-soy-bottle/5 mb-8 text-[11px] font-black uppercase tracking-wider italic">
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">⭐</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🍴</span> {result.forks}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🐛</span> {(result as any).openIssues || 0} OPEN</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">📅</span> {(result as any).lastCommit ? new Date((result as any).lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🔑</span> {result.license}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">â­</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð´</span> {result.forks}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {(result as any).openIssues || 0} OPEN</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {(result as any).lastCommit ? new Date((result as any).lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {result.license}</div>
                     </div>
 
                     {/* 5 Pillars Breakdown */}
@@ -328,7 +304,7 @@ export default function Lookup() {
                       {isWatching(result.owner, result.name) ? (
                         <>
                           <EyeOff size={20} />
-                          <span>✓ WATCHING | UNWATCH</span>
+                          <span>â WATCHING | UNWATCH</span>
                         </>
                       ) : (
                         <>
