@@ -1,4 +1,5 @@
-import { Link, NavLink, Outlet } from 'react-router-dom';
+
+      </div>import { Link, NavLink, Outlet } from 'react-router-dom';
 import { FlaskConical as Sauce, Github, Search, Menu, X, Check } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -48,11 +49,11 @@ export default function Layout() {
     `transition-colors duration-200 ${isActive ? 'text-soy-red' : ''}`;
 
   return (
-    <div className="min-h-screen ml-56 bg-soy-label font-sans text-soy-bottle">
-      {/* Left Sidebar */}
-      <aside className="fixed top-0 left-0 h-screen w-56 bg-soy-label border-r-4 border-soy-bottle flex flex-col z-50 overflow-y-auto">
-        {/* Logo */}
-        <div className="px-4 py-5 border-b-4 border-soy-bottle" onClick={handleLogoClick}>
+    <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
+
+      {/* Top Header - logo + auth only */}
+      <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label border-b-4 border-soy-bottle z-50 flex items-center justify-between px-4">
+        <div onClick={handleLogoClick}>
           <Link to="/" className="flex items-center gap-2 group">
             <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform duration-200 flex-shrink-0">
               <Sauce size={20} className="text-white" />
@@ -61,8 +62,35 @@ export default function Layout() {
           </Link>
         </div>
 
-        {/* Nav Links */}
-        <nav className="flex flex-col px-3 py-4 gap-1 flex-1">
+        {/* Auth - far right */}
+        <div className="flex items-center gap-3">
+          {isLoggedIn && user ? (
+            <div className="flex items-center gap-3">
+              <img src={user.avatar_url} alt={user.login} className="w-7 h-7 rounded-full border-2 border-soy-red" />
+              <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">{user.login}</span>
+              <button onClick={logout} className="text-[9px] text-soy-red hover:underline font-bold uppercase tracking-widest">Sign Out</button>
+            </div>
+          ) : (
+            <>
+              <Link to="/claim" className="bg-soy-red text-white px-4 py-1.5 font-black uppercase tracking-widest text-[10px] hover:bg-black transition-colors border-2 border-soy-bottle">
+                Claim
+              </Link>
+              <button
+                onClick={() => login()}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 border-2 border-soy-bottle px-3 py-1.5 text-[9px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-white transition-colors"
+              >
+                <Github size={12} />
+                {isLoading ? '...' : 'Sign In'}
+              </button>
+            </>
+          )}
+        </div>
+      </header>
+
+      {/* Left Sidebar - nav links */}
+      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r-4 border-soy-bottle flex flex-col z-40 overflow-y-auto">
+        <nav className="flex flex-col px-2 py-4 gap-0.5">
           <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
           <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>Remix</NavLink>
           <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>Methodology</NavLink>
@@ -72,9 +100,9 @@ export default function Layout() {
           <NavLink to="/watchlist" className={navLinkClass}>Watchlist</NavLink>
           <NavLink to="/pricing" className={navLinkClass}>Pricing</NavLink>
 
-          <div className="border-t-2 border-soy-bottle/30 my-3" />
+          <div className="border-t-2 border-soy-bottle/30 my-3 mx-2" />
 
-          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-2 mb-1">Tools</p>
+          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-3 mb-1">Tools</p>
           <NavLink to="/cli" className={navLinkClass}>CLI</NavLink>
           <NavLink to="/graveyard" className={navLinkClass}>☠ Graveyard</NavLink>
           <NavLink to="/heat-check" className={navLinkClass}>Heat Check</NavLink>
@@ -83,34 +111,10 @@ export default function Layout() {
           <NavLink to="/compare" className={navLinkClass}>Compare</NavLink>
           <NavLink to="/about" className={navLinkClass}>About</NavLink>
         </nav>
-
-        {/* Auth / Claim */}
-        <div className="px-3 py-4 border-t-4 border-soy-bottle flex flex-col gap-2">
-          {isLoggedIn && user ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <img src={user.avatar_url} alt={user.login} className="w-6 h-6 rounded-full border-2 border-soy-red" />
-                <span className="text-[9px] font-black uppercase tracking-widest truncate">{user.login}</span>
-              </div>
-              <button onClick={logout} className="text-[9px] text-soy-red hover:underline text-left font-bold uppercase tracking-widest">Sign Out</button>
-            </div>
-          ) : (
-            <>
-              <Link to="/claim" className="bg-soy-red text-white px-3 py-2 font-black uppercase tracking-widest text-[10px] text-center hover:bg-black transition-colors border-2 border-soy-bottle">
-                Claim
-              </Link>
-              <button
-                onClick={() => login()}
-                disabled={isLoading}
-                className="flex items-center justify-center gap-2 border-2 border-soy-bottle px-3 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-white transition-colors"
-              >
-                <Github size={12} />
-                {isLoading ? '...' : 'Sign In'}
-              </button>
-            </>
-          )}
-        </div>
       </aside>
+
+      {/* Main content - offset for header + sidebar */}
+      <div className="ml-52 pt-14">
 
       {/* Secret Overlay */}
       <AnimatePresence>
@@ -250,6 +254,7 @@ export default function Layout() {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 }
