@@ -1,6 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import { FlaskConical as Sauce, Github, Check, Settings, LifeBuoy } from 'lucide-react';
+import {
+  FlaskConical as Sauce,
+  Github,
+  Trophy,
+  Shuffle,
+  BookOpen,
+  Send,
+  Search,
+  Newspaper,
+  Star,
+  DollarSign,
+  Terminal,
+  Skull,
+  Flame,
+  ScanLine,
+  Wand2,
+  GitCompare,
+  Info,
+  Settings,
+  LifeBuoy,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -12,7 +32,7 @@ export default function Layout() {
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
 
-  const handleLogoClick = (e: React.MouseEvent) => {
+  const handleLogoClick = () => {
     const now = Date.now();
     const newCount = now - lastClickTime < 2000 ? clickCount + 1 : 1;
     setClickCount(newCount);
@@ -24,15 +44,19 @@ export default function Layout() {
   };
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors duration-200 hover:text-soy-red hover:bg-soy-bottle/10 rounded-sm ${isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : ''}`;
+    `flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm ${
+      isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : 'text-soy-bottle/70'
+    }`;
 
-  const bottomLinkClass = "flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors duration-200 hover:text-soy-red hover:bg-soy-bottle/10 rounded-sm opacity-70 hover:opacity-100";
+  const bottomLinkClass =
+    'flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm text-soy-bottle/50 hover:text-soy-bottle/80';
 
   return (
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
-      {/* Top Header: logo left, auth right */}
+
+      {/* ── Top Header ── */}
       <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label z-50 flex items-center justify-between px-5">
-        <div onClick={handleLogoClick}>
+        <div onClick={handleLogoClick} className="cursor-pointer">
           <Link to="/" className="flex items-center gap-2 group">
             <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform duration-200 flex-shrink-0">
               <Sauce size={20} className="text-white" />
@@ -49,10 +73,7 @@ export default function Layout() {
             </div>
           ) : (
             <>
-              <Link
-                to="/claim"
-                className="bg-soy-red text-white px-4 py-1.5 font-black uppercase tracking-widest text-[10px] hover:bg-black transition-colors border-2 border-soy-bottle"
-              >
+              <Link to="/claim" className="bg-soy-red text-white px-4 py-1.5 font-black uppercase tracking-widest text-[10px] hover:bg-black transition-colors border-2 border-soy-bottle">
                 Claim
               </Link>
               <button
@@ -68,80 +89,91 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Left Sidebar: nav links + bottom section */}
+      {/* ── Left Sidebar ── */}
       <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden">
-        {/* Scrollable nav area */}
-        <nav className="flex flex-col px-2 py-4 gap-0.5 flex-1 overflow-y-auto">
-          <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
-          <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>Remix</NavLink>
-          <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>Methodology</NavLink>
-          <NavLink to="/submit-project" onClick={() => trackEvent('submit_project_click', { source: 'nav' })} className={navLinkClass}>Submit</NavLink>
-          <NavLink to="/lookup" onClick={() => trackEvent('lookup_click', { source: 'nav' })} className={navLinkClass}>Lookup</NavLink>
-          <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>Blog</NavLink>
-          <NavLink to="/watchlist" className={navLinkClass}>Watchlist</NavLink>
-          <NavLink to="/pricing" className={navLinkClass}>Pricing</NavLink>
 
-          <div className="border-t-2 border-soy-bottle/30 my-3 mx-2" />
-          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-3 mb-1">Tools</p>
-          <NavLink to="/cli" className={navLinkClass}>CLI</NavLink>
-          <NavLink to="/graveyard" className={navLinkClass}>Graveyard</NavLink>
-          <NavLink to="/heat-check" className={navLinkClass}>Heat Check</NavLink>
-          <NavLink to="/scan" className={navLinkClass}>Scanner</NavLink>
-          <NavLink to="/recommend" className={navLinkClass}>AI Recipes</NavLink>
-          <NavLink to="/compare" className={navLinkClass}>Compare</NavLink>
-          <NavLink to="/about" className={navLinkClass}>About</NavLink>
+        {/* Scrollable nav */}
+        <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
+          <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>
+            <Trophy size={13} strokeWidth={2.5} /><span>Leaderboards</span>
+          </NavLink>
+          <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>
+            <Shuffle size={13} strokeWidth={2.5} /><span>Remix</span>
+          </NavLink>
+          <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>
+            <BookOpen size={13} strokeWidth={2.5} /><span>Methodology</span>
+          </NavLink>
+          <NavLink to="/submit-project" onClick={() => trackEvent('submit_project_click', { source: 'nav' })} className={navLinkClass}>
+            <Send size={13} strokeWidth={2.5} /><span>Submit</span>
+          </NavLink>
+          <NavLink to="/lookup" onClick={() => trackEvent('lookup_click', { source: 'nav' })} className={navLinkClass}>
+            <Search size={13} strokeWidth={2.5} /><span>Lookup</span>
+          </NavLink>
+          <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>
+            <Newspaper size={13} strokeWidth={2.5} /><span>Blog</span>
+          </NavLink>
+          <NavLink to="/watchlist" className={navLinkClass}>
+            <Star size={13} strokeWidth={2.5} /><span>Watchlist</span>
+          </NavLink>
+          <NavLink to="/pricing" className={navLinkClass}>
+            <DollarSign size={13} strokeWidth={2.5} /><span>Pricing</span>
+          </NavLink>
+
+          <div className="border-t border-soy-bottle/15 my-2 mx-1" />
+          <p className="text-[8px] font-black uppercase tracking-widest opacity-30 px-3 mb-1">Tools</p>
+
+          <NavLink to="/cli" className={navLinkClass}>
+            <Terminal size={13} strokeWidth={2.5} /><span>CLI</span>
+          </NavLink>
+          <NavLink to="/graveyard" className={navLinkClass}>
+            <Skull size={13} strokeWidth={2.5} /><span>Graveyard</span>
+          </NavLink>
+          <NavLink to="/heat-check" className={navLinkClass}>
+            <Flame size={13} strokeWidth={2.5} /><span>Heat Check</span>
+          </NavLink>
+          <NavLink to="/scan" className={navLinkClass}>
+            <ScanLine size={13} strokeWidth={2.5} /><span>Scanner</span>
+          </NavLink>
+          <NavLink to="/recommend" className={navLinkClass}>
+            <Wand2 size={13} strokeWidth={2.5} /><span>AI Recipes</span>
+          </NavLink>
+          <NavLink to="/compare" className={navLinkClass}>
+            <GitCompare size={13} strokeWidth={2.5} /><span>Compare</span>
+          </NavLink>
+          <NavLink to="/about" className={navLinkClass}>
+            <Info size={13} strokeWidth={2.5} /><span>About</span>
+          </NavLink>
         </nav>
 
-        {/* Bottom pinned section: dancing bottle + settings + support */}
-        <div className="border-t-2 border-soy-bottle/30 px-2 pb-3 pt-2 flex-shrink-0">
-          {/* Animated dancing soy sauce bottle */}
-          <div className="flex justify-center mb-3">
+        {/* Bottom pinned: subtle dancing bottle + settings + support */}
+        <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-3 flex-shrink-0">
+          {/* Tiny idle soy sauce bottle — barely there, almost breathing */}
+          <div className="flex justify-center mb-2">
             <motion.div
-              animate={{
-                rotate: [0, -15, 15, -10, 10, -5, 5, 0],
-                y: [0, -4, 0, -3, 0, -2, 0],
-                scale: [1, 1.05, 1, 1.05, 1],
-              }}
-              transition={{
-                duration: 1.2,
-                repeat: Infinity,
-                repeatDelay: 1.5,
-                ease: 'easeInOut',
-              }}
-              className="cursor-pointer"
-              title="SECRET SAUCE"
+              animate={{ y: [0, -1.5, 0], rotate: [0, 1, -1, 0] }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', repeatDelay: 2 }}
+              className="opacity-25 hover:opacity-60 transition-opacity duration-500 cursor-default"
+              title="✦"
             >
-              <div className="bg-soy-bottle p-2 rounded-sm border-2 border-soy-red shadow-lg">
-                <Sauce size={22} className="text-soy-red" />
-              </div>
-            </motion.div>
-            <motion.div
-              animate={{ opacity: [0, 1, 1, 0] }}
-              transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1.5, ease: 'easeInOut', delay: 0.3 }}
-              className="absolute ml-14 mt-1 text-[8px] font-black uppercase tracking-widest text-soy-red pointer-events-none"
-            >
-              ♪ ♫
+              <Sauce size={14} className="text-soy-bottle" />
             </motion.div>
           </div>
 
           <NavLink to="/settings" className={navLinkClass}>
-            <Settings size={13} />
-            Settings
+            <Settings size={13} strokeWidth={2.5} /><span>Settings</span>
           </NavLink>
           <a
             href="mailto:support@opensoyce.com"
             className={bottomLinkClass}
             onClick={() => trackEvent('support_click', { source: 'nav' })}
           >
-            <LifeBuoy size={13} />
-            Support
+            <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
           </a>
         </div>
       </aside>
 
-      {/* Page content: offset right of sidebar, below header */}
+      {/* ── Page content ── */}
       <div className="ml-52 pt-14">
-        {/* Secret Overlay */}
         <AnimatePresence>
           {showSecretOverlay && (
             <motion.div
@@ -173,19 +205,14 @@ export default function Layout() {
           )}
         </AnimatePresence>
 
-        <main>
-          <Outlet />
-        </main>
+        <main><Outlet /></main>
 
-        {/* Footer */}
         <footer className="border-t-4 border-soy-bottle bg-soy-label mt-20">
           <div className="max-w-7xl mx-auto px-4 py-12">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               <div className="col-span-1 md:col-span-2">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="bg-soy-bottle p-1">
-                    <Sauce size={20} className="text-white" />
-                  </div>
+                  <div className="bg-soy-bottle p-1"><Sauce size={20} className="text-white" /></div>
                   <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
                 </div>
                 <p className="text-sm font-medium opacity-70 max-w-sm mb-6">
