@@ -62,7 +62,7 @@ export default function Layout() {
           </div>
 
           {/* Left Nav */}
-          <div className="hidden md:flex items-center gap-8 text-xs font-bold uppercase tracking-widest shrink-0">
+          <div className="hidden md:flex items-center gap-8 text-xs font-bold uppercase tracking-widest shrink-0 ml-10">
             <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
             <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>Remix</NavLink>
             <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>Methodology</NavLink>
@@ -77,7 +77,7 @@ export default function Layout() {
               onMouseLeave={() => setShowTools(false)}
             >
               <button className="flex items-center gap-1 hover:text-soy-red transition-colors cursor-pointer py-4">
-                Tools <span className="text-[8px] transform translate-y-0.5">▼</span>
+                Tools <span className="text-[8px] transform translate-y-0.5">â¼</span>
               </button>
               
               <AnimatePresence>
@@ -91,7 +91,7 @@ export default function Layout() {
                     <div className="flex flex-col">
                       {[
                         { label: 'CLI', path: '/cli' },
-                        { label: '☠ Graveyard', path: '/graveyard' },
+                        { label: 'â  Graveyard', path: '/graveyard' },
                         { label: 'Scanner', path: '/scan' },
                         { label: 'AI Recipes', path: '/recommend' },
                         { label: 'Heat Check #001', path: '/heat-check' },
@@ -179,7 +179,7 @@ export default function Layout() {
             </NavLink>
             <div className="border-t border-soy-bottle/20 pt-4 opacity-40 text-[10px]">Tools</div>
             <NavLink to="/cli" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>CLI</NavLink>
-            <NavLink to="/graveyard" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>☠ Graveyard</NavLink>
+            <NavLink to="/graveyard" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>â  Graveyard</NavLink>
             <NavLink to="/heat-check" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Heat Check #001</NavLink>
             <NavLink to="/case-study/open-design" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Open Design Case Study</NavLink>
             <NavLink to="/scan" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Scanner</NavLink>
@@ -235,10 +235,10 @@ export default function Layout() {
               transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
               className="text-8xl mb-12"
             >
-              🧪
+              ð§ª
             </motion.div>
             <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-4">
-              YOU FOUND THE SECRET SAUCE 🤫
+              YOU FOUND THE SECRET SAUCE ð¤«
             </h2>
             <p className="text-xl md:text-2xl font-bold uppercase tracking-widest text-soy-red italic mb-12 max-w-2xl">
               THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY
@@ -282,7 +282,7 @@ export default function Layout() {
               <ul className="text-sm space-y-2 font-medium opacity-80">
                 <li><Link to="/leaderboards" className="hover:text-soy-red transition-colors">Leaderboards</Link></li>
                 <li><Link to="/blog" className="hover:text-soy-red transition-colors">Blog</Link></li>
-                <li><Link to="/submit-project" className="hover:text-soy-red transition-colors">Submit a Project →</Link></li>
+                <li><Link to="/submit-project" className="hover:text-soy-red transition-colors">Submit a Project â</Link></li>
                 <li><Link to="/faq" className="hover:text-soy-red transition-colors">FAQ</Link></li>
                 <li><Link to="/pricing" className="hover:text-soy-red transition-colors">Pricing</Link></li>
                 <li><Link to="/claim" className="hover:text-soy-red transition-colors">Claim Your Project</Link></li>
@@ -354,7 +354,7 @@ export default function Layout() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-soy-bottle flex flex-col md:flex-row justify-between gap-4 text-[10px] font-bold uppercase tracking-widest opacity-40">
-            <span>© 2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>
+            <span>Â© 2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>
             <span>POWERED BY SWARM INTELLIGENCE</span>
           </div>
         </div>
