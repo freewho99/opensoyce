@@ -54,7 +54,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
 
-      {/* ── Top Header ── */}
+      {/* Top Header */}
       <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label z-50 flex items-center justify-between px-5">
         <div onClick={handleLogoClick} className="cursor-pointer">
           <Link to="/" className="flex items-center gap-2 group">
@@ -89,10 +89,8 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* ── Left Sidebar ── */}
+      {/* Left Sidebar */}
       <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden">
-
-        {/* Scrollable nav */}
         <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
           <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>
             <Trophy size={13} strokeWidth={2.5} /><span>Leaderboards</span>
@@ -145,8 +143,72 @@ export default function Layout() {
           </NavLink>
         </nav>
 
-        {/* Bottom pinned: subtle dancing bottle + settings + support */}
-        <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-3 flex-shrink-0">
+        <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-2 flex-shrink-0">
+          <NavLink to="/settings" className={navLinkClass}>
+            <Settings size={13} strokeWidth={2.5} /><span>Settings</span>
+          </NavLink>
+          <a
+            href="mailto:support@opensoyce.com"
+            className={bottomLinkClass}
+            onClick={() => trackEvent('support_click', { source: 'nav' })}
+          >
+            <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
+          </a>
+        </div>
+      </aside>
+
+      {/* Page content */}
+      <div className="ml-52 pt-14">
+        <AnimatePresence>
+          {showSecretOverlay && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center text-white text-center p-8"
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                className="text-8xl mb-12"
+              >
+                🧪
+              </motion.div>
+              <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">
+                YOU FOUND THE SECRET SAUCE
+              </h2>
+              <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">
+                THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY
+              </p>
+              <button
+                onClick={() => setShowSecretOverlay(false)}
+                className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase tracking-widest hover:bg-white hover:text-soy-red transition-colors"
+              >
+                CLOSE
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <main><Outlet /></main>
+
+        <footer className="border-t-4 border-soy-bottle bg-soy-label mt-20">
+          <div className="max-w-7xl mx-auto px-4 py-12">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+              <div className="col-span-1 md:col-span-2">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="bg-soy-bottle p-1"><Sauce size={20} className="text-white" /></div>
+                  <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
+                </div>
+                <p className="text-sm font-medium opacity-70 max-w-sm mb-6">
+                  OpenSoyce is the trust and discovery layer for the open-source ecosystem.
+                </p>
+                <div className="flex gap-4">
+                  <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors">
+                    <Github size={20} />
+                  </a>
+                </div>
+              </div>
               <div>
                 <h4 className="font-black uppercase tracking-widest text-xs mb-4">Product</h4>
                 <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
