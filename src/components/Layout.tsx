@@ -1,52 +1,30 @@
-
-      </div>import { Link, NavLink, Outlet } from 'react-router-dom';
-import { FlaskConical as Sauce, Github, Search, Menu, X, Check } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useWatchlist } from '../context/WatchlistContext';
-import { trackEvent } from '../utils/analytics';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, NavLink, Outlet } from 'react-router-dom';
+import { FlaskConical as Sauce, Github, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
+declare function trackEvent(name: string, props?: Record<string, unknown>): void;
+
 export default function Layout() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showTools, setShowTools] = useState(false);
+  const { isLoggedIn, user, login, logout, isLoading } = useAuth();
+  const [showSecretOverlay, setShowSecretOverlay] = useState(false);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
-  const [showSecretOverlay, setShowSecretOverlay] = useState(false);
-  
-  const { watchlist } = useWatchlist();
-  const { user, isLoggedIn, login, logout, isLoading } = useAuth();
-  const [email, setEmail] = useState('');
-  const [subscribed, setSubscribed] = useState(false);
-
-  const handleSubscribe = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (email) {
-      setSubscribed(true);
-      setEmail('');
-    }
-  };
 
   const handleLogoClick = (e: React.MouseEvent) => {
     const now = Date.now();
-    if (now - lastClickTime < 2000) {
-      const newCount = clickCount + 1;
-      setClickCount(newCount);
-      if (newCount >= 5) {
-        setShowSecretOverlay(true);
-        setClickCount(0);
-      }
-    } else {
-      setClickCount(1);
+    const newCount = now - lastClickTime < 2000 ? clickCount + 1 : 1;
+    setClickCount(newCount);
+    if (newCount >= 5) {
+      setShowSecretOverlay(true);
+      setClickCount(0);
     }
     setLastClickTime(now);
   };
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `block px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors duration-200 hover:text-soy-red hover:bg-soy-bottle/10 ${isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : ''}`
-
-  const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) => 
-    `transition-colors duration-200 ${isActive ? 'text-soy-red' : ''}`;
+    `block px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors duration-200 hover:text-soy-red hover:bg-soy-bottle/10 rounded-sm ${isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : ''}`;
 
   return (
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
@@ -87,8 +65,8 @@ export default function Layout() {
       </header>
 
       {/* ── Left Sidebar: nav links only ── */}
-      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r-4 border-soy-bottle z-40 overflow-y-auto flex flex-col">
-        <nav className="flex flex-col px-2 py-4 gap-0.5 flex-1">
+      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r-4 border-soy-bottle z-40 overflow-y-auto">
+        <nav className="flex flex-col px-2 py-4 gap-0.5">
           <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
           <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>Remix</NavLink>
           <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>Methodology</NavLink>
@@ -100,7 +78,7 @@ export default function Layout() {
           <div className="border-t-2 border-soy-bottle/30 my-3 mx-2" />
           <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-3 mb-1">Tools</p>
           <NavLink to="/cli" className={navLinkClass}>CLI</NavLink>
-          <NavLink to="/graveyard" className={navLinkClass}>☠ Graveyard</NavLink>
+          <NavLink to="/graveyard" className={navLinkClass}>Graveyard</NavLink>
           <NavLink to="/heat-check" className={navLinkClass}>Heat Check</NavLink>
           <NavLink to="/scan" className={navLinkClass}>Scanner</NavLink>
           <NavLink to="/recommend" className={navLinkClass}>AI Recipes</NavLink>
@@ -123,13 +101,13 @@ export default function Layout() {
             >
               <motion.div
                 animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
                 className="text-8xl mb-12"
               >
                 🧪
               </motion.div>
               <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">
-                YOU FOUND THE SECRET SAUCE 🤫
+                YOU FOUND THE SECRET SAUCE
               </h2>
               <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">
                 THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY
@@ -160,10 +138,12 @@ export default function Layout() {
                   <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
                 </div>
                 <p className="text-sm font-medium opacity-70 max-w-sm mb-6">
-                  OpenSoyce is the trust and discovery layer for the open-source ecosystem. We believe health, security, and documentation are the secret ingredients to great software.
+                  OpenSoyce is the trust and discovery layer for the open-source ecosystem.
                 </p>
                 <div className="flex gap-4">
-                  <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors"><Github size={20} /></a>
+                  <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors">
+                    <Github size={20} />
+                  </a>
                 </div>
               </div>
               <div>
@@ -172,7 +152,6 @@ export default function Layout() {
                   <Link to="/leaderboards" className="hover:text-soy-red hover:opacity-100 transition-colors">Leaderboards</Link>
                   <Link to="/lookup" className="hover:text-soy-red hover:opacity-100 transition-colors">Lookup</Link>
                   <Link to="/methodology" className="hover:text-soy-red hover:opacity-100 transition-colors">Methodology</Link>
-                  <Link to="/submit-project" className="hover:text-soy-red hover:opacity-100 transition-colors">Submit a Project</Link>
                   <Link to="/pricing" className="hover:text-soy-red hover:opacity-100 transition-colors">Pricing</Link>
                 </div>
               </div>
@@ -180,15 +159,12 @@ export default function Layout() {
                 <h4 className="font-black uppercase tracking-widest text-xs mb-4">Company</h4>
                 <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
                   <Link to="/about" className="hover:text-soy-red hover:opacity-100 transition-colors">About</Link>
-                  <a href="#" className="hover:text-soy-red hover:opacity-100 transition-colors">Blog</a>
-                  <Link to="/submit-project" className="hover:text-soy-red hover:opacity-100 transition-colors">Submit a Project →</Link>
-                  <a href="#" className="hover:text-soy-red hover:opacity-100 transition-colors">FAQ</a>
-                  <a href="#" className="hover:text-soy-red hover:opacity-100 transition-colors">Privacy</a>
+                  <Link to="/submit-project" className="hover:text-soy-red hover:opacity-100 transition-colors">Submit a Project</Link>
                 </div>
               </div>
             </div>
             <div className="mt-12 pt-8 border-t border-soy-bottle flex flex-col md:flex-row justify-between gap-4 text-[10px] font-bold uppercase tracking-widest opacity-40">
-              <span>© 2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>
+              <span>2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>
               <span>POWERED BY SWARM INTELLIGENCE</span>
             </div>
           </div>
