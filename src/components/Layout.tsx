@@ -77,7 +77,7 @@ export default function Layout() {
               onMouseLeave={() => setShowTools(false)}
             >
               <button className="flex items-center gap-1 hover:text-soy-red transition-colors cursor-pointer py-4">
-                Tools <span className="text-[8px] transform translate-y-0.5">Ã¢ÂÂ¼</span>
+                Tools <span className="text-[8px] transform translate-y-0.5">▼</span>
               </button>
               
               <AnimatePresence>
@@ -91,7 +91,7 @@ export default function Layout() {
                     <div className="flex flex-col">
                       {[
                         { label: 'CLI', path: '/cli' },
-                        { label: 'Ã¢ÂÂ  Graveyard', path: '/graveyard' },
+                        { label: '☠ Graveyard', path: '/graveyard' },
                         { label: 'Scanner', path: '/scan' },
                         { label: 'AI Recipes', path: '/recommend' },
                         { label: 'Heat Check #001', path: '/heat-check' },
@@ -179,7 +179,7 @@ export default function Layout() {
             </NavLink>
             <div className="border-t border-soy-bottle/20 pt-4 opacity-40 text-[10px]">Tools</div>
             <NavLink to="/cli" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>CLI</NavLink>
-            <NavLink to="/graveyard" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Ã¢ÂÂ  Graveyard</NavLink>
+            <NavLink to="/graveyard" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>☠ Graveyard</NavLink>
             <NavLink to="/heat-check" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Heat Check #001</NavLink>
             <NavLink to="/case-study/open-design" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Open Design Case Study</NavLink>
             <NavLink to="/scan" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Scanner</NavLink>
