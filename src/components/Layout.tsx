@@ -51,8 +51,8 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
 
-      {/* Top Header - logo + auth only */}
-      <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label border-b-4 border-soy-bottle z-50 flex items-center justify-between px-4">
+      {/* ── Top Header: logo left, auth right ── */}
+      <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label border-b-4 border-soy-bottle z-50 flex items-center justify-between px-5">
         <div onClick={handleLogoClick}>
           <Link to="/" className="flex items-center gap-2 group">
             <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform duration-200 flex-shrink-0">
@@ -61,8 +61,6 @@ export default function Layout() {
             <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
           </Link>
         </div>
-
-        {/* Auth - far right */}
         <div className="flex items-center gap-3">
           {isLoggedIn && user ? (
             <div className="flex items-center gap-3">
@@ -88,9 +86,9 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Left Sidebar - nav links */}
-      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r-4 border-soy-bottle flex flex-col z-40 overflow-y-auto">
-        <nav className="flex flex-col px-2 py-4 gap-0.5">
+      {/* ── Left Sidebar: nav links only ── */}
+      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r-4 border-soy-bottle z-40 overflow-y-auto flex flex-col">
+        <nav className="flex flex-col px-2 py-4 gap-0.5 flex-1">
           <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
           <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>Remix</NavLink>
           <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>Methodology</NavLink>
@@ -99,9 +97,7 @@ export default function Layout() {
           <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>Blog</NavLink>
           <NavLink to="/watchlist" className={navLinkClass}>Watchlist</NavLink>
           <NavLink to="/pricing" className={navLinkClass}>Pricing</NavLink>
-
           <div className="border-t-2 border-soy-bottle/30 my-3 mx-2" />
-
           <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-3 mb-1">Tools</p>
           <NavLink to="/cli" className={navLinkClass}>CLI</NavLink>
           <NavLink to="/graveyard" className={navLinkClass}>☠ Graveyard</NavLink>
@@ -113,147 +109,91 @@ export default function Layout() {
         </nav>
       </aside>
 
-      {/* Main content - offset for header + sidebar */}
+      {/* ── Page content: offset right of sidebar, below header ── */}
       <div className="ml-52 pt-14">
 
-      {/* Secret Overlay */}
-      <AnimatePresence>
-        {showSecretOverlay && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4 text-center"
-          >
-            <motion.div 
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              className="text-8xl mb-12"
+        {/* Secret Overlay */}
+        <AnimatePresence>
+          {showSecretOverlay && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center text-white text-center p-8"
             >
-              Ã°ÂÂ§Âª
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                className="text-8xl mb-12"
+              >
+                🧪
+              </motion.div>
+              <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">
+                YOU FOUND THE SECRET SAUCE 🤫
+              </h2>
+              <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">
+                THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY
+              </p>
+              <button
+                onClick={() => setShowSecretOverlay(false)}
+                className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase tracking-widest hover:bg-white hover:text-soy-red transition-colors"
+              >
+                CLOSE
+              </button>
             </motion.div>
-            <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-4">
-              YOU FOUND THE SECRET SAUCE Ã°ÂÂ¤Â«
-            </h2>
-            <p className="text-xl md:text-2xl font-bold uppercase tracking-widest text-soy-red italic mb-12 max-w-2xl">
-              THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY
-            </p>
-            <button 
-              onClick={() => setShowSecretOverlay(false)}
-              className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase italic hover:bg-white hover:text-black transition-colors shadow-[8px_8px_0px_#fff]"
-            >
-              CLOSE
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      <main>
-        <Outlet />
-      </main>
+        <main>
+          <Outlet />
+        </main>
 
-      {/* Footer */}
-      <footer className="border-t-4 border-soy-bottle bg-soy-label mt-20">
-        <div className="max-w-7xl mx-auto px-4 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                 <div className="bg-soy-bottle p-1">
-                  <Sauce size={20} className="text-white" />
+        {/* Footer */}
+        <footer className="border-t-4 border-soy-bottle bg-soy-label mt-20">
+          <div className="max-w-7xl mx-auto px-4 py-12">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+              <div className="col-span-1 md:col-span-2">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="bg-soy-bottle p-1">
+                    <Sauce size={20} className="text-white" />
+                  </div>
+                  <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
                 </div>
-                <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
+                <p className="text-sm font-medium opacity-70 max-w-sm mb-6">
+                  OpenSoyce is the trust and discovery layer for the open-source ecosystem. We believe health, security, and documentation are the secret ingredients to great software.
+                </p>
+                <div className="flex gap-4">
+                  <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors"><Github size={20} /></a>
+                </div>
               </div>
-              <p className="text-sm font-medium opacity-70 max-w-sm mb-6">
-                OpenSoyce is the trust and discovery layer for the open-source ecosystem. 
-                We believe health, security, and documentation are the secret ingredients to great software.
-              </p>
-              <div className="flex gap-4">
-                <a href="#" className="hover:text-soy-red transition-colors"><Github size={20} /></a>
+              <div>
+                <h4 className="font-black uppercase tracking-widest text-xs mb-4">Product</h4>
+                <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
+                  <Link to="/leaderboards" className="hover:text-soy-red hover:opacity-100 transition-colors">Leaderboards</Link>
+                  <Link to="/lookup" className="hover:text-soy-red hover:opacity-100 transition-colors">Lookup</Link>
+                  <Link to="/methodology" className="hover:text-soy-red hover:opacity-100 transition-colors">Methodology</Link>
+                  <Link to="/submit-project" className="hover:text-soy-red hover:opacity-100 transition-colors">Submit a Project</Link>
+                  <Link to="/pricing" className="hover:text-soy-red hover:opacity-100 transition-colors">Pricing</Link>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-black uppercase tracking-widest text-xs mb-4">Company</h4>
+                <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
+                  <Link to="/about" className="hover:text-soy-red hover:opacity-100 transition-colors">About</Link>
+                  <a href="#" className="hover:text-soy-red hover:opacity-100 transition-colors">Blog</a>
+                  <Link to="/submit-project" className="hover:text-soy-red hover:opacity-100 transition-colors">Submit a Project →</Link>
+                  <a href="#" className="hover:text-soy-red hover:opacity-100 transition-colors">FAQ</a>
+                  <a href="#" className="hover:text-soy-red hover:opacity-100 transition-colors">Privacy</a>
+                </div>
               </div>
             </div>
-            
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-widest mb-4">Product</h4>
-              <ul className="text-sm space-y-2 font-medium opacity-80">
-                <li><Link to="/leaderboards" className="hover:text-soy-red transition-colors">Leaderboards</Link></li>
-                <li><Link to="/blog" className="hover:text-soy-red transition-colors">Blog</Link></li>
-                <li><Link to="/submit-project" className="hover:text-soy-red transition-colors">Submit a Project Ã¢ÂÂ</Link></li>
-                <li><Link to="/faq" className="hover:text-soy-red transition-colors">FAQ</Link></li>
-                <li><Link to="/pricing" className="hover:text-soy-red transition-colors">Pricing</Link></li>
-                <li><Link to="/claim" className="hover:text-soy-red transition-colors">Claim Your Project</Link></li>
-              </ul>
+            <div className="mt-12 pt-8 border-t border-soy-bottle flex flex-col md:flex-row justify-between gap-4 text-[10px] font-bold uppercase tracking-widest opacity-40">
+              <span>© 2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>
+              <span>POWERED BY SWARM INTELLIGENCE</span>
             </div>
+          </div>
+        </footer>
 
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-widest mb-4">Company</h4>
-              <ul className="text-sm space-y-2 font-medium opacity-80">
-                <li><Link to="/about" className="hover:text-soy-red transition-colors">About</Link></li>
-                <li><Link to="/about" className="hover:text-soy-red transition-colors">How it works</Link></li>
-                <li><Link to="/faq" className="hover:text-soy-red transition-colors">Contact</Link></li>
-                <li><Link to="/faq" className="hover:text-soy-red transition-colors">Privacy</Link></li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="mt-20 -mx-4">
-            <div className="bg-black py-16 px-4 text-center">
-              <h3 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter text-white mb-2">
-                GET THE WEEKLY SOYCE REPORT
-              </h3>
-              <p className="text-sm md:text-base font-bold uppercase tracking-widest text-soy-red italic mb-10 opacity-80">
-                Top repos, trend alerts, and dependency graveyard updates. No spam. Ever.
-              </p>
-              
-              <div className="max-w-md mx-auto">
-                <AnimatePresence mode="wait">
-                  {!subscribed ? (
-                    <motion.form 
-                      key="form"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      onSubmit={(e) => {
-                        handleSubscribe(e);
-                        trackEvent('email_subscribe', { source: 'footer' });
-                      }} 
-                      className="flex flex-col sm:flex-row gap-0"
-                    >
-                      <input 
-                        type="email" 
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="your@email.com"
-                        required
-                        className="flex-1 bg-soy-label border-2 border-white px-6 py-4 font-bold outline-none focus:bg-white transition-all text-black"
-                      />
-                      <button 
-                        type="submit"
-                        className="bg-soy-red text-white px-8 py-4 font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all border-2 border-soy-red"
-                      >
-                        SUBSCRIBE
-                      </button>
-                    </motion.form>
-                  ) : (
-                    <motion.div 
-                      key="success"
-                      initial={{ scale: 0.9, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className="bg-emerald-500 text-white p-4 font-black uppercase tracking-widest flex items-center justify-center gap-3 border-2 border-white italic"
-                    >
-                      <Check size={24} /> YOU'RE IN THE SAUCE.
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-12 pt-8 border-t border-soy-bottle flex flex-col md:flex-row justify-between gap-4 text-[10px] font-bold uppercase tracking-widest opacity-40">
-            <span>ÃÂ© 2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>
-            <span>POWERED BY SWARM INTELLIGENCE</span>
-          </div>
-        </div>
-      </footer>
       </div>
     </div>
   );
