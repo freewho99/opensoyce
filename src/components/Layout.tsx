@@ -31,7 +31,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
       {/* Top Header: logo left, auth right */}
-      <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label border-b-4 border-soy-bottle z-50 flex items-center justify-between px-5">
+      <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label z-50 flex items-center justify-between px-5">
         <div onClick={handleLogoClick}>
           <Link to="/" className="flex items-center gap-2 group">
             <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform duration-200 flex-shrink-0">
@@ -69,7 +69,7 @@ export default function Layout() {
       </header>
 
       {/* Left Sidebar: nav links + bottom section */}
-      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r-4 border-soy-bottle z-40 flex flex-col overflow-hidden">
+      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden">
         {/* Scrollable nav area */}
         <nav className="flex flex-col px-2 py-4 gap-0.5 flex-1 overflow-y-auto">
           <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
