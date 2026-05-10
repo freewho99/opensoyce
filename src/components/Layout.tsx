@@ -51,7 +51,7 @@ export default function Layout() {
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
       {/* Navigation */}
       <nav className="border-b-4 border-soy-bottle sticky top-0 bg-soy-label z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center">
           <div onClick={handleLogoClick}>
             <Link to="/" className="flex items-center gap-2 group">
               <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform">
