@@ -41,185 +41,76 @@ export default function Layout() {
     setLastClickTime(now);
   };
 
-  const navLinkClass = ({ isActive }: { isActive: boolean }) => 
-    `transition-colors duration-200 ${isActive ? 'text-soy-red underline decoration-2 underline-offset-8' : 'hover:text-soy-red'}`;
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `block px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors duration-200 hover:text-soy-red hover:bg-soy-bottle/10 ${isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : ''}`
 
   const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) => 
     `transition-colors duration-200 ${isActive ? 'text-soy-red' : ''}`;
 
   return (
-    <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
-      {/* Navigation */}
-      <nav className="border-b-4 border-soy-bottle sticky top-0 bg-soy-label z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center">
-          <div onClick={handleLogoClick}>
-            <Link to="/" className="flex items-center gap-2 group">
-              <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform">
-                <Sauce size={24} className="text-white" />
-              </div>
-              <span className="text-2xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
-            </Link>
-          </div>
-
-          {/* Left Nav */}
-          <div className="hidden md:flex items-center gap-8 text-xs font-bold uppercase tracking-widest shrink-0 ml-10">
-            <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
-            <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>Remix</NavLink>
-            <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>Methodology</NavLink>
-            <NavLink to="/submit-project" onClick={() => trackEvent('submit_project_click', { source: 'nav' })} className={navLinkClass}>Submit</NavLink>
-            <NavLink to="/lookup" onClick={() => trackEvent('lookup_click', { source: 'nav' })} className={navLinkClass}>Lookup</NavLink>
-            <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>Blog</NavLink>
-            
-            {/* Tools Dropdown */}
-            <div 
-              className="relative"
-              onMouseEnter={() => setShowTools(true)}
-              onMouseLeave={() => setShowTools(false)}
-            >
-              <button className="flex items-center gap-1 hover:text-soy-red transition-colors cursor-pointer py-4">
-                Tools <span className="text-[8px] transform translate-y-0.5">▼</span>
-              </button>
-              
-              <AnimatePresence>
-                {showTools && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute top-12 left-0 w-48 bg-black border-2 border-soy-bottle shadow-[4px_4px_0px_#D12D2D] z-50 overflow-hidden"
-                  >
-                    <div className="flex flex-col">
-                      {[
-                        { label: 'CLI', path: '/cli' },
-                        { label: '☠ Graveyard', path: '/graveyard' },
-                        { label: 'Scanner', path: '/scan' },
-                        { label: 'AI Recipes', path: '/recommend' },
-                        { label: 'Heat Check #001', path: '/heat-check' },
-                        { label: 'Open Design Case Study', path: '/case-study/open-design' },
-                        { label: 'About', path: '/about' },
-                        { label: 'Compare', path: '/compare' },
-                      ].map((item) => (
-                        <Link
-                          key={item.path}
-                          to={item.path}
-                          onClick={() => setShowTools(false)}
-                          className="px-4 py-3 text-white hover:bg-soy-red hover:text-white transition-colors text-[10px] font-black uppercase tracking-widest border-b border-soy-bottle/30 last:border-b-0"
-                        >
-                          {item.label}
-                        </Link>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+    <div className="min-h-screen ml-56 bg-soy-label font-sans text-soy-bottle">
+      {/* Left Sidebar */}
+      <aside className="fixed top-0 left-0 h-screen w-56 bg-soy-label border-r-4 border-soy-bottle flex flex-col z-50 overflow-y-auto">
+        {/* Logo */}
+        <div className="px-4 py-5 border-b-4 border-soy-bottle" onClick={handleLogoClick}>
+          <Link to="/" className="flex items-center gap-2 group">
+            <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform duration-200 flex-shrink-0">
+              <Sauce size={20} className="text-white" />
             </div>
-          </div>
-
-          {/* Right Nav */}
-          <div className="hidden md:flex items-center gap-6 text-xs font-bold uppercase tracking-widest ml-auto pl-6 border-l-2 border-soy-bottle">
-            <NavLink to="/watchlist" className={navLinkClass}>
-              Watchlist {watchlist.length > 0 && <span className="ml-1 bg-soy-red text-white px-1.5 py-0.5 rounded-sm tabular-nums">[{watchlist.length}]</span>}
-            </NavLink>
-            <NavLink to="/pricing" className={navLinkClass}>Pricing</NavLink>
-            {isLoggedIn && <NavLink to="/dashboard" className={navLinkClass}>Dashboard</NavLink>}
-            
-            <div className="flex items-center gap-4 pl-4 border-l-2 border-soy-bottle">
-              {isLoggedIn && user ? (
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col items-end">
-                    <span className="text-[8px] font-black uppercase tracking-widest leading-none mb-1">{user.login}</span>
-                    <button onClick={logout} className="text-[8px] text-soy-red hover:underline leading-none">SIGN OUT</button>
-                  </div>
-                  <img src={user.avatar_url} alt={user.login} className="w-8 h-8 rounded-full border-2 border-soy-red" />
-                  <Link 
-                    to="/claim" 
-                    className="bg-soy-red text-white px-4 py-2 rounded-full font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all shadow-[2px_2px_0px_#000]"
-                  >
-                    Claim
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <Link 
-                    to="/claim" 
-                    className="bg-soy-red text-white px-4 py-2 rounded-full font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all shadow-[2px_2px_0px_#000]"
-                  >
-                    Claim
-                  </Link>
-                  <button 
-                    onClick={() => login()}
-                    disabled={isLoading}
-                    className="flex items-center gap-2 border-2 border-soy-bottle px-3 py-1.5 hover:bg-soy-bottle hover:text-soy-label transition-colors text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
-                  >
-                    <Github size={14} />
-                    {isLoading ? '...' : 'SIGN IN'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Mobile Menu Button */}
-          <button className="md:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+            <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
+          </Link>
         </div>
 
-        {/* Mobile Nav */}
-        {isMenuOpen && (
-          <div className="md:hidden border-t-2 border-soy-bottle bg-soy-label p-4 flex flex-col gap-4 text-sm font-bold uppercase tracking-widest">
-            <NavLink to="/leaderboards" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Leaderboards</NavLink>
-            <NavLink to="/remix" onClick={() => { trackEvent('remix_click'); setIsMenuOpen(false); }} className={mobileNavLinkClass}>Remix</NavLink>
-            <NavLink to="/methodology" onClick={() => { trackEvent('methodology_click'); setIsMenuOpen(false); }} className={mobileNavLinkClass}>Methodology</NavLink>
-            <NavLink to="/submit-project" onClick={() => { trackEvent('submit_project_click'); setIsMenuOpen(false); }} className={mobileNavLinkClass}>Submit Project</NavLink>
-            <NavLink to="/lookup" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Lookup</NavLink>
-            <NavLink to="/blog" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Blog</NavLink>
-            <NavLink to="/watchlist" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>
-              Watchlist {watchlist.length > 0 && <span className="ml-1 bg-soy-red text-white px-2 py-0.5 rounded-sm">[{watchlist.length}]</span>}
-            </NavLink>
-            <div className="border-t border-soy-bottle/20 pt-4 opacity-40 text-[10px]">Tools</div>
-            <NavLink to="/cli" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>CLI</NavLink>
-            <NavLink to="/graveyard" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>☠ Graveyard</NavLink>
-            <NavLink to="/heat-check" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Heat Check #001</NavLink>
-            <NavLink to="/case-study/open-design" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Open Design Case Study</NavLink>
-            <NavLink to="/scan" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Scanner</NavLink>
-            <NavLink to="/recommend" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>AI Recipes</NavLink>
-            <NavLink to="/about" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>About</NavLink>
-            <NavLink to="/compare" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Compare</NavLink>
-            <div className="border-t border-soy-bottle/20 pt-4" />
-            <NavLink to="/pricing" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Pricing</NavLink>
-            {isLoggedIn && <NavLink to="/dashboard" onClick={() => setIsMenuOpen(false)} className={mobileNavLinkClass}>Dashboard</NavLink>}
-            <Link to="/claim" onClick={() => setIsMenuOpen(false)} className="bg-soy-red text-white px-4 py-3 text-center font-black">Claim Project</Link>
-            
-            {/* Mobile Auth */}
-            <div className="mt-4 pt-4 border-t-2 border-soy-bottle">
-              {isLoggedIn && user ? (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <img src={user.avatar_url} alt={user.login} className="w-8 h-8 rounded-full border-2 border-soy-bottle" />
-                    <span className="font-black uppercase tracking-widest">{user.login}</span>
-                  </div>
-                  <button 
-                    onClick={() => { logout(); setIsMenuOpen(false); }}
-                    className="text-soy-red font-black uppercase tracking-widest"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              ) : (
-                <button 
-                  onClick={() => { login(); setIsMenuOpen(false); }}
-                  disabled={isLoading}
-                  className="w-full flex items-center justify-center gap-2 bg-soy-bottle text-soy-label py-3 font-black uppercase tracking-widest disabled:opacity-50"
-                >
-                  <Github size={18} />
-                  {isLoading ? 'Connecting to GitHub...' : 'Sign In with GitHub'}
-                </button>
-              )}
+        {/* Nav Links */}
+        <nav className="flex flex-col px-3 py-4 gap-1 flex-1">
+          <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>Leaderboards</NavLink>
+          <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>Remix</NavLink>
+          <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>Methodology</NavLink>
+          <NavLink to="/submit-project" onClick={() => trackEvent('submit_project_click', { source: 'nav' })} className={navLinkClass}>Submit</NavLink>
+          <NavLink to="/lookup" onClick={() => trackEvent('lookup_click', { source: 'nav' })} className={navLinkClass}>Lookup</NavLink>
+          <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>Blog</NavLink>
+          <NavLink to="/watchlist" className={navLinkClass}>Watchlist</NavLink>
+          <NavLink to="/pricing" className={navLinkClass}>Pricing</NavLink>
+
+          <div className="border-t-2 border-soy-bottle/30 my-3" />
+
+          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-2 mb-1">Tools</p>
+          <NavLink to="/cli" className={navLinkClass}>CLI</NavLink>
+          <NavLink to="/graveyard" className={navLinkClass}>☠ Graveyard</NavLink>
+          <NavLink to="/heat-check" className={navLinkClass}>Heat Check</NavLink>
+          <NavLink to="/scan" className={navLinkClass}>Scanner</NavLink>
+          <NavLink to="/recommend" className={navLinkClass}>AI Recipes</NavLink>
+          <NavLink to="/compare" className={navLinkClass}>Compare</NavLink>
+          <NavLink to="/about" className={navLinkClass}>About</NavLink>
+        </nav>
+
+        {/* Auth / Claim */}
+        <div className="px-3 py-4 border-t-4 border-soy-bottle flex flex-col gap-2">
+          {isLoggedIn && user ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <img src={user.avatar_url} alt={user.login} className="w-6 h-6 rounded-full border-2 border-soy-red" />
+                <span className="text-[9px] font-black uppercase tracking-widest truncate">{user.login}</span>
+              </div>
+              <button onClick={logout} className="text-[9px] text-soy-red hover:underline text-left font-bold uppercase tracking-widest">Sign Out</button>
             </div>
-          </div>
-        )}
-      </nav>
+          ) : (
+            <>
+              <Link to="/claim" className="bg-soy-red text-white px-3 py-2 font-black uppercase tracking-widest text-[10px] text-center hover:bg-black transition-colors border-2 border-soy-bottle">
+                Claim
+              </Link>
+              <button
+                onClick={() => login()}
+                disabled={isLoading}
+                className="flex items-center justify-center gap-2 border-2 border-soy-bottle px-3 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-white transition-colors"
+              >
+                <Github size={12} />
+                {isLoading ? '...' : 'Sign In'}
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
 
       {/* Secret Overlay */}
       <AnimatePresence>
