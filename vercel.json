@@ -1,5 +1,11 @@
-{
-  "rewrites": [
-    { "source": "/api/github/:owner/:repo", "destination": "/api/github" }
-  ]
+{{
+    "rewrites": [
+          { "source": "/api/github/:owner/:repo", "destination": "/api/github" },
+          { "source": "/((?!api/).*)", "destination": "/index.html" }
+    ]
+}
+    "rewrites": [
+          { "source": "/api/github/:owner/:repo", "destination": "/api/github" },
+          { "source": "/((?!api/).*)", "destination": "/index.html" }
+    ]
 }
