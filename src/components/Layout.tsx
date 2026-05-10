@@ -1,6 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { FlaskConical as Sauce, Github, Search, ArrowRight } from 'lucide-react';
+import {
+  FlaskConical as Sauce,
+  Github,
+  Trophy,
+  Shuffle,
+  BookOpen,
+  Send,
+  Search,
+  Newspaper,
+  Star,
+  DollarSign,
+  Terminal,
+  Skull,
+  Flame,
+  ScanLine,
+  Wand2,
+  GitCompare,
+  Info,
+  Settings,
+  LifeBuoy,
+  ArrowRight,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -23,28 +44,6 @@ const PAGES = [
   { label: 'Compare', path: '/compare', hint: 'Side-by-side repo comparison' },
   { label: 'About', path: '/about', hint: 'About OpenSoyce' },
   { label: 'Settings', path: '/settings', hint: 'Your account settings' },
-];
-
-// Brutalist text glyphs — raw, deadpan, slightly unhinged
-const NAV = [
-  { to: '/leaderboards', glyph: '#1', label: 'Leaderboards', event: 'leaderboards_click' },
-  { to: '/remix',        glyph: '~>',  label: 'Remix',        event: 'remix_click' },
-  { to: '/methodology',  glyph: '?',   label: 'Methodology',  event: 'methodology_click' },
-  { to: '/submit-project', glyph: '+', label: 'Submit',       event: 'submit_project_click' },
-  { to: '/lookup',       glyph: '@',   label: 'Lookup',       event: 'lookup_click' },
-  { to: '/blog',         glyph: '//',  label: 'Blog',         event: 'blog_click' },
-  { to: '/watchlist',    glyph: '*',   label: 'Watchlist',    event: null },
-  { to: '/pricing',      glyph: '$',   label: 'Pricing',      event: null },
-];
-
-const TOOLS = [
-  { to: '/cli',        glyph: '>_',  label: 'CLI' },
-  { to: '/graveyard',  glyph: 'RIP', label: 'Graveyard' },
-  { to: '/heat-check', glyph: '!!',  label: 'Heat Check' },
-  { to: '/scan',       glyph: '[]',  label: 'Scanner' },
-  { to: '/recommend',  glyph: 'AI?', label: 'AI Recipes' },
-  { to: '/compare',    glyph: '<>',  label: 'Compare' },
-  { to: '/about',      glyph: 'i',   label: 'About' },
 ];
 
 export default function Layout() {
@@ -109,9 +108,7 @@ export default function Layout() {
       isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : 'text-soy-bottle/70'
     }`;
 
-  const glyphClass = 'w-[22px] flex-shrink-0 text-[10px] font-black font-mono text-center leading-none opacity-60 group-hover:opacity-100';
-
-  const bottomLinkClass = 'flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm text-soy-bottle/50 hover:text-soy-bottle/80 group';
+  const bottomLinkClass = 'flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm text-soy-bottle/50 hover:text-soy-bottle/80';
 
   return (
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
@@ -219,55 +216,60 @@ export default function Layout() {
       {/* Left Sidebar */}
       <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden">
         <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
-          {NAV.map(({ to, glyph, label, event }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={() => event && trackEvent(event, { source: 'nav' })}
-              className={({ isActive }) =>
-                `group flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm ${
-                  isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : 'text-soy-bottle/70'
-                }`
-              }
-            >
-              <span className={glyphClass}>{glyph}</span>
-              <span>{label}</span>
-            </NavLink>
-          ))}
-
+          <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>
+            <Trophy size={13} strokeWidth={2.5} /><span>Leaderboards</span>
+          </NavLink>
+          <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>
+            <Shuffle size={13} strokeWidth={2.5} /><span>Remix</span>
+          </NavLink>
+          <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>
+            <BookOpen size={13} strokeWidth={2.5} /><span>Methodology</span>
+          </NavLink>
+          <NavLink to="/submit-project" onClick={() => trackEvent('submit_project_click', { source: 'nav' })} className={navLinkClass}>
+            <Send size={13} strokeWidth={2.5} /><span>Submit</span>
+          </NavLink>
+          <NavLink to="/lookup" onClick={() => trackEvent('lookup_click', { source: 'nav' })} className={navLinkClass}>
+            <Search size={13} strokeWidth={2.5} /><span>Lookup</span>
+          </NavLink>
+          <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>
+            <Newspaper size={13} strokeWidth={2.5} /><span>Blog</span>
+          </NavLink>
+          <NavLink to="/watchlist" className={navLinkClass}>
+            <Star size={13} strokeWidth={2.5} /><span>Watchlist</span>
+          </NavLink>
+          <NavLink to="/pricing" className={navLinkClass}>
+            <DollarSign size={13} strokeWidth={2.5} /><span>Pricing</span>
+          </NavLink>
           <div className="border-t border-soy-bottle/15 my-2 mx-1" />
           <p className="text-[8px] font-black uppercase tracking-widest opacity-30 px-3 mb-1">Tools</p>
-
-          {TOOLS.map(({ to, glyph, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `group flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm ${
-                  isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : 'text-soy-bottle/70'
-                }`
-              }
-            >
-              <span className={glyphClass}>{glyph}</span>
-              <span>{label}</span>
-            </NavLink>
-          ))}
+          <NavLink to="/cli" className={navLinkClass}>
+            <Terminal size={13} strokeWidth={2.5} /><span>CLI</span>
+          </NavLink>
+          <NavLink to="/graveyard" className={navLinkClass}>
+            <Skull size={13} strokeWidth={2.5} /><span>Graveyard</span>
+          </NavLink>
+          <NavLink to="/heat-check" className={navLinkClass}>
+            <Flame size={13} strokeWidth={2.5} /><span>Heat Check</span>
+          </NavLink>
+          <NavLink to="/scan" className={navLinkClass}>
+            <ScanLine size={13} strokeWidth={2.5} /><span>Scanner</span>
+          </NavLink>
+          <NavLink to="/recommend" className={navLinkClass}>
+            <Wand2 size={13} strokeWidth={2.5} /><span>AI Recipes</span>
+          </NavLink>
+          <NavLink to="/compare" className={navLinkClass}>
+            <GitCompare size={13} strokeWidth={2.5} /><span>Compare</span>
+          </NavLink>
+          <NavLink to="/about" className={navLinkClass}>
+            <Info size={13} strokeWidth={2.5} /><span>About</span>
+          </NavLink>
         </nav>
-
         <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-2 flex-shrink-0">
-          <NavLink to="/settings"
-            className={({ isActive }) =>
-              `group flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm ${
-                isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : 'text-soy-bottle/70'
-              }`
-            }
-          >
-            <span className={glyphClass}>::</span>
-            <span>Settings</span>
+          <NavLink to="/settings" className={navLinkClass}>
+            <Settings size={13} strokeWidth={2.5} /><span>Settings</span>
           </NavLink>
           <a href="mailto:support@opensoyce.com" className={bottomLinkClass} onClick={() => trackEvent('support_click', { source: 'nav' })}>
-            <span className={glyphClass}>?!</span>
-            <span>Support</span>
+            <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
           </a>
         </div>
       </aside>
@@ -285,9 +287,7 @@ export default function Layout() {
             </motion.div>
           )}
         </AnimatePresence>
-
         <main><Outlet /></main>
-
         <footer className="border-t-4 border-soy-bottle bg-soy-label mt-20">
           <div className="max-w-7xl mx-auto px-4 py-12">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
