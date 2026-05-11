@@ -17,9 +17,57 @@ async function startServer() {
 
   const gh = new GitHubService();
 
-  // Simple in-memory cache
+  // Simple in-memory cache with TTL and a FIFO size cap.
   const cache = new Map<string, { data: any, timestamp: number }>();
   const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  const CACHE_MAX_ENTRIES = 200;
+
+  function cacheGet(key: string) {
+    const entry = cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp >= CACHE_TTL) {
+      cache.delete(key);
+      return null;
+    }
+    return entry.data;
+  }
+
+  function cacheSet(key: string, data: any) {
+    cache.set(key, { data, timestamp: Date.now() });
+    while (cache.size > CACHE_MAX_ENTRIES) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) break;
+      cache.delete(oldest);
+    }
+  }
+
+  async function getCachedAnalysis(owner: string, repo: string) {
+    const key = `analyze:${owner}/${repo}`;
+    const hit = cacheGet(key);
+    if (hit) return hit;
+
+    const [repoData, commits, contributors] = await Promise.all([
+      gh.getRepo(owner, repo),
+      gh.getCommits(owner, repo),
+      gh.getContributors(owner, repo)
+    ]);
+    if (!repoData) return null;
+
+    const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || []);
+    const data = {
+      ...scoreResult,
+      repo: {
+        name: repoData.name,
+        description: repoData.description,
+        url: repoData.html_url,
+        owner: repoData.owner.login,
+        avatar: repoData.owner.avatar_url,
+        id: repoData.id.toString()
+      }
+    };
+    cacheSet(key, data);
+    return data;
+  }
 
   // API Routes
   app.get("/api/health", (req, res) => {
@@ -38,41 +86,10 @@ async function startServer() {
       return res.status(400).json({ error: 'Owner and repo are required' });
     }
 
-    const cacheKey = `analyze:${owner}/${repo}`;
-    if (cache.has(cacheKey)) {
-      const cached = cache.get(cacheKey)!;
-      if (Date.now() - cached.timestamp < CACHE_TTL) {
-        return res.json(cached.data);
-      }
-    }
-
     try {
-      const [repoData, commits, contributors] = await Promise.all([
-        gh.getRepo(owner, repo),
-        gh.getCommits(owner, repo),
-        gh.getContributors(owner, repo)
-      ]);
-
-      if (!repoData) {
-        return res.status(404).json({ error: 'REPO_NOT_FOUND' });
-      }
-
-      const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || []);
-      
-      const responseData = {
-        ...scoreResult,
-        repo: {
-          name: repoData.name,
-          description: repoData.description,
-          url: repoData.html_url,
-          owner: repoData.owner.login,
-          avatar: repoData.owner.avatar_url,
-          id: repoData.id.toString()
-        }
-      };
-
-      cache.set(cacheKey, { data: responseData, timestamp: Date.now() });
-      res.json(responseData);
+      const data = await getCachedAnalysis(owner, repo);
+      if (!data) return res.status(404).json({ error: 'REPO_NOT_FOUND' });
+      res.json(data);
     } catch (error: any) {
       console.error('Analysis Error:', error);
       if (error.message === 'RATE_LIMIT_HIT') {
@@ -97,20 +114,8 @@ async function startServer() {
   app.get("/api/badge/:owner/:repo.svg", async (req, res) => {
     const { owner, repo } = req.params;
     try {
-      const cacheKey = `analyze:${owner}/${repo}`;
-      let data;
-      
-      if (cache.has(cacheKey)) {
-        data = cache.get(cacheKey)!.data;
-      } else {
-        const [repoData, commits, contributors] = await Promise.all([
-          gh.getRepo(owner, repo),
-          gh.getCommits(owner, repo),
-          gh.getContributors(owner, repo)
-        ]);
-        if (!repoData) throw new Error('Not found');
-        data = calculateSoyceScore(repoData, commits || [], contributors || []);
-      }
+      const data = await getCachedAnalysis(owner, repo);
+      if (!data) return res.status(404).send('Not found');
 
       const score = data.total ?? 0;
       const color = score >= 8 ? '#22c55e' : score >= 6 ? '#f59e0b' : '#E63322';
@@ -133,47 +138,38 @@ async function startServer() {
     }
   });
 
-  // Legacy endpoint for backward compatibility (optional but good to keep or update)
+  // Legacy endpoint for backward compatibility. Returns a percentage-scaled
+  // shape distinct from /api/analyze; always derived from the same cached
+  // analysis, so the response shape no longer depends on cache state.
   app.get("/api/github/:owner/:repo", async (req, res) => {
     const { owner, repo } = req.params;
-    // Just proxy to analyze logic for now
-    req.body = { owner, repo };
-    // Reuse analyze logic
-    const cacheKey = `analyze:${owner}/${repo}`;
-    if (cache.has(cacheKey)) {
-        res.json(cache.get(cacheKey)!.data);
-    } else {
-        // Simple redirect or re-implementation
-        try {
-            const [repoData, commits, contributors] = await Promise.all([
-                gh.getRepo(owner, repo),
-                gh.getCommits(owner, repo),
-                gh.getContributors(owner, repo)
-            ]);
-            if (!repoData) return res.status(404).json({ error: 'Not found' });
-            const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || []);
-            res.json({
-                ...scoreResult,
-                // Map to old project structure if needed
-                name: repoData.name,
-                owner: repoData.owner.login,
-                description: repoData.description,
-                stars: repoData.stargazers_count,
-                forks: repoData.forks_count,
-                score: {
-                    overall: scoreResult.total,
-                    maintenance: scoreResult.breakdown.maintenance * 33.3, // scale to 100 for old UI
-                    security: scoreResult.breakdown.security * 50,
-                    community: scoreResult.breakdown.community * 40,
-                    documentation: scoreResult.breakdown.documentation * 66.6
-                },
-                techStack: repoData.topics || [],
-                license: repoData.license ? repoData.license.spdx_id : 'No License',
-                lastScanned: 'Just now'
-            });
-        } catch (e: any) {
-            res.status(500).json({ error: e.message });
-        }
+    try {
+      const data = await getCachedAnalysis(owner, repo);
+      if (!data) return res.status(404).json({ error: 'Not found' });
+
+      const { breakdown, meta, total, repo: repoBlock } = data;
+      res.json({
+        total,
+        breakdown,
+        meta,
+        name: repoBlock.name,
+        owner: repoBlock.owner,
+        description: repoBlock.description,
+        stars: meta.totalStars,
+        forks: meta.totalForks,
+        score: {
+          overall: total,
+          maintenance: (breakdown.maintenance / 3.0) * 100,
+          security: (breakdown.security / 2.0) * 100,
+          community: (breakdown.community / 2.5) * 100,
+          documentation: (breakdown.documentation / 1.5) * 100,
+        },
+        techStack: meta.topics,
+        license: meta.license,
+        lastScanned: 'Just now'
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
