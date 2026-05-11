@@ -250,11 +250,11 @@ export default function Lookup() {
                     
                     {/* Meta Row */}
                     <div className="flex flex-wrap items-center gap-4 py-6 border-y-2 border-soy-bottle/5 mb-8 text-[11px] font-black uppercase tracking-wider italic">
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">â­</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð´</span> {result.forks}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {result.openIssues || 0} OPEN</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {result.lastCommit ? new Date(result.lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {result.license}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">⭐</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🍴</span> {result.forks}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🐛</span> {result.openIssues || 0} OPEN</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">📅</span> {result.lastCommit ? new Date(result.lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🔑</span> {result.license}</div>
                     </div>
 
                     {/* 5 Pillars Breakdown */}
@@ -330,7 +330,7 @@ export default function Lookup() {
                       {isWatching(result.owner, result.name) ? (
                         <>
                           <EyeOff size={20} />
-                          <span>â WATCHING | UNWATCH</span>
+                          <span>✓ WATCHING | UNWATCH</span>
                         </>
                       ) : (
                         <>
