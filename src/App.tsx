@@ -90,7 +90,6 @@ export default function App() {
           <Route path="/compare/skills-agents" element={<SkillsAgentsCompare />} />
           <Route path="/challenge" element={<Challenge />} />
           <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />
-          <Route path="/compare" element={<Compare />} />
           <Route path="/compare/:slug" element={<Compare />} />
           <Route path="/graveyard" element={<Graveyard />} />
           <Route path="/dashboard" element={<Dashboard />} />

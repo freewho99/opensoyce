@@ -2,19 +2,35 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# OpenSoyce
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/fa32f302-b4de-4410-9921-22a9bd58d16a
+A "nutrition label" for open-source GitHub repositories. Enter `owner/repo`, get a 0-10 Soyce Score across five pillars (maintenance, community, security, documentation, activity) and an embeddable README badge.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js 20+
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+
+   ```sh
+   npm install
+   ```
+
+2. Optional — create `.env` and set `GITHUB_TOKEN` to a GitHub Personal Access Token. Without it, the GitHub API allows 60 unauthenticated requests per hour; with it, 5000.
+
+   ```sh
+   GITHUB_TOKEN=ghp_...
+   ```
+
+3. Run the dev server (Express + Vite middleware on port 3000):
+
+   ```sh
+   npm run dev
+   ```
+
+## Project Layout
+
+- `server.ts` — Express dev server (API routes + Vite SPA)
+- `api/` — Vercel serverless functions used in production
+- `src/shared/scoreCalculator.js` — single scoring algorithm shared by both runtimes
+- `src/pages/Lookup.tsx` — the repo lookup UI
