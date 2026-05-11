@@ -28,6 +28,8 @@ export type Project = {
   techStack: string[];
   license: string;
   scoreTrend: 'up' | 'down' | 'flat';
+  openIssues?: number;
+  lastCommit?: string;
   parentId?: string; // ID of the original project if this is a fork
   parentName?: string;
   parentOwner?: string;
