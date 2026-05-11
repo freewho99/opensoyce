@@ -39,11 +39,7 @@ export class GitHubService {
   }
 
   async getContributors(owner: string, repo: string) {
-    return this.fetchGH(`/repos/${owner}/${repo}/contributors?per_page=10`);
-  }
-
-  async getIssues(owner: string, repo: string) {
-    return this.fetchGH(`/repos/${owner}/${repo}/issues?state=open&per_page=20`);
+    return this.fetchGH(`/repos/${owner}/${repo}/contributors?per_page=30`);
   }
 
   async getWorkflows(owner: string, repo: string) {

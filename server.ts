@@ -3,7 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { GitHubService } from "./src/server/github.js";
-import { calculateSoyceScore } from "./src/server/scoreCalculator.js";
+import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,18 +47,17 @@ async function startServer() {
     }
 
     try {
-      const [repoData, commits, contributors, issues] = await Promise.all([
+      const [repoData, commits, contributors] = await Promise.all([
         gh.getRepo(owner, repo),
         gh.getCommits(owner, repo),
-        gh.getContributors(owner, repo),
-        gh.getIssues(owner, repo)
+        gh.getContributors(owner, repo)
       ]);
 
       if (!repoData) {
         return res.status(404).json({ error: 'REPO_NOT_FOUND' });
       }
 
-      const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || [], issues || []);
+      const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || []);
       
       const responseData = {
         ...scoreResult,
@@ -104,14 +103,13 @@ async function startServer() {
       if (cache.has(cacheKey)) {
         data = cache.get(cacheKey)!.data;
       } else {
-        const [repoData, commits, contributors, issues] = await Promise.all([
+        const [repoData, commits, contributors] = await Promise.all([
           gh.getRepo(owner, repo),
           gh.getCommits(owner, repo),
-          gh.getContributors(owner, repo),
-          gh.getIssues(owner, repo)
+          gh.getContributors(owner, repo)
         ]);
         if (!repoData) throw new Error('Not found');
-        data = calculateSoyceScore(repoData, commits || [], contributors || [], issues || []);
+        data = calculateSoyceScore(repoData, commits || [], contributors || []);
       }
 
       const score = data.total ?? 0;
@@ -147,14 +145,13 @@ async function startServer() {
     } else {
         // Simple redirect or re-implementation
         try {
-            const [repoData, commits, contributors, issues] = await Promise.all([
+            const [repoData, commits, contributors] = await Promise.all([
                 gh.getRepo(owner, repo),
                 gh.getCommits(owner, repo),
-                gh.getContributors(owner, repo),
-                gh.getIssues(owner, repo)
+                gh.getContributors(owner, repo)
             ]);
             if (!repoData) return res.status(404).json({ error: 'Not found' });
-            const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || [], issues || []);
+            const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || []);
             res.json({
                 ...scoreResult,
                 // Map to old project structure if needed
