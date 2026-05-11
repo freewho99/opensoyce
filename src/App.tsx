@@ -40,6 +40,8 @@ export default function App() {
     const konami = 'ArrowUp,ArrowUp,ArrowDown,ArrowDown,ArrowLeft,ArrowRight,ArrowLeft,ArrowRight,b,a';
     
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       keys.push(e.key);
       keys = keys.slice(-10);
       
@@ -109,7 +111,7 @@ export default function App() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-10 left-1/2 -track-x-1/2 z-[100] bg-soy-red text-white border-4 border-black px-8 py-4 shadow-[8px_8px_0px_#000]"
+            className="fixed bottom-10 left-1/2 z-[100] bg-soy-red text-white border-4 border-black px-8 py-4 shadow-[8px_8px_0px_#000]"
             style={{ left: '50%', transform: 'translateX(-50%)' }}
           >
             <span className="text-2xl font-black uppercase italic tracking-tighter">

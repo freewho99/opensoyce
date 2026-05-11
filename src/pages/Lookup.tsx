@@ -360,15 +360,6 @@ export default function Lookup() {
   );
 }
 
-function StatBox({ label, value }: { label: string, value: string }) {
-  return (
-    <div className="bg-soy-label/20 border border-soy-bottle/10 px-4 py-2">
-      <div className="text-[8px] font-black uppercase tracking-widest opacity-40">{label}</div>
-      <div className="text-sm font-black italic tracking-tight">{value}</div>
-    </div>
-  );
-}
-
 function PillarRow({ label, value, raw, max }: { label: string, value: number, raw?: number, max: number }) {
   return (
     <div className="flex flex-col gap-1">
