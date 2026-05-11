@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   FlaskConical as Sauce,
   Github,
@@ -21,6 +21,8 @@ import {
   Settings,
   LifeBuoy,
   ArrowRight,
+  Menu,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -49,14 +51,18 @@ const PAGES = [
 export default function Layout() {
   const { isLoggedIn, user, login, logout, isLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showSecretOverlay, setShowSecretOverlay] = useState(false);
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
   const [query, setQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
 
   const isRepo = (q: string) => /^[\w.-]+\/[\w.-]+$/.test(q.trim());
 
@@ -114,7 +120,15 @@ export default function Layout() {
     <div className="min-h-screen bg-soy-label font-sans text-soy-bottle">
 
       {/* Top Header */}
-      <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label z-50 flex items-center px-5 gap-4">
+      <header className="fixed top-0 left-0 right-0 h-14 bg-soy-label z-50 flex items-center px-3 sm:px-5 gap-2 sm:gap-4">
+        <button
+          type="button"
+          aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+          onClick={() => setDrawerOpen(o => !o)}
+          className="lg:hidden flex-shrink-0 p-1.5 -ml-1.5 text-soy-bottle hover:text-soy-red transition-colors"
+        >
+          {drawerOpen ? <X size={20} strokeWidth={2.5} /> : <Menu size={20} strokeWidth={2.5} />}
+        </button>
         <div onClick={handleLogoClick} className="cursor-pointer flex-shrink-0">
           <Link to="/" className="flex items-center gap-2 group">
             <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform duration-200 flex-shrink-0">
@@ -124,8 +138,11 @@ export default function Layout() {
           </Link>
         </div>
 
+        {/* Mobile spacer when search is hidden */}
+        <div className="flex-1 sm:hidden" />
+
         {/* Search */}
-        <div ref={searchRef} className="flex-1 max-w-lg mx-auto relative">
+        <div ref={searchRef} className="hidden sm:block flex-1 max-w-lg mx-auto relative">
           <form onSubmit={handleSearch} className="relative">
             <Search size={12} strokeWidth={2.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-soy-bottle/50 pointer-events-none" />
             <input
@@ -213,8 +230,18 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Left Sidebar */}
-      <aside className="fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden">
+      {/* Mobile backdrop */}
+      {drawerOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={() => setDrawerOpen(false)}
+          className="lg:hidden fixed inset-0 top-14 z-30 bg-black/40 cursor-default"
+        />
+      )}
+
+      {/* Left Sidebar — drawer on <lg, permanent at lg+ */}
+      <aside className={`fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-64 lg:w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden transform transition-transform duration-200 ease-out lg:translate-x-0 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
           <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>
             <Trophy size={13} strokeWidth={2.5} /><span>Leaderboards</span>
@@ -275,7 +302,7 @@ export default function Layout() {
       </aside>
 
       {/* Page content */}
-      <div className="ml-52 pt-14">
+      <div className="ml-0 lg:ml-52 pt-14">
         <AnimatePresence>
           {showSecretOverlay && (
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}

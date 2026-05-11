@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 .claude/
+.playwright-mcp/
+*.png
+!public/**/*.png

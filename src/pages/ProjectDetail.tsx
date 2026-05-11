@@ -152,7 +152,7 @@ export default function ProjectDetail() {
       <header className="bg-black text-white h-20 flex items-center border-b-4 border-black sticky top-16 z-40">
         <div className="max-w-7xl mx-auto px-4 w-full flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter truncate max-w-[200px] md:max-w-none">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tighter truncate max-w-[55vw] md:max-w-none">
               {project.owner}/{project.name}
             </h1>
             <a href={project.url} target="_blank" rel="noreferrer" className="opacity-60 hover:opacity-100 transition-opacity">
@@ -187,7 +187,7 @@ export default function ProjectDetail() {
                     <span className="opacity-20">/</span>
                     <span className="text-xs font-bold uppercase tracking-widest opacity-40">{project.category}</span>
                   </div>
-                  <h2 className="text-6xl md:text-8xl font-black uppercase italic tracking-tighter mb-6 leading-[0.9]">
+                  <h2 className="text-4xl sm:text-6xl md:text-8xl font-black uppercase italic tracking-tighter mb-6 leading-[0.9] break-words">
                     {project.name.toUpperCase()}
                   </h2>
                 </div>
@@ -243,7 +243,7 @@ export default function ProjectDetail() {
 
               {/* Nutrition Label Stickyish */}
               <div className="lg:col-span-5 flex justify-center lg:block">
-                <div className="sticky top-40">
+                <div className="lg:sticky lg:top-40">
                   <NutritionLabel project={project} />
                   <div className="mt-8 flex items-center justify-center gap-4 bg-white border-2 border-black p-4 italic font-bold">
                     <Soycie mood={project.score.overall > 8.5 ? "happy" : "suspicious"} size="sm" />
