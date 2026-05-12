@@ -39,7 +39,7 @@ export default function BlogPost() {
             <img
               src={imgMatch[1]}
               alt={imgMatch[2]}
-              className="w-full rounded-sm border-4 border-soy-bottle shadow-[8px_8px_0px_#000]"
+              className="w-full h-auto rounded-sm border-4 border-soy-bottle shadow-[8px_8px_0px_#000] object-contain"
             />
             <figcaption className="text-[10px] font-black uppercase tracking-widest opacity-50 mt-3 text-center italic">
               {imgMatch[2]}
@@ -105,7 +105,7 @@ export default function BlogPost() {
             <img
               src={post.heroImage}
               alt={post.title}
-              className="w-full max-h-[500px] object-cover border-4 border-soy-bottle shadow-[8px_8px_0px_#E63322]"
+              className="w-full h-auto max-h-[520px] object-contain border-4 border-soy-bottle shadow-[8px_8px_0px_#E63322] bg-black"
             />
           </div>
         )}
@@ -159,7 +159,7 @@ export default function BlogPost() {
               <Link key={rp.slug} to={`/blog/${rp.slug}`} className="group">
                 <div className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#000] group-hover:shadow-[8px_8px_0px_#E63322] transition-all h-full">
                   {rp.heroImage && (
-                    <img src={rp.heroImage} alt={rp.title} className="w-full h-32 object-cover mb-4 border-2 border-soy-bottle" />
+                    <img src={rp.heroImage} alt={rp.title} className="w-full h-40 object-cover mb-4 border-2 border-soy-bottle" />
                   )}
                   <div className="flex justify-between mb-4">
                     <span className="text-3xl">{rp.emoji}</span>
