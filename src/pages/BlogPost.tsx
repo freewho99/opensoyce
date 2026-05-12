@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { blogPosts } from '../data/blogPosts';
-import { ArrowLeft, Clock, Calendar, Share2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, Share2 } from 'lucide-react';
 
 export default function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
@@ -28,13 +28,43 @@ export default function BlogPost() {
     }
   };
 
+  // Render content: support [img:url:caption] markers for inline images
+  const renderContent = (content: string) => {
+    const paragraphs = content.split('\n\n');
+    return paragraphs.map((para, i) => {
+      const imgMatch = para.match(/^\[img:([^:]+):([^\]]+)\]$/);
+      if (imgMatch) {
+        return (
+          <figure key={i} className="my-10">
+            <img
+              src={imgMatch[1]}
+              alt={imgMatch[2]}
+              className="w-full rounded-sm border-4 border-soy-bottle shadow-[8px_8px_0px_#000]"
+            />
+            <figcaption className="text-[10px] font-black uppercase tracking-widest opacity-50 mt-3 text-center italic">
+              {imgMatch[2]}
+            </figcaption>
+          </figure>
+        );
+      }
+      // Bold text support: **text**
+      const parts = para.split(/\*\*(.+?)\*\*/g);
+      return (
+        <p key={i} className="text-[18px] leading-[1.8] font-medium text-soy-bottle/90">
+          {parts.map((part, j) => j % 2 === 1 ? <strong key={j} className="font-black text-soy-bottle">{part}</strong> : part)}
+        </p>
+      );
+    });
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-20">
-      <Link 
-        to="/blog" 
+      <Link
+        to="/blog"
         className="inline-flex items-center gap-2 font-black uppercase tracking-widest text-xs hover:text-soy-red transition-colors mb-12"
       >
-        <ArrowLeft size={16} strokeWidth={3} /> BACK TO THE SAUCE REPORT
+        <ArrowLeft size={16} strokeWidth={3} />
+        BACK TO THE SAUCE REPORT
       </Link>
 
       <article>
@@ -45,39 +75,45 @@ export default function BlogPost() {
             </span>
             <span className="text-4xl">{post.emoji}</span>
           </div>
-          
           <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-[0.9] mb-8">
             {post.title}
           </h1>
-          
           <p className="text-2xl font-bold uppercase tracking-widest opacity-60 italic mb-8 max-w-2xl leading-tight">
             {post.subtitle}
           </p>
-
           <div className="flex flex-wrap items-center gap-8 pt-8 border-t-4 border-soy-bottle text-xs font-black uppercase tracking-widest">
             <div className="flex items-center gap-2 opacity-60">
-              <Calendar size={16} /> {post.date}
+              <Calendar size={16} />
+              {post.date}
             </div>
             <div className="flex items-center gap-2 opacity-60">
-              <Clock size={16} /> {post.readTime}
+              <Clock size={16} />
+              {post.readTime}
             </div>
             <div className="flex items-center gap-2 ml-auto">
               <button className="flex items-center gap-2 hover:text-soy-red transition-colors">
-                <Share2 size={16} /> SHARE PIECE
+                <Share2 size={16} />
+                SHARE PIECE
               </button>
             </div>
           </div>
         </header>
 
+        {/* Hero Image */}
+        {post.heroImage && (
+          <div className="mb-16">
+            <img
+              src={post.heroImage}
+              alt={post.title}
+              className="w-full max-h-[500px] object-cover border-4 border-soy-bottle shadow-[8px_8px_0px_#E63322]"
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-12 gap-16">
           {/* Main Content */}
           <div className="md:col-span-8 space-y-8">
-            {post.content.split('\n\n').map((paragraph, i) => (
-              <p key={i} className="text-[18px] leading-[1.8] font-medium text-soy-bottle/90">
-                {paragraph}
-              </p>
-            ))}
-            
+            {renderContent(post.content)}
             <div className="pt-12 flex flex-wrap gap-3">
               {post.tags.map(tag => (
                 <span key={tag} className="bg-soy-label text-[10px] font-black uppercase tracking-widest px-3 py-1 border border-soy-bottle/10">
@@ -97,14 +133,13 @@ export default function BlogPost() {
                   <div className="bg-soy-red text-white px-3 py-1 text-2xl font-black italic">8.5</div>
                 </div>
                 <div className="h-2 bg-soy-label w-full mb-4">
-                   <div className="h-full bg-soy-red w-[85%]" />
+                  <div className="h-full bg-soy-red w-[85%]" />
                 </div>
                 <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic leading-tight">
                   THIS ENTIRE ARTICLE REVOLVES AROUND TRANSPARENCY IN SCORING METHODOLOGY.
                 </p>
               </div>
             )}
-
             <div className="border-t-4 border-soy-bottle pt-8">
               <h4 className="text-sm font-black uppercase tracking-widest mb-6 italic">MAINTAINER NOTE</h4>
               <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic leading-relaxed">
@@ -123,18 +158,21 @@ export default function BlogPost() {
             {relatedPosts.map(rp => (
               <Link key={rp.slug} to={`/blog/${rp.slug}`} className="group">
                 <div className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#000] group-hover:shadow-[8px_8px_0px_#E63322] transition-all h-full">
-                   <div className="flex justify-between mb-4">
-                     <span className="text-3xl">{rp.emoji}</span>
-                     <span className={`px-3 py-1 text-[8px] font-black uppercase tracking-widest ${getCategoryColor(rp.category)}`}>
-                        {rp.category}
-                      </span>
-                   </div>
-                   <h4 className="text-xl font-black uppercase italic tracking-tight group-hover:text-soy-red transition-colors mb-2 leading-none">
-                     {rp.title}
-                   </h4>
-                   <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic line-clamp-2">
-                     {rp.subtitle}
-                   </p>
+                  {rp.heroImage && (
+                    <img src={rp.heroImage} alt={rp.title} className="w-full h-32 object-cover mb-4 border-2 border-soy-bottle" />
+                  )}
+                  <div className="flex justify-between mb-4">
+                    <span className="text-3xl">{rp.emoji}</span>
+                    <span className={`px-3 py-1 text-[8px] font-black uppercase tracking-widest ${getCategoryColor(rp.category)}`}>
+                      {rp.category}
+                    </span>
+                  </div>
+                  <h4 className="text-xl font-black uppercase italic tracking-tight group-hover:text-soy-red transition-colors mb-2 leading-none">
+                    {rp.title}
+                  </h4>
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic line-clamp-2">
+                    {rp.subtitle}
+                  </p>
                 </div>
               </Link>
             ))}
