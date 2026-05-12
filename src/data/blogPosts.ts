@@ -19,7 +19,7 @@ export const blogPosts: BlogPost[] = [
     category: "HOT TAKE",
     date: "APRIL 28, 2026",
     readTime: "6 min read",
-    emoji: "ð§©",
+    emoji: "🧩",
     tags: ["history", "trust", "npm"],
     content: `In March 2016, a developer named Azer Koculu unpublished 273 packages from npm in a dispute over a naming conflict with Kik. One of those packages was left-pad - 11 lines of code that left-padded a string with zeros or spaces. Within hours, React, Babel, and thousands of other projects were broken worldwide. CI pipelines failed. Production deployments stalled. The internet had a meltdown over a function that could be written in a tweet.
 
@@ -36,7 +36,7 @@ The left-pad incident is now a footnote. But the underlying problem - opacity in
     category: "FRAMEWORK WARS",
     date: "APRIL 15, 2026",
     readTime: "8 min read",
-    emoji: "'ï¸",
+    emoji: "⚔️",
     tags: ["react", "vue", "angular", "maintenance"],
     content: `The React vs Vue vs Angular vs Svelte debate is a massive distraction. While developers argue about syntax and reactivity models, the real signals of project success are being ignored. If you look at the top tier of any framework ecosystem, you'll find that their core library scores on OpenSoyce are remarkably similar - almost all of them sit comfortably above 8.5.
 
@@ -53,7 +53,7 @@ Ultimately, the best framework is the one your team can maintain best. If you're
     category: "DEEP DIVE",
     date: "APRIL 2, 2026",
     readTime: "10 min read",
-    emoji: "ð",
+    emoji: "📊",
     tags: ["methodology", "metrics", "transparency"],
     content: `A Soyce Score is a 0-10 metric derived from five core pillars: Maintenance, Community, Security, Documentation, and Activity. Each pillar represents a critical health signal. Maintenance tracks how often code is pushed and how long bugs sit open. Community looks at the contributor base. Security audits licenses and known CVEs. Documentation uses AI to judge how well the code is explained. Activity measures the pulse of the last 30 days.
 
@@ -70,7 +70,7 @@ Use the Soyce Score to filter out the noise. If a project has a 3.5, you probabl
     category: "SECURITY",
     date: "MARCH 20, 2026",
     readTime: "7 min read",
-    emoji: "ð¡ï¸",
+    emoji: "🔒",
     tags: ["security", "xz-utils", "supply-chain"],
     content: `The security landscape changed forever after the SolarWinds and Log4Shell incidents. More recently, the XZ Utils backdoor proved that attackers are no longer just looking for bugs - they are looking for maintainers. By social engineering their way into a position of trust over years, a state-sponsored actor almost compromised the foundations of Linux worldwide.
 
@@ -87,7 +87,7 @@ In 2026, every engineering team needs a supply chain posture. You wouldn't hire 
     category: "ANALYSIS",
     date: "MARCH 5, 2026",
     readTime: "9 min read",
-    emoji: "ð¯ï¸",
+    emoji: "🔥",
     tags: ["burnout", "philosophy", "sustainability"],
     content: `Open source is built on a foundation of volunteers who are often overworked and underappreciated. From OpenSSL to curl to the Faker.js incident, we've seen maintainers reach their breaking point after years of providing free labor to billion-dollar corporations. The imbalance between corporate consumption and contribution is a crisis.
 
@@ -105,7 +105,7 @@ OpenSource sustainability is the biggest challenge facing our industry. If we do
     category: "ANALYSIS",
     date: "MAY 19, 2026",
     readTime: "8 min read",
-    emoji: "ðª¦",
+    emoji: "🪦",
     tags: ["zombie-dependencies", "npm", "graveyard", "soyce-score", "supply-chain", "maintenance", "technical-debt"],
     content: `You shipped that feature six months ago. It works. Tests pass. Nobody's touched it. Life goes on.
 
@@ -191,7 +191,7 @@ Check the label. Build on what's actually alive.`
     category: "HOT TAKE",
     date: "MAY 26, 2026",
     readTime: "9 min read",
-    emoji: "ð¥",
+    emoji: "🌡️",
     tags: ["security", "supply-chain", "github-stars", "heat-check", "cve", "soyce-score", "risk", "npm"],
     content: `It's a Thursday afternoon. You're deep in a Slack thread about the architecture for a new service. Someone drops a GitHub link. "We should use this," they say. "It's got 12,000 stars and everyone's talking about it."
 
@@ -271,7 +271,7 @@ Trending means people are excited. Trustworthy means you can ship on it. The Hea
     category: "DEEP DIVE",
     date: "JUNE 2, 2026",
     readTime: "10 min read",
-    emoji: "ð´",
+    emoji: "🍴",
     tags: ["forking", "remix", "forkability", "open-source-strategy", "license", "mit", "architecture", "biome", "archon", "astro", "soyce-score", "compare-tool"],
     content: `Every great product built on open source started with a fork decision.
 
