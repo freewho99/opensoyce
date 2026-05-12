@@ -333,4 +333,357 @@ Stop forking blind. The shortlist you build before you need it is worth more tha
 
 Score before you fork. Build on what's actually solid.`
   }
+,
+
+  {
+    slug: "npm-worm-mini-shai-hulud-tanstack",
+    title: "THE NPM WORM THAT HIT TANSTACK AND INTERCOM IN THE SAME WEEK",
+    subtitle: "A self-replicating supply chain attack crossed four package registries. Here is what actually happened and how your stack scores against it.",
+    category: "HOT TAKE",
+    date: "May 12, 2026",
+    readTime: "8 min",
+    emoji: "🪱",
+    heroImage: "/blog/npm-worm-hero.png",
+    tags: ["supply-chain", "npm", "security", "malware"],
+    metaDescription: "The Mini Shai-Hulud worm compromised TanStack, Intercom, and PyTorch Lightning across npm and PyPI. Here is the full breakdown and what OpenSoyce scores reveal about your risk.",
+    author: "The Sauce Report",
+    content: `
+# The NPM Worm That Hit TanStack and Intercom in the Same Week
+
+Open source supply chain attacks just hit a new level. A self-replicating worm dubbed **Mini Shai-Hulud** compromised 84 npm package artifacts in the TanStack namespace, then crossed into Intercom's official Node.js SDK, and then into PyTorch Lightning on PyPI - all within weeks of each other in spring 2026.
+
+This is not a theoretical attack vector. It is an active, credential-stealing, CI-poisoning campaign that your team is likely already exposed to.
+
+## What Is Mini Shai-Hulud
+
+Socket's Threat Research team named the campaign after the sandworms in Dune - because once it gets into an ecosystem, it spreads. The attack works in three stages.
+
+Stage one: the attacker compromises a developer account - most likely through credential theft or a prior breach. Stage two: they publish a malicious version of a popular package containing a heavily obfuscated JavaScript file called router_init.js. At roughly 2.3 MB, the file is deliberately oversized to evade quick review. Stage three: the malicious package contains worm logic that attempts to find and re-infect adjacent packages in the same npm namespace.
+
+The TanStack packages flagged include @tanstack/react-router - which has over 12 million weekly downloads. Socket's AI scanner flagged the malicious versions within six minutes of publication. That six-minute window is the entire window your team has if you are pulling packages in CI without lockfiles.
+
+## Intercom and PyTorch Lightning Were Also Hit
+
+The same worm pattern showed up in intercom-client@7.0.4, the official Node.js SDK for Intercom's API. That package sees roughly 360,000 weekly downloads and is installed in backend services and CI/CD pipelines globally. Version 7.0.4 added two files not present in 7.0.3: setup.mjs and router_runtime.js - the same worm payload.
+
+Then PyTorch Lightning got hit. The lightning PyPI package - a deep learning framework used to train and ship ML models - had versions 2.6.2 and 2.6.3 flagged as malicious. Version 2.6.1 was clean. The jump from clean to compromised happened on April 30, 2026.
+
+## What the Soyce Score Would Have Told You
+
+This is exactly what OpenSoyce's Graveyard and Scanner features exist to catch. If you run any of these packages through the Scanner today, you will see:
+
+- Sudden version jump with no corresponding commit activity
+- Spike in file additions not matching the package changelog
+- Maintainer account activity inconsistencies
+- Download velocity mismatches between npm stats and GitHub release traffic
+
+A Soyce Score looks at maintenance percentage, security signals, community health, documentation consistency, and activity patterns. A package whose account was compromised will often show a sharp drop in community score alongside an anomalous activity spike - a pattern that does not match organic development.
+
+## The Real Problem: No One Checks Before Install
+
+The default developer workflow is still broken. You need a package. You search npm. You find something with stars and downloads. You run npm install. You never check when the last legitimate maintainer committed. You never check if the publisher account recently changed passwords or had suspicious login activity. You never verify that the new version's file additions match the stated changelog.
+
+This is not a failure of developers. It is a failure of tooling. The package registries themselves do not surface this information at install time.
+
+## What To Do Right Now
+
+Lock your dependencies. If you are using TanStack, Intercom, or PyTorch Lightning in any project, audit which version is pinned in your lockfile right now. Versions 7.0.4 of intercom-client, versions 2.6.2 and 2.6.3 of lightning, and any TanStack packages published between May 5 and May 8, 2026 should be treated as suspect until you can verify the hash.
+
+Run your full dependency tree through OpenSoyce Scanner. Not just direct dependencies - transitive ones too. The TanStack compromise was especially dangerous because it spreads transitively: you might not depend on @tanstack/react-router directly, but something you depend on might.
+
+Treat this as a pattern, not an isolated incident. Mini Shai-Hulud has already crossed five package ecosystems: npm, PyPI, Go Modules, crates.io, and Packagist. Any account with publish rights to multiple registries using reused credentials is a potential entry point.
+
+[img:/blog/npm-worm-inline.png:The Mini Shai-Hulud attack chain - from credential theft to worm replication across npm and PyPI]
+
+## The Transparency Problem
+
+Here is the uncomfortable truth: TanStack, Intercom, and the PyTorch Lightning maintainer did nothing wrong in the traditional sense. Their accounts were compromised. Their code was backdoored without their knowledge. The packages looked legitimate because they came from the official publisher namespace.
+
+This is the core argument for nutrition label transparency in open source. It is not enough to know who published a package. You need to know the health of the account, the consistency of commit patterns, the correspondence between published versions and repository activity. You need a Soyce Score.
+
+The mini Shai-Hulud campaign will not be the last worm to cross registry boundaries. The question is whether your team is running blind or whether you are checking the label before you install.
+
+Check the label at opensoyce.com/scanner.
+`
+  },
+  {
+    slug: "ai-is-writing-your-open-source-now-what",
+    title: "AI IS WRITING YOUR OPEN SOURCE. NOW WHAT?",
+    subtitle: "OpenAI Codex and the coming wave of AI-generated packages raise questions the ecosystem is not ready to answer.",
+    category: "HOT TAKE",
+    date: "May 12, 2026",
+    readTime: "9 min",
+    emoji: "🤖",
+    heroImage: "/blog/ai-open-source-hero.png",
+    tags: ["ai", "openai", "codex", "open-source", "maintainership"],
+    metaDescription: "OpenAI Codex can now commit to your GitHub repo autonomously. What does AI-generated open source code mean for trust, maintenance health scores, and the Soyce Score?",
+    author: "The Sauce Report",
+    content: `
+# AI Is Writing Your Open Source. Now What?
+
+In May 2025, OpenAI launched Codex - a cloud-based software engineering agent that can work on many tasks in parallel, commit to your GitHub repo autonomously, and run CI checks to verify its own output. By mid-2026 it is available to ChatGPT Pro, Enterprise, and Business users globally. That means right now, today, thousands of developers are assigning AI agents to open source tasks.
+
+The ecosystem is not ready for what this means.
+
+## What Codex Actually Does
+
+Codex is powered by codex-1, a version of OpenAI's o3 model optimized for software engineering. You assign it tasks through a sidebar in ChatGPT. It runs in an isolated cloud container preloaded with your codebase. It browses files, runs terminal commands, writes code, commits changes, and verifies its work against test suites.
+
+It can handle bug fixes, feature implementation, documentation, test coverage, and refactoring. OpenAI's internal teams use it daily. Early external testers include Cisco, Temporal, Superhuman, and Kodiak AI.
+
+The model can also be guided by AGENTS.md files placed in your repository - essentially a set of instructions the AI reads before acting on your codebase.
+
+## The Open Source Trust Problem
+
+Here is the issue that no one in the Codex launch coverage is talking about: every metric we use to evaluate open source health assumes the work was done by humans.
+
+Commit frequency. Contributor diversity. Response time to issues. Review quality. These are all proxies for human judgment, human availability, and human accountability. When an AI agent is making dozens of commits a day, all of these metrics become meaningless as trust signals.
+
+Imagine a package maintainer who sets up Codex to automatically triage issues, patch bugs, and bump versions. From the outside, this project looks extremely healthy. High commit frequency. Fast issue response. Regular releases. The Soyce Score, if it only looked at activity, would rate it highly.
+
+But who is accountable when something goes wrong? Who reviewed the AI's output? Was the AI's commit actually correct, or was it an optimistic-looking patch that introduced a subtle regression? An AI can write code that passes tests. It cannot yet judge whether the tests are testing the right things.
+
+## The Maintenance Percentage Question
+
+OpenSoyce's Nutrition Label tracks maintenance percentage as one of its five core dimensions. The question was always: is this project actively maintained by humans who understand the codebase? Now we need to ask a harder question: is it maintained by humans at all?
+
+A project maintained entirely by Codex might show 100% maintenance health by traditional metrics. But the underlying accountability structure - the thing that actually protects you when there is a production incident - has changed fundamentally.
+
+This is not an argument against AI-assisted development. OpenAI's Codex is genuinely impressive and will make developers more productive. Cisco, Temporal, and Superhuman are not wrong to use it. The question is what signals you need to evaluate AI-maintained packages differently from human-maintained ones.
+
+[img:/blog/ai-open-source-inline.png:OpenAI Codex dashboard showing parallel task assignment and autonomous commit workflow]
+
+## What Needs to Change in How We Score Trust
+
+OpenSoyce is thinking about this problem. A few signals we think matter:
+
+Human review rate on commits. AI-assisted is fine. AI-autonomous with no human review is a different trust category. The question is not whether an AI touched the code - it is whether a human signed off on it.
+
+AGENTS.md presence and content. A project that has published its AI behavior instructions is being transparent. That transparency should be a positive signal. A project with no AGENTS.md but clearly AI-generated commit messages is being opaque.
+
+Commit message quality and consistency. AI commit messages often have a specific pattern - slightly too thorough, slightly too uniform. This is actually a useful signal if you know what to look for.
+
+Issue-to-commit correspondence. Human maintainers respond to issues that matter to users. AI agents respond to whatever they are assigned. A mismatch between what users are asking in issues and what is being committed is a governance signal worth tracking.
+
+## The Anthropic Glasswing Angle
+
+In March 2026, Anthropic announced Project Glasswing alongside AWS, Apple, Broadcom, Cisco, CrowdStrike, Google, JPMorganChase, the Linux Foundation, Microsoft, NVIDIA, and Palo Alto Networks. The stated goal: to secure the world's most critical software. The Linux Foundation's involvement is notable - this initiative is specifically about open source software security at scale.
+
+Glasswing has not published its methodology yet, but the framing suggests AI-assisted security analysis of the open source ecosystem. If major AI labs and enterprise security companies are about to run automated security analysis across the OSS ecosystem, the question of how AI-generated vs. human-generated code gets evaluated becomes much more urgent.
+
+## The Bottom Line
+
+AI-generated open source is here. Codex is already committing to repos used by millions of developers. The supply chain is about to get a lot harder to evaluate with traditional health metrics alone.
+
+What this means for your team: in addition to checking standard Soyce Scores, start asking whether a project you depend on has AGENTS.md files, what they say, and what percentage of recent commits have human sign-offs in the PR review history.
+
+The nutrition label for open source needs new ingredients. We are working on it.
+
+Check any package's current health at opensoyce.com.
+`
+  },
+  {
+    slug: "48000-cves-in-2025-the-math-does-not-work",
+    title: "48,000 CVES IN 2025. THE MATH DOES NOT WORK ANYMORE.",
+    subtitle: "One hundred and thirty new vulnerabilities every day is not a problem you can patch your way out of. Here is what the numbers mean for your stack.",
+    category: "ANALYSIS",
+    date: "May 10, 2026",
+    readTime: "8 min",
+    emoji: "📈",
+    heroImage: "/blog/cve-math-hero.png",
+    tags: ["cve", "vulnerabilities", "security", "open-source", "risk"],
+    metaDescription: "48,185 CVEs were published in 2025 - a 20% increase over 2024. That is 130 new vulnerabilities per day. Here is why the traditional patch-and-pray approach is broken and what to do instead.",
+    author: "The Sauce Report",
+    content: `
+# 48,000 CVEs in 2025. The Math Does Not Work Anymore.
+
+The Open Source Security Foundation published a number recently that should make every engineering team stop and think. In 2025, 48,185 Common Vulnerabilities and Exposures were published. That is a 20.6% increase over 2024's already record-breaking total of 39,962. It works out to roughly 130 new vulnerabilities disclosed every single day.
+
+Here is the uncomfortable math. Most engineering teams do a security audit once a quarter. In that 90-day window, approximately 11,700 new CVEs will have been published. Your team will meaningfully evaluate maybe 20 of them. The gap between disclosed vulnerabilities and your team's actual remediation capacity is not a gap. It is a chasm.
+
+## Why the Volume Keeps Growing
+
+The CVE count is increasing for several compounding reasons. AI-assisted security research is finding vulnerabilities faster - tools like GPT-5.5-Cyber, announced by OpenAI in May 2026, are explicitly designed to scale trusted access for security work. More researchers with better tools means more discoveries.
+
+The open source ecosystem is also getting larger and more complex. The average production application has hundreds of direct dependencies and thousands of transitive ones. Each one of those is a potential vulnerability surface. As the ecosystem grows, so does the attack surface.
+
+Package registry growth compounds this. npm alone has over 3 million packages. PyPI has over 500,000. The review capacity of the security community has not grown proportionally to the size of the ecosystem it is trying to secure.
+
+## The Patch-and-Pray Approach Is Broken
+
+The traditional response to CVEs is to run a vulnerability scanner, get a list of affected packages, prioritize by CVSS score, and patch in order of severity. This worked in 2018 when there were maybe 15,000 CVEs per year. It does not work in 2026.
+
+At 130 CVEs per day, a CVSS-sorted patch queue is a treadmill moving faster than you can run. A critical vulnerability published today will likely be followed by 25 more critical vulnerabilities before you finish patching the first one. Meanwhile, your team is also shipping features, responding to incidents, and maintaining existing infrastructure.
+
+The problem is not that engineering teams are lazy or incompetent. The problem is that the model of reviewing every CVE individually is structurally broken at this volume.
+
+[img:/blog/cve-math-inline.png:CVE publication count 2020-2025 showing exponential growth curve, with 2025 at 48,185 total]
+
+## From Noise to Signal: What Runtime Context Changes
+
+The OpenSSF published a compelling piece in April 2026 arguing for runtime context as a filter. The core insight: not all vulnerabilities in your dependency tree are reachable by your application. A CVE in a package you depend on is only dangerous if your application actually calls the vulnerable code path.
+
+Runtime context - knowing which functions are actually called in production - dramatically shrinks the list of vulnerabilities that matter to your specific deployment. A critical CVE in a package you depend on might score 9.8 on CVSS but be completely unreachable in your application because you only use three functions from that package and none of them touch the vulnerable code.
+
+This is still an emerging area of tooling. But it points toward a more sustainable model: instead of patching everything at maximum urgency, you understand your actual attack surface and prioritize accordingly.
+
+## The OpenSoyce Approach: Health Before Patching
+
+Here is a perspective that often gets missed in vulnerability discussions: the packages that are most likely to have unpatched CVEs are the ones with the worst maintenance health scores.
+
+An actively maintained package with strong maintainer engagement, regular releases, and high community score will typically patch a critical CVE within days. An abandoned or low-maintenance package might take months or never. When you are trying to prioritize remediation across a dependency tree with hundreds of packages, maintenance health is a leading indicator of CVE exposure risk.
+
+OpenSoyce's Soyce Score tracks maintenance percentage as a first-class signal. A package with a maintenance score below 40% is not just potentially outdated - it is a package where the maintainers may not be responding to CVE reports at all. That is a different risk posture than a high-activity package with a temporary vulnerability.
+
+The Graveyard feature shows you which of your dependencies have been effectively abandoned. Packages in the Graveyard are not just cosmetically unmaintained - they are packages where the security response loop is broken. A CVE can sit open indefinitely with no remediation available except forking or migrating.
+
+## What Your Team Should Actually Do
+
+Stop treating every CVE as equivalent. A critical CVE in an actively maintained package that has already published a patch is a routine update. A medium CVE in an abandoned package with no patch timeline is a strategic risk.
+
+Add maintenance health to your vulnerability triage process. Before asking "how severe is this CVE?", ask "is this package's maintainer actively responding to security issues?". The Soyce Score answers that question in seconds.
+
+Build a minimum health threshold into your dependency approval process. If a package has a Soyce Score below a threshold your team sets, require explicit sign-off before adding it as a dependency - not because it definitely has a CVE today, but because it is a package where you have less confidence that future CVEs will be patched.
+
+Audit your transitive dependency tree, not just your direct dependencies. The TanStack and Intercom compromises in May 2026 spread transitively. The 48,000 CVE problem is not just about your direct installs.
+
+130 new vulnerabilities per day is a systems problem, not an attention problem. The teams that stay ahead of it are the ones who have built health evaluation into the dependency lifecycle from the start.
+
+Check your stack at opensoyce.com/scanner.
+`
+  },
+  {
+    slug: "the-maintainer-who-got-locked-out",
+    title: "THE MAINTAINER WHO GOT LOCKED OUT (AND WHY IT MATTERS TO YOUR TEAM)",
+    subtitle: "The fsnotify dispute is not drama. It is a preview of the governance crisis coming for every open source project that never wrote down its own rules.",
+    category: "ANALYSIS",
+    date: "May 8, 2026",
+    readTime: "7 min",
+    emoji: "🔐",
+    heroImage: "/blog/maintainer-lockout-hero.png",
+    tags: ["maintainership", "governance", "supply-chain", "open-source", "risk"],
+    metaDescription: "When fsnotify contributors were removed from the GitHub org in a maintainer dispute, the downstream concern was not just drama - it was a preview of a supply chain risk. Here is what it means for your team.",
+    author: "The Sauce Report",
+    content: `
+# The Maintainer Who Got Locked Out (And Why It Matters to Your Team)
+
+In early May 2026, a dispute over maintainer access in fsnotify - a widely used Go library for cross-platform filesystem notifications - briefly raised supply chain concerns across the Go ecosystem.
+
+Contributors were removed from the project's GitHub organization. Recent releases came under scrutiny. Kubernetes users started discussing forks and alternatives. The question spreading through Go community forums was uncomfortable: when a popular project has unclear maintainer roles and release access, how do you tell the difference between routine open source conflict and the early signs of a takeover?
+
+## What Actually Happened with fsnotify
+
+So far, there is no evidence that any fsnotify release was compromised. The concern is messier than that - and more important.
+
+fsnotify has 10,700 GitHub stars and 969 forks. It provides cross-platform filesystem notifications for Windows, Linux, macOS, BSD, and illumos. It is a dependency for many tools in the Kubernetes ecosystem and the broader Go infrastructure. The kind of package that ends up in production environments without anyone actively thinking about it.
+
+The dispute involved rushed merges, changes to sponsorship arrangements, and decisions about who had access to what parts of the project infrastructure. Contributors were removed. Some felt the process was opaque. The community did not have a clear source of truth for who was authorized to make decisions about the project.
+
+No malicious code. No compromised releases. Just a governance crisis that briefly made it impossible for downstream users to have confidence in the package.
+
+## Why This Is a Supply Chain Risk Even Without Compromise
+
+The security framing usually focuses on compromised accounts and malicious code. But the fsnotify situation points to a different category of risk: governance opacity.
+
+If you cannot tell who legitimately controls a package, you cannot evaluate the risk of depending on it. A project where it is unclear who has publish rights is a project where a future compromise might be harder to detect. Was this release authorized? By whom? Under what review process? If the project has never answered those questions publicly, you are trusting a black box.
+
+This is exactly the kind of signal that OpenSoyce's community health score tries to surface. Unclear contributor roles, opaque release processes, and sponsorship structures that create conflicts of interest are all governance signals. They do not mean a package is dangerous today. They mean the risk of a future problem is higher than a project with clear, documented governance.
+
+[img:/blog/maintainer-lockout-inline.png:fsnotify GitHub repository showing stars, forks, and contributor activity patterns]
+
+## The Governance Gap Is Industry-Wide
+
+fsnotify is not exceptional in having governance opacity. Most open source projects of this scale never wrote down their governance model. Who can approve a PR? Who can publish a release? What happens if the primary maintainer becomes unavailable? What is the escalation path if a contributor disagrees with a decision?
+
+For large, well-funded projects - Linux kernel, major Apache projects, CNCF graduated projects - there are answers to these questions. Written governance documents, release management processes, multi-stakeholder review.
+
+For the vast middle tier of open source - packages with 5,000 to 50,000 stars, meaningful download counts, real production usage - governance is usually implicit. It is whatever the maintainer decides. That is fine when the maintainer is present, aligned, and acting in good faith. It becomes a risk when any of those conditions change.
+
+## What Downstream Users Actually Need
+
+The fsnotify situation highlights what downstream users actually need to evaluate dependency health - and it is not just code quality or test coverage.
+
+Who has publish rights to this package right now? This is not always public information. npm and PyPI log publisher accounts but do not always make historical access changes easy to audit.
+
+Has the maintainer structure changed recently? A sudden change in who has repository access or publish rights is a signal worth investigating. It might be routine - a maintainer transitioning the project - or it might be an early indicator of something more serious.
+
+Is there a governance document? Projects with written governance documents have explicitly thought through their decision-making process. That is a trust signal worth surfacing.
+
+What is the fork activity pattern? When a project has an internal dispute, fork activity spikes. This is visible in GitHub's network graph. A fork spike without a corresponding explanation is worth investigating.
+
+OpenSoyce tracks community health score as one of five dimensions in the Soyce Score. Contributor diversity, review process transparency, maintainer responsiveness - these are the signals that predict governance risk before it becomes a security incident.
+
+## The Kubernetes Lesson
+
+The Kubernetes community's response to the fsnotify dispute was notable: they immediately started discussing forks and alternatives. This is actually good dependency hygiene. For a critical piece of infrastructure, you want to know in advance what your fallback is if a dependency becomes unavailable or untrusted.
+
+Most teams only have this conversation after a problem has already occurred. The time to evaluate your dependency on any single-maintainer project is before the maintainer dispute, not during one.
+
+Check any package's community health score at opensoyce.com.
+`
+  },
+  {
+    slug: "pypi-had-two-high-severity-holes-heres-what-they-were",
+    title: "PYPI HAD TWO HIGH-SEVERITY HOLES. HERE IS WHAT THEY WERE.",
+    subtitle: "A Trail of Bits audit found access control bugs that could have let org members invite new owners. The fix is in. But the audit reveals a deeper problem with registry trust.",
+    category: "DEEP DIVE",
+    date: "May 6, 2026",
+    readTime: "7 min",
+    emoji: "🔑",
+    heroImage: "/blog/pypi-audit-hero.png",
+    tags: ["pypi", "security-audit", "access-control", "supply-chain", "python"],
+    metaDescription: "PyPI's second external security audit by Trail of Bits found two high-severity access control bugs. Here is the technical breakdown and what it means for Python package trust.",
+    author: "The Sauce Report",
+    content: `
+# PyPI Had Two High-Severity Holes. Here Is What They Were.
+
+PyPI has patched two high-severity vulnerabilities found during its second external security audit. The audit was performed by Trail of Bits, funded by the Sovereign Tech Agency, and reviewed Warehouse - the open source Python application that powers PyPI.
+
+The assessment produced 14 findings in total: two High, one Medium, one Low, and ten Informational. The two High-severity findings are the ones worth understanding in detail.
+
+## Finding One: Organization Members Could Invite New Owners
+
+The first high-severity finding is the scarier of the two. Organization members had a code path that allowed them to invite new organization owners. This is a privilege escalation vulnerability. An organization member - someone with legitimate but limited access to a PyPI organization - could potentially invite additional accounts to the owner tier.
+
+In an attack scenario: a compromised or malicious organization member account could use this path to install a fully-trusted account into the organization. From there, the attacker would have publish rights across all packages owned by the organization.
+
+This is the kind of vulnerability that matters most in supply chain attacks. The attack pattern for mini Shai-Hulud and similar campaigns is to compromise an account with limited access, then escalate privileges to gain publish rights. This finding is exactly that escalation path.
+
+PyPI has fixed this. But the existence of this code path in a registry that hosts over 500,000 packages and serves billions of downloads per month is worth sitting with.
+
+## Finding Two: Project Transfers Left Stale Upload Access
+
+The second high-severity finding involves what happens when a Python package changes ownership. When a project is transferred from one organization to another, the old organization's teams could retain upload access to the package.
+
+This is a ghost access problem. If you transferred a package last year, the previous owner might still be able to publish new versions today. This is not a hypothetical concern. The Heartbleed and XZ Utils incidents both involved confusion about who legitimately had access to critical projects.
+
+In a supply chain attack context, ghost access is an attacker's best friend. It is access that does not appear in the current owner's access control list, that does not trigger obvious security alerts, and that might persist indefinitely if no one is auditing stale permissions.
+
+[img:/blog/pypi-audit-inline.png:Trail of Bits audit timeline showing PyPI security assessment findings and remediation status]
+
+## The Audit Also Found OIDC Replay Issues and IDOR in Token Deletion
+
+Beyond the two high-severity findings, the audit identified trusted publishing replay edge cases in OIDC-based publishing, gaps in audit logging, and an insecure direct object reference in API token deletion.
+
+The OIDC findings are particularly relevant for teams using GitHub Actions to publish to PyPI via trusted publishing. Replay edge cases in authentication flows can enable token reuse in ways that bypass expected access controls. The details have not been fully published, but the existence of the finding suggests that trusted publishing - which many teams use precisely because it is supposed to be more secure than static tokens - has more surface area than commonly understood.
+
+## What This Means for Registry Trust
+
+Here is the uncomfortable meta-point: this is PyPI's second external security audit. The first one found similar classes of issues. The fact that access control bugs of this severity existed in a system that handled billions of package downloads is not a failure unique to PyPI - it is a reflection of how difficult it is to build and maintain a secure package registry at scale.
+
+npm, crates.io, RubyGems - these registries all have access control complexity that has never been fully audited by independent security researchers. The Sovereign Tech Agency's funding of the PyPI audit is a model worth expanding. But it also means that the security posture of registries you publish to and install from is, at least partially, a known unknown.
+
+## What Your Team Should Take From This
+
+Use trusted publishing where possible, but understand its limitations. OIDC-based publishing reduces the surface area for credential theft but does not eliminate trust assumptions. Understand the OIDC configuration for any packages you publish.
+
+Audit your PyPI organization's current member list and access levels. If you have transferred packages in the last few years, verify that the previous organization's access has been fully revoked. Ghost access is not always visible without active auditing.
+
+Pay attention to publisher account stability when evaluating packages you depend on. A package whose publisher organization has had recent member changes is worth extra scrutiny - not because it is definitely compromised, but because the access control picture is noisier.
+
+OpenSoyce tracks security score as one of five dimensions in the Soyce Score. Security score includes signals about publisher account stability, version history consistency, and anomalous publish patterns. The PyPI findings are exactly the class of upstream risk that this score is designed to surface.
+
+Check any Python package's current Soyce Score at opensoyce.com.
+`
+  }
 ];
