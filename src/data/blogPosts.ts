@@ -36,7 +36,7 @@ The left-pad incident is now a footnote. But the underlying problem - opacity in
     category: "FRAMEWORK WARS",
     date: "APRIL 15, 2026",
     readTime: "8 min read",
-    emoji: "âï¸",
+    emoji: "'ï¸",
     tags: ["react", "vue", "angular", "maintenance"],
     content: `The React vs Vue vs Angular vs Svelte debate is a massive distraction. While developers argue about syntax and reactivity models, the real signals of project success are being ignored. If you look at the top tier of any framework ecosystem, you'll find that their core library scores on OpenSoyce are remarkably similar - almost all of them sit comfortably above 8.5.
 
@@ -295,13 +295,13 @@ The OpenSoyce Forkability signal is built around this distinction. A project can
 
 The OpenSoyce Remix section is a curated list of repos that are specifically good fork candidates - projects where there's a clear gap between what the original does and what the ecosystem needs.
 
-Biome â Ship as a team code-quality CLI. Biome is a unified linting and formatting toolchain - one binary, zero config, runs 100x faster than ESLint. The core project is excellent and growing fast. But the enterprise and team workflow layer doesn't exist yet. A fork that wraps Biome in opinionated team configuration, adds policy enforcement, and ships as a managed CLI for engineering orgs has a real market and a clean foundation. Forkability: high. Architecture is modular, docs are strong, license is MIT.
+Biome -> Ship as a team code-quality CLI. Biome is a unified linting and formatting toolchain - one binary, zero config, runs 100x faster than ESLint. The core project is excellent and growing fast. But the enterprise and team workflow layer doesn't exist yet. A fork that wraps Biome in opinionated team configuration, adds policy enforcement, and ships as a managed CLI for engineering orgs has a real market and a clean foundation. Forkability: high. Architecture is modular, docs are strong, license is MIT.
 
 [img:/blog/forking-shortlist-2.png:Stop Blind Forking - the ultimate vetted shortlist for your next major build.]
 
-Archon â Package as an AI workflow builder. Archon is a YAML-defined AI coding workflow framework - think Docker Compose, but for agent pipelines. The concept is right and the timing is early. A visual layer and managed execution environment forked from Archon could be a serious product. Forkability: high.
+Archon -> Package as an AI workflow builder. Archon is a YAML-defined AI coding workflow framework - think Docker Compose, but for agent pipelines. The concept is right and the timing is early. A visual layer and managed execution environment forked from Archon could be a serious product. Forkability: high.
 
-Astro â Build a visual content CMS. Astro's content collections approach in v5 is reshaping how developers think about content structure. But the visual editing layer is wide open. A headless CMS product forked from Astro, with a built-in visual editor and managed content layer, targets a gap Contentful and Sanity haven't fully closed. Forkability: high.
+Astro -> Build a visual content CMS. Astro's content collections approach in v5 is reshaping how developers think about content structure. But the visual editing layer is wide open. A headless CMS product forked from Astro, with a built-in visual editor and managed content layer, targets a gap Contentful and Sanity haven't fully closed. Forkability: high.
 
 **The Forking Mistakes That Kill Projects**
 
