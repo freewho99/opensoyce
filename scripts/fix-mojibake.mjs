@@ -57,6 +57,10 @@ const FIXES = [
   { hex: 'c3a2c29cc293', to: 'e29c93', meaning: 'â\\u009c\\u0093 -> ✓' },
   // ✗ (U+2717)
   { hex: 'c3a2c29cc297', to: 'e29c97', meaning: 'â\\u009c\\u0097 -> ✗' },
+  // ❄ (U+2744 SNOWFLAKE)
+  { hex: 'c3a2c29dc284', to: 'e29d84', meaning: 'â\\u009d\\u0084 -> ❄' },
+  // Variation Selector-16 (U+FE0F) — turns preceding base char into emoji form. Must run AFTER its base.
+  { hex: 'c3afc2b8c28f', to: 'efb88f', meaning: '\\u00ef\\u00b8\\u008f -> VS-16 (emoji variant selector)' },
   // → (U+2192)
   { hex: 'c3a2c286c2920', to: 'e28692', meaning: 'â\\u0086\\u0092 -> → (arrow)', note: 'inline trailing byte' },
   { hex: 'c3a2c286c292', to: 'e28692', meaning: 'â\\u0086\\u0092 -> → (right arrow)' },
@@ -81,6 +85,29 @@ const FIXES = [
   { hex: 'c3b0c29fc294c2a5', to: 'f09f94a5', meaning: '\\u00f0\\u009f\\u0094\\u00a5 -> 🔥' },
   // 📊 bar chart
   { hex: 'c3b0c29fc293c28a', to: 'f09f938a', meaning: '\\u00f0\\u009f\\u0093\\u008a -> 📊' },
+  // 🧵 thread
+  { hex: 'c3b0c29fc2a7c2b5', to: 'f09fa7b5', meaning: '\\u00f0\\u009f\\u00a7\\u00b5 -> 🧵' },
+  // 🔒 closed lock
+  { hex: 'c3b0c29fc294c292', to: 'f09f9492', meaning: '\\u00f0\\u009f\\u0094\\u0092 -> 🔒' },
+  // 🔐 closed lock with key
+  { hex: 'c3b0c29fc294c290', to: 'f09f9490', meaning: '\\u00f0\\u009f\\u0094\\u0090 -> 🔐' },
+  // 🌡 thermometer
+  { hex: 'c3b0c29fc28cc2a1', to: 'f09f8ca1', meaning: '\\u00f0\\u009f\\u008c\\u00a1 -> 🌡' },
+  // 🤖 robot
+  { hex: 'c3b0c29fc2a4c296', to: 'f09fa496', meaning: '\\u00f0\\u009f\\u00a4\\u0096 -> 🤖' },
+  // 🪦 headstone (U+1FAA6) — was misidentified earlier; 1faa6 is HEADSTONE
+  { hex: 'c3b0c29fc2aac2a6', to: 'f09faaa6', meaning: '\\u00f0\\u009f\\u00aa\\u00a6 -> 🪦' },
+  // 🪱 worm
+  { hex: 'c3b0c29fc2aac2b1', to: 'f09faab1', meaning: '\\u00f0\\u009f\\u00aa\\u00b1 -> 🪱' },
+  // 🧬 dna
+  { hex: 'c3b0c29fc2a7c2ac', to: 'f09fa7ac', meaning: '\\u00f0\\u009f\\u00a7\\u00ac -> 🧬' },
+  // 📈 chart up — but observed mangle is c3b0c29fc293c288 -> f09f9388 which is U+1F388 (balloon)
+  // Likely was supposed to be U+1F4C8 (chart up) — keeping as decoded since changing intent is wrong.
+  { hex: 'c3b0c29fc293c288', to: 'f09f9388', meaning: '\\u00f0\\u009f\\u0093\\u0088 -> 🎈 (balloon, as decoded)' },
+  // ⚔ crossed swords (U+2694)
+  { hex: 'c3a2c29ac294', to: 'e29a94', meaning: 'â\\u009a\\u0094 -> ⚔' },
+  // ⚖ scales of justice (U+2696)
+  { hex: 'c3a2c29ac296', to: 'e29a96', meaning: 'â\\u009a\\u0096 -> ⚖' },
 ];
 
 // Strip placeholder/invalid hex entries (spaces, comments-only).

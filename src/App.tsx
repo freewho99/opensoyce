@@ -117,7 +117,7 @@ export default function App() {
             style={{ left: '50%', transform: 'translateX(-50%)' }}
           >
             <span className="text-2xl font-black uppercase italic tracking-tighter">
-              {darkSauceMode ? 'ð¥ DARK SAUCE MODE ACTIVATED' : 'âï¸ LIGHT SAUCE MODE RESTORED'}
+              {darkSauceMode ? '🔥 DARK SAUCE MODE ACTIVATED' : '❄️ LIGHT SAUCE MODE RESTORED'}
             </span>
           </motion.div>
         )}
