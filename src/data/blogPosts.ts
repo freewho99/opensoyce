@@ -924,8 +924,7 @@ And its family tree is still branching.
 
 Check the health of any open-source dependency behind your development tools at opensoyce.com.
 `
-  }
-
+  },
 
   {
     slug: 'open-source-licensing-wars-mit-vs-gpl-vs-apache',
