@@ -67,11 +67,12 @@ export default function Methodology() {
             <div className="bg-black text-white p-12 shadow-[12px_12px_0px_#E63322]">
               <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-8 text-soy-red">SCORE RANGES</h3>
               <div className="space-y-8">
-                 <ScoreRange label="9.0+" status="USE READY" desc="Production grade. Stable, documented, and actively maintained." color="text-green-500" />
-                 <ScoreRange label="8.0 – 8.9" status="FORKABLE" desc="Strong core infrastructure. May have minor gaps in docs or PR response time." color="text-blue-500" />
-                 <ScoreRange label="7.0 – 7.9" status="WATCHLIST" desc="Emerging breakout or previously strong project losing steam." color="text-yellow-500" />
-                 <ScoreRange label="5.0 – 6.9" status="RISKY" desc="High maintenance debt or stale signals. Verify before using." color="text-orange-500" />
-                 <ScoreRange label="BELOW 5.0" status="STALE" desc="Inactive for >18 months or abandoned by maintainers." color="text-soy-red" />
+                 <ScoreRange label="8.5+" status="USE READY" desc="Production grade. Real CVE hygiene, active maintenance, strong docs." color="text-green-500" />
+                 <ScoreRange label="7.0 – 8.4" status="FORKABLE" desc="Mature core infrastructure. Minor gaps in one or two pillars." color="text-blue-500" />
+                 <ScoreRange label="5.5 – 6.9" status="STABLE" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
+                 <ScoreRange label="4.0 – 5.4" status="WATCHLIST" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
+                 <ScoreRange label="2.5 – 3.9" status="RISKY" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." color="text-orange-500" />
+                 <ScoreRange label="BELOW 2.5" status="STALE" desc="Effectively abandoned. No recent commits, no releases, no triage." color="text-soy-red" />
               </div>
             </div>
           </div>
@@ -137,12 +138,13 @@ export default function Methodology() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            <VocabCard title="USE READY" score="≥ 9.0" desc="Production-grade signals. Actively maintained, well-documented, and ready for serious adoption evaluation." />
-            <VocabCard title="FORKABLE" score="8.0–8.9" desc="Strong core infrastructure. Best for teams who want to build on top of it." />
-            <VocabCard title="HIGH MOMENTUM" score="earlyBreakout" desc="GitHub stats still catching up to real adoption. Community signal is outpacing the numbers." />
-            <VocabCard title="WATCHLIST" score="7.0–7.9" desc="Emerging breakout or previously strong project losing steam. Worth monitoring." />
-            <VocabCard title="RISKY BUT HOT" score="< 7.0 + earlyBreakout" desc="High community signal, but instability or sparse docs. Use with eyes open." />
-            <VocabCard title="STALE" score="< 5.0 or last commit > 18mo" desc="No longer gaining ground. Not recommended for new greenfield projects." />
+            <VocabCard title="USE READY" score="≥ 8.5" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
+            <VocabCard title="FORKABLE" score="7.0–8.4" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
+            <VocabCard title="HIGH MOMENTUM" score="earlyBreakout override" desc="A sub-8.5 project with strong rising-signal curation. GitHub stats catching up to real adoption." />
+            <VocabCard title="STABLE" score="5.5–6.9" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
+            <VocabCard title="WATCHLIST" score="4.0–5.4" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
+            <VocabCard title="RISKY" score="2.5–3.9" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
+            <VocabCard title="STALE" score="< 2.5" desc="Effectively abandoned. No recent commits, no releases, no triage." />
             <VocabCard title="GRAVEYARD" score="Deprecated" desc="Shaped the ecosystem. Now a museum piece. Some have forkable infrastructure." />
           </div>
         </div>

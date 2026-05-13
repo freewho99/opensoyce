@@ -1,14 +1,23 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export type SoyceVerdict = 'USE READY' | 'FORKABLE' | 'HIGH MOMENTUM' | 'WATCHLIST' | 'RISKY' | 'STALE';
+export type SoyceVerdict = 'USE READY' | 'FORKABLE' | 'HIGH MOMENTUM' | 'STABLE' | 'WATCHLIST' | 'RISKY' | 'STALE';
 
+// Verdict bands were recalibrated in commit-after-13ec156 to match where
+// real projects land. The earlier bands (USE READY ≥ 9.0, FORKABLE ≥ 8.0,
+// WATCHLIST ≥ 7.0, RISKY ≥ 5.0) punished healthy stable libraries — winston
+// at 6.8 was labeled "RISKY" while being a perfectly maintained logger.
+// The new bands add a STABLE tier and let RISKY mean what it says.
 export function verdictFor(score: number, opts?: { earlyBreakout?: boolean }): SoyceVerdict {
-  if (score >= 9.0) return 'USE READY';
-  if (score >= 8.0) return 'FORKABLE';
+  if (score >= 8.5) return 'USE READY';
+  if (score >= 7.0) return 'FORKABLE';
+  // earlyBreakout: a sub-8.5 project with strong rising-signal curation.
+  // Renders as HIGH MOMENTUM in any of the lower tiers so the breakout
+  // story isn't swallowed by a STABLE / WATCHLIST label.
   if (opts?.earlyBreakout) return 'HIGH MOMENTUM';
-  if (score >= 7.0) return 'WATCHLIST';
-  if (score >= 5.0) return 'RISKY';
+  if (score >= 5.5) return 'STABLE';
+  if (score >= 4.0) return 'WATCHLIST';
+  if (score >= 2.5) return 'RISKY';
   return 'STALE';
 }
 

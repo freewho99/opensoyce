@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { MOCK_RECIPES } from '../constants';
 import NutritionLabel from '../components/NutritionLabel';
 import SimilarProjects from '../components/SimilarProjects';
-import SoyceScore from '../components/SoyceScore';
+import SoyceScore, { verdictFor } from '../components/SoyceScore';
 import {
   Github, Star, GitFork, ShieldCheck, ShieldAlert, ExternalLink, ArrowLeft,
   Terminal, Package, Code, GitBranch, Copy, Check, X,
@@ -117,14 +117,6 @@ export default function ProjectDetail() {
   };
 
   const licenseInfo = getLicenseInfo(project?.license);
-
-  const getBadge = (score: number) => {
-    if (score >= 9.0) return "USE READY";
-    if (score >= 8.0) return "FORKABLE";
-    if (curated?.earlyBreakout) return "HIGH MOMENTUM";
-    if (score < 7.0) return "WATCHLIST";
-    return "FORKABLE";
-  };
 
   if (loading && !localProject) {
     return (
@@ -375,7 +367,7 @@ export default function ProjectDetail() {
                     to={`/challenge?repo=${project.owner}/${project.name}`}
                     onClick={() => trackEvent('challenge_label_click', { 
                       repo: `${project.owner}/${project.name}`, 
-                      currentLabel: getBadge(project.score.overall),
+                      currentLabel: verdictFor(project.score.overall, { earlyBreakout: !!curated?.earlyBreakout }),
                       score: project.score.overall
                     })}
                     className="inline-block bg-black text-white px-6 py-3 text-xs font-black uppercase italic tracking-widest hover:bg-soy-red transition-all"
