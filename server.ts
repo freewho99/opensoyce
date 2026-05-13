@@ -1,4 +1,5 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,6 +17,17 @@ async function startServer() {
   // Middleware for parsing JSON
   app.use(express.json());
 
+  // Per-IP rate limit on the three scoring routes (the only ones that hit
+  // GitHub). 30 requests/minute is generous for human use, cheap for abuse.
+  // Health/config/search endpoints are not rate-limited.
+  const scoringLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'RATE_LIMIT_HIT_LOCAL' },
+  });
+
   const gh = new GitHubService();
 
   // Simple in-memory cache with TTL and a FIFO size cap.
@@ -30,6 +42,10 @@ async function startServer() {
       cache.delete(key);
       return null;
     }
+    // Bump-on-read: move this entry to the end of the iteration order so
+    // FIFO eviction in cacheSet evicts genuinely-cold entries, not hot ones.
+    cache.delete(key);
+    cache.set(key, entry);
     return entry.data;
   }
 
@@ -84,7 +100,7 @@ async function startServer() {
     });
   });
 
-  app.post("/api/analyze", async (req, res) => {
+  app.post("/api/analyze", scoringLimiter, async (req, res) => {
     const { owner, repo } = req.body;
     if (!owner || !repo) {
       return res.status(400).json({ error: 'Owner and repo are required' });
@@ -118,7 +134,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/badge/:owner/:repo.svg", async (req, res) => {
+  app.get("/api/badge/:owner/:repo.svg", scoringLimiter, async (req, res) => {
     const { owner, repo } = req.params;
     if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
       return res.status(400).send('Invalid owner or repo');
@@ -127,7 +143,7 @@ async function startServer() {
       const data = await getCachedAnalysis(owner, repo);
       if (!data) return res.status(404).send('Not found');
 
-      const score = data.total ?? 0;
+      const score = Number.isFinite(data.total) ? data.total : 0;
       const color = score >= 8 ? '#22c55e' : score >= 6 ? '#f59e0b' : '#E63322';
       
       res.setHeader('Content-Type', 'image/svg+xml');
@@ -151,14 +167,14 @@ async function startServer() {
   // Legacy endpoint for backward compatibility. Returns a percentage-scaled
   // shape distinct from /api/analyze; always derived from the same cached
   // analysis, so the response shape no longer depends on cache state.
-  app.get("/api/github/:owner/:repo", async (req, res) => {
+  app.get("/api/github/:owner/:repo", scoringLimiter, async (req, res) => {
     const { owner, repo } = req.params;
     if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
       return res.status(400).json({ error: 'INVALID_OWNER_OR_REPO' });
     }
     try {
       const data = await getCachedAnalysis(owner, repo);
-      if (!data) return res.status(404).json({ error: 'Not found' });
+      if (!data) return res.status(404).json({ error: 'REPO_NOT_FOUND' });
 
       const { breakdown, meta, total, repo: repoBlock } = data;
       res.json({

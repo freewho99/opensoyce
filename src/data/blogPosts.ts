@@ -9,6 +9,8 @@ export type BlogPost = {
   emoji: string;
   content: string;
   tags: string[];
+  metaDescription?: string;
+  author?: string;
 };
 
 export const blogPosts: BlogPost[] = [

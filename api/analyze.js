@@ -11,10 +11,10 @@ export default async function handler(req, res) {
 
   const token = process.env.GITHUB_TOKEN;
   const headers = {
-    Authorization: `Bearer ${token}`,
     'User-Agent': 'opensoyce',
     'Accept': 'application/vnd.github+json',
   };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   try {
     const [repoRes, commitsRes, contributorsRes, readmeRes, communityRes, releaseRes] = await Promise.all([
@@ -26,9 +26,17 @@ export default async function handler(req, res) {
       fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, { headers }),
     ]);
 
+    if (repoRes.status === 404) {
+      return res.status(404).json({ error: 'REPO_NOT_FOUND' });
+    }
+    if (repoRes.status === 403 && repoRes.headers.get('x-ratelimit-remaining') === '0') {
+      return res.status(429).json({ error: 'RATE_LIMIT_HIT' });
+    }
+    if (!repoRes.ok) {
+      console.error('Upstream GitHub error', repoRes.status, await repoRes.text().catch(() => '(no body)'));
+      return res.status(502).json({ error: 'UPSTREAM_ERROR' });
+    }
     const repoData = await repoRes.json();
-    if (repoData.message === 'Not Found') return res.status(404).json({ error: 'REPO_NOT_FOUND' });
-    if (repoData.message) return res.status(500).json({ error: repoData.message });
 
     const commits = commitsRes.ok ? await commitsRes.json() : [];
     const contributors = contributorsRes.ok ? await contributorsRes.json() : [];

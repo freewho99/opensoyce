@@ -499,7 +499,7 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
   const badge = getBadge();
 
   return (
-    <div className="min-w-[400px] min-h-[460px] bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000] hover:shadow-[12px_12px_0px_#D12D2D] transition-all snap-center relative flex flex-col group">
+    <div className="min-w-[280px] sm:min-w-[400px] min-h-[460px] bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000] hover:shadow-[12px_12px_0px_#D12D2D] transition-all snap-center relative flex flex-col group">
       {/* Badge */}
       <div className={`absolute top-0 right-0 px-2 py-0.5 ${badge.bg} ${badge.textCol} text-[8px] font-black uppercase tracking-widest border border-black shadow-[-2px_2px_0px_#000]`}>
         {badge.text}
