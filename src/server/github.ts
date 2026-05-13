@@ -58,6 +58,13 @@ export class GitHubService {
     return this.fetchGH(`/repos/${owner}/${repo}/security-advisories?per_page=100`);
   }
 
+  async getRecentIssues(owner: string, repo: string) {
+    // Issues opened/updated in the last 90 days. GitHub's /issues endpoint
+    // mixes PRs into the response; the scorer filters them via item.pull_request.
+    const since = new Date(Date.now() - 90 * 86400000).toISOString();
+    return this.fetchGH(`/repos/${owner}/${repo}/issues?state=all&since=${since}&per_page=100`);
+  }
+
   async getWorkflows(owner: string, repo: string) {
     return this.fetchGH(`/repos/${owner}/${repo}/actions/workflows`);
   }

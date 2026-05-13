@@ -15,6 +15,12 @@
  * @property {number}   medium
  * @property {number}   low
  *
+ * @typedef {Object} MaintenanceBreakdown
+ * @property {number}   commit   0.0 – 1.5  bucketed days-since-last-commit
+ * @property {number}   release  0.0 – 1.0  release recency
+ * @property {number}   triage   0.0 – 0.5  recent-issues triage rate
+ * @property {boolean}  triageDataAvailable  false when the issues fetch failed (UI must distinguish "no signal" from "score 0")
+ *
  * @typedef {Object} ScoreMeta
  * @property {string}   lastCommit  ISO timestamp of the most recent commit
  * @property {number}   totalStars
@@ -25,6 +31,7 @@
  * @property {string[]} topics
  * @property {number}   contributors Number of contributors observed (capped by fetch page size)
  * @property {AdvisorySummary | null} advisories  null when the advisory fetch failed; populated summary (possibly all zeroes) when it succeeded
+ * @property {MaintenanceBreakdown} maintenanceBreakdown  always populated; `triageDataAvailable` indicates whether the triage sub-score is real or a fallback zero
  *
  * @typedef {Object} ScoreResult
  * @property {number}          total      0.0 - 10.0, sum of all pillars, rounded to 1 decimal
@@ -45,25 +52,34 @@
  * @param {any | null} [communityProfile]  GET /repos/{owner}/{repo}/community/profile (may be null)
  * @param {any | null} [latestRelease]     GET /repos/{owner}/{repo}/releases/latest (may be null when no releases)
  * @param {any[] | null} [repoAdvisories]  GET /repos/{owner}/{repo}/security-advisories (null on fetch failure, [] when none)
+ * @param {any[] | null} [recentIssues]    GET /repos/{owner}/{repo}/issues?state=all&since=<90d>&per_page=100 (null on fetch failure, [] when quiet). Caller supplies the `since` cutoff — the scorer is pure.
  * @returns {ScoreResult}
  */
-export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories) {
+export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues) {
   const now = new Date();
   const safeCommits = Array.isArray(commits) ? commits : [];
   const safeContributors = Array.isArray(contributors) ? contributors : [];
 
-  // 1. MAINTENANCE (max 3.0) - how recently the project was touched
+  // 1. MAINTENANCE (max 3.0) — three sub-signals so finished/stable libraries
+  //    can earn a credible score without active commits.
+  //    - Commit recency:   up to 1.5  (halved from the old single-signal max)
+  //    - Release recency:  up to 1.0  (moved here from Security — see scoreReleaseRecency)
+  //    - Issue triage:     up to 0.5  (responsiveness on recent issues)
   const lastCommitDate = safeCommits.length > 0
     ? new Date(safeCommits[0].commit.author.date)
     : new Date(repoData.pushed_at);
   const diffDays = Math.floor((now.getTime() - lastCommitDate.getTime()) / 86400000);
 
-  let maintenance;
-  if (diffDays <= 7) maintenance = 3.0;
-  else if (diffDays <= 30) maintenance = 2.5;
-  else if (diffDays <= 90) maintenance = 1.5;
-  else if (diffDays <= 365) maintenance = 0.8;
-  else maintenance = 0.2;
+  let commitRecency;
+  if (diffDays <= 7) commitRecency = 1.5;
+  else if (diffDays <= 30) commitRecency = 1.2;
+  else if (diffDays <= 90) commitRecency = 0.8;
+  else if (diffDays <= 365) commitRecency = 0.4;
+  else commitRecency = 0.1;
+
+  const releaseRecency = scoreReleaseRecency(latestRelease, now);
+  const issueTriage = scoreIssueTriage(recentIssues, now);
+  const maintenance = Math.min(3.0, commitRecency + releaseRecency + issueTriage);
 
   // 2. COMMUNITY (max 2.5) - stars (log-scaled), contributor count, fork milestone
   const stars = repoData.stargazers_count || 0;
@@ -97,7 +113,7 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
     else if (issuesPerStar < 0.02) security += 0.15;
   }
 
-  security += scoreSecurityExtras(communityProfile, latestRelease, now);
+  security += scoreSecurityExtras(communityProfile);
   security += scoreRepoAdvisories(repoAdvisories, now);
   if (security < 0) security = 0;
   security = Math.min(2.0, security);
@@ -145,6 +161,12 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
       topics: repoData.topics || [],
       contributors: contributorCount,
       advisories: summarizeAdvisories(repoAdvisories, now),
+      maintenanceBreakdown: {
+        commit: round1(commitRecency),
+        release: round1(releaseRecency),
+        triage: round1(issueTriage),
+        triageDataAvailable: Array.isArray(recentIssues),
+      },
     },
   };
 }
@@ -154,35 +176,75 @@ function round1(n) {
 }
 
 /**
- * Score the "real signal" portion of Security: SECURITY.md presence and
- * release publishing maturity. Returns 0.0 - 0.9.
+ * Score the SECURITY.md sub-signal of the Security pillar. Returns 0.0 – 0.4.
+ *
+ * Release-recency was moved to the Maintenance pillar — releases measure
+ * "still shipping?", not "secure?".
  *
  *   0.4  SECURITY.md or equivalent declared on the community profile
- *   0.3  >= 1 release ever published
- *   0.2  most recent release published <= 365 days ago (cumulative)
  *
  * @param {any | null | undefined} communityProfile
- * @param {any | null | undefined} latestRelease
+ * @returns {number}
+ */
+function scoreSecurityExtras(communityProfile) {
+  if (communityProfile && communityProfile.files && communityProfile.files.security_policy) {
+    return 0.4;
+  }
+  return 0;
+}
+
+/**
+ * Score release recency as a Maintenance sub-signal. Returns 0.0 – 1.0.
+ *
+ *   <= 365 days   1.0   still cutting releases
+ *   <= 730 days   0.5   stable, not abandoned
+ *   else          0.0
+ *
+ * @param {{published_at?: string} | null | undefined} latestRelease
  * @param {Date} now
  * @returns {number}
  */
-function scoreSecurityExtras(communityProfile, latestRelease, now) {
-  let score = 0;
+function scoreReleaseRecency(latestRelease, now) {
+  if (!latestRelease || !latestRelease.published_at) return 0;
+  const days = (now.getTime() - new Date(latestRelease.published_at).getTime()) / 86400000;
+  if (days <= 365) return 1.0;
+  if (days <= 730) return 0.5;
+  return 0;
+}
 
-  // SECURITY.md: GitHub's /community/profile endpoint returns
-  // files.security_policy = null when absent, or an object with html_url when present.
-  if (communityProfile && communityProfile.files && communityProfile.files.security_policy) {
-    score += 0.4;
-  }
+/**
+ * Score how responsively a project triages recent issues. Returns 0.0 – 0.5.
+ *
+ * GitHub's /issues endpoint returns BOTH issues and PRs; PRs are filtered
+ * out by skipping items where `pull_request` is truthy. An issue counts
+ * as "triaged" if it has ≥1 comment OR has been closed. Then bucket:
+ *
+ *   >= 80%  +0.5
+ *   >= 50%  +0.3
+ *   else     0.0
+ *
+ * Quiet repos (no recent issues) score 0 — no signal in either direction.
+ * The `now` parameter is accepted for symmetry; the helper does not yet
+ * use it but keeps the signature stable for future recency weighting.
+ *
+ * @param {Array<{pull_request?: any, comments?: number, state?: string}> | null | undefined} recentIssues
+ * @param {Date} now
+ * @returns {number}
+ */
+function scoreIssueTriage(recentIssues, now) {
+  void now; // reserved for future recency weighting
+  if (recentIssues === null || recentIssues === undefined) return 0;
+  if (!Array.isArray(recentIssues)) return 0;
 
-  if (latestRelease && latestRelease.published_at) {
-    score += 0.3;
-    const releaseDate = new Date(latestRelease.published_at);
-    const days = (now.getTime() - releaseDate.getTime()) / 86400000;
-    if (days <= 365) score += 0.2;
-  }
+  const issuesOnly = recentIssues.filter(a => a && !a.pull_request);
+  if (issuesOnly.length === 0) return 0;
 
-  return score;
+  const triaged = issuesOnly.filter(a => (a.comments || 0) >= 1 || a.state === 'closed').length;
+  const pct = triaged / issuesOnly.length;
+
+  if (pct >= 0.8) return 0.5;
+  if (pct >= 0.5) return 0.3;
+  return 0;
 }
 
 /**

@@ -68,6 +68,7 @@ export default function ProjectDetail() {
           openIssues: data.meta.openIssues,
           url: data.repo.url,
           advisories: data.meta.advisories ?? null,
+          maintenanceBreakdown: data.meta.maintenanceBreakdown ?? null,
         });
       } catch (err: any) {
         setError(err.message);
@@ -239,17 +240,33 @@ export default function ProjectDetail() {
                   <SignalSection
                     title="HEALTH"
                     value={project.score.overall.toFixed(1)}
-                    bullets={[
-                      "↑ Maintenance velocity sustained",
-                      project.advisories
+                    bullets={(() => {
+                      const mb = project.maintenanceBreakdown;
+                      const lastCommit = project.lastCommit ? new Date(project.lastCommit) : null;
+                      const daysSinceCommit = lastCommit
+                        ? Math.floor((Date.now() - lastCommit.getTime()) / 86400000)
+                        : null;
+                      const maintenanceBullet = !mb
+                        ? "— Maintenance data unavailable"
+                        : mb.commit >= 1.2
+                          ? "↑ Active commits this month"
+                          : mb.release >= 0.8
+                            ? "↑ Stable: recent tagged release"
+                            : mb.triage >= 0.4
+                              ? "↑ Recent issues being triaged"
+                              : daysSinceCommit != null
+                                ? `↓ No commits in ${daysSinceCommit}d`
+                                : "↓ Commit cadence cold";
+                      const advisoryBullet = project.advisories
                         ? (project.advisories.openCount === 0
                             ? "↑ No known advisories"
                             : `↓ ${project.advisories.openCount} open ${project.advisories.openCount === 1 ? 'advisory' : 'advisories'}`)
-                        : "— Advisory data unavailable",
-                      project.advisories && (project.advisories.critical ?? 0) > 0
-                        ? `↓ ${project.advisories.critical} critical advisory${(project.advisories.critical ?? 0) > 1 ? 's' : ''}`
-                        : "↑ Zero critical advisories"
-                    ]}
+                        : "— Advisory data unavailable";
+                      const criticalBullet = project.advisories && (project.advisories.critical ?? 0) > 0
+                        ? `↓ ${project.advisories.critical} critical`
+                        : "↑ Zero critical advisories";
+                      return [maintenanceBullet, advisoryBullet, criticalBullet];
+                    })()}
                   />
                   <SignalSection 
                     title="FORKABILITY" 

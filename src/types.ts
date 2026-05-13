@@ -24,6 +24,13 @@ export type AdvisorySummary = {
   low: number;
 };
 
+export type MaintenanceBreakdown = {
+  commit: number;     // 0.0-1.5
+  release: number;    // 0.0-1.0
+  triage: number;     // 0.0-0.5
+  triageDataAvailable: boolean;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -41,6 +48,7 @@ export type Project = {
   openIssues?: number;
   lastCommit?: string;
   advisories?: AdvisorySummary | null;
+  maintenanceBreakdown?: MaintenanceBreakdown | null;
   parentId?: string; // ID of the original project if this is a fork
   parentName?: string;
   parentOwner?: string;

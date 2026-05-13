@@ -42,14 +42,14 @@ export default function Methodology() {
             <div>
               <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-8">THE SOYCE SCORE</h2>
               <p className="text-xl font-medium opacity-70 mb-12 leading-relaxed">
-                The Soyce Score is a weighted composite computed from twelve GitHub repository signals: last commit date, star count, contributor count, fork count, license, open issue count, description / topics / homepage presence, 30-day commit volume, README content, SECURITY.md presence, release recency, and published security advisories (CVEs the maintainers disclosed in this repo's own code).
+                The Soyce Score is a weighted composite computed from thirteen GitHub repository signals: last commit date, star count, contributor count, fork count, license, open issue count, description / topics / homepage presence, 30-day commit volume, README content, SECURITY.md presence, release recency, recent-issue triage rate, and published security advisories (CVEs the maintainers disclosed in this repo's own code).
               </p>
 
               <div className="space-y-6">
                 {[
-                  { label: 'MAINTENANCE', weight: 30, desc: 'Days since the most recent commit. Recent = high, stale = low.' },
+                  { label: 'MAINTENANCE', weight: 30, desc: 'Three sub-signals so finished/stable libraries are not punished for being done. Commit recency: bucketed days since the latest commit (up to 1.5). Release recency: latest tagged release within 1 year scores full credit, within 2 years scores half (up to 1.0). Issue triage: percentage of issues opened in the last 90 days that received a comment or were closed (up to 0.5). PRs are filtered out; quiet repos with no recent issues score 0 on triage.' },
                   { label: 'COMMUNITY', weight: 25, desc: 'Log-scaled star count, contributor count, fork milestone (1k+).' },
-                  { label: 'SECURITY', weight: 20, desc: 'Published security advisories (real CVEs the maintainers disclosed in this repo, weighted by severity and recency; withdrawn advisories ignored), license presence + permissiveness (MIT / Apache / BSD), low issues-per-star ratio on actively-maintained projects, SECURITY.md policy, and tagged-release recency. Does NOT score vulnerabilities in this repo\'s dependencies.' },
+                  { label: 'SECURITY', weight: 20, desc: 'Published security advisories (real CVEs the maintainers disclosed in this repo, weighted by severity and recency; withdrawn advisories ignored), license presence + permissiveness (MIT / Apache / BSD), low issues-per-star ratio on actively-maintained projects, and SECURITY.md policy. Release recency moved to MAINTENANCE — releases measure "still shipping?", not "secure?". Does NOT score vulnerabilities in this repo\'s dependencies.' },
                   { label: 'DOCUMENTATION', weight: 15, desc: 'Description, ≥3 topics, homepage URL — and README content: length, heading count, code examples, install instructions.' },
                   { label: 'ACTIVITY', weight: 10, desc: 'Number of commits in the last 30 days (sampled from the most recent 30 commits).' },
                 ].map(item => (

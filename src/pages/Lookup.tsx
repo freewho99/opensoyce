@@ -98,6 +98,7 @@ export default function Lookup() {
         openIssues: data.meta.openIssues,
         lastCommit: data.meta.lastCommit,
         advisories: data.meta.advisories ?? null,
+        maintenanceBreakdown: data.meta.maintenanceBreakdown ?? null,
       });
       
       showToast('Analysis complete!');
@@ -265,6 +266,17 @@ export default function Lookup() {
                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 mb-2">SCRIBED SCORE BREAKDOWN</h3>
                        <div className="space-y-4">
                         <PillarRow label="Maintenance" value={result.score.maintenance} raw={result.score.raw?.maintenance} max={3.0} />
+                        {result.maintenanceBreakdown === undefined ? null : result.maintenanceBreakdown === null ? (
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-30 -mt-2 pl-1">
+                            └ MAINTENANCE BREAKDOWN UNAVAILABLE
+                          </div>
+                        ) : (
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-60 -mt-2 pl-1 break-words">
+                            └ COMMIT {result.maintenanceBreakdown.commit.toFixed(1)}
+                            {' · '}RELEASE {result.maintenanceBreakdown.release.toFixed(1)}
+                            {' · '}TRIAGE {result.maintenanceBreakdown.triageDataAvailable ? result.maintenanceBreakdown.triage.toFixed(1) : 'N/A'}
+                          </div>
+                        )}
                         <PillarRow label="Community" value={result.score.community} raw={result.score.raw?.community} max={2.5} />
                         <PillarRow label="Security" value={result.score.security} raw={result.score.raw?.security} max={2.0} />
                         {result.advisories === undefined ? null : result.advisories === null ? (
