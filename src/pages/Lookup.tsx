@@ -109,8 +109,12 @@ export default function Lookup() {
 
   const copyBadge = () => {
     if (!result) return;
-    const origin = window.location.origin;
-    const markdown = `[![OpenSoyce Score](${origin}/api/badge/${result.owner}/${result.name}.svg)](${origin}/project/${result.owner}/${result.name})`;
+    // Always emit the canonical production origin in the badge markdown so a
+    // README badge copied from dev still points at the live site, not localhost.
+    const origin = (typeof window !== 'undefined' && /^https?:\/\/(localhost|127\.0\.0\.1)/.test(window.location.origin))
+      ? 'https://opensoyce.com'
+      : window.location.origin;
+    const markdown = `[![OpenSoyce Score](${origin}/api/badge/${result.owner}/${result.name}.svg)](${origin}/projects/${result.owner}/${result.name})`;
     navigator.clipboard.writeText(markdown);
     setCopied(true);
     showToast('BADGE COPIED! PASTE INTO YOUR README.');

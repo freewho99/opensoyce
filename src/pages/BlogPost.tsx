@@ -32,7 +32,11 @@ export default function BlogPost() {
   const renderContent = (content: string) => {
     const paragraphs = content.split('\n\n');
     return paragraphs.map((para, i) => {
-      const imgMatch = para.match(/^\[img:([^:]+):([^\]]+)\]$/);
+      // Trim each paragraph so leading newlines / whitespace in the article
+      // template literal don't break heading detection.
+      const trimmed = para.trim();
+      if (!trimmed) return null;
+      const imgMatch = trimmed.match(/^\[img:([^:]+):([^\]]+)\]$/);
       if (imgMatch) {
         return (
           <figure key={i} className="my-10">
@@ -47,28 +51,28 @@ export default function BlogPost() {
           </figure>
         );
       }
-      if (para.startsWith('### ')) {
+      if (trimmed.startsWith('### ')) {
         return (
           <h3 key={i} className="text-2xl font-black uppercase italic tracking-tight mt-10 mb-4 text-soy-bottle">
-            {para.slice(4)}
+            {trimmed.slice(4)}
           </h3>
         );
       }
-      if (para.startsWith('## ')) {
+      if (trimmed.startsWith('## ')) {
         return (
           <h2 key={i} className="text-3xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle border-b-2 border-soy-red pb-3">
-            {para.slice(3)}
+            {trimmed.slice(3)}
           </h2>
         );
       }
-      if (para.startsWith('# ')) {
+      if (trimmed.startsWith('# ')) {
         return (
           <h1 key={i} className="text-4xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle">
-            {para.slice(2)}
+            {trimmed.slice(2)}
           </h1>
         );
       }
-      const parts = para.split(/(\*\*[^*]+\*\*)/g);
+      const parts = trimmed.split(/(\*\*[^*]+\*\*)/g);
       return (
         <p key={i} className="text-lg leading-relaxed mb-6 opacity-90">
           {parts.map((part, j) => {
