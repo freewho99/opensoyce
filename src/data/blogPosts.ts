@@ -24,6 +24,7 @@ export const blogPosts: BlogPost[] = [
     date: 'May 12, 2026',
     featured: false,
     heroImage: '/blog/package-lock-hero.png',
+    tags: ['security', 'dependencies', 'npm', 'supply-chain', 'package-lock', 'deep-dive'],
     metaDescription: 'Most teams review their direct dependencies. Almost no one reads their package-lock.json. Here is what lives inside that file and why it matters more than your package.json.',
     content: `
 ## THE FILE YOU CHECK IN BUT NEVER READ
