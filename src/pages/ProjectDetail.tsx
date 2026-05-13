@@ -4,9 +4,9 @@ import { MOCK_RECIPES } from '../constants';
 import NutritionLabel from '../components/NutritionLabel';
 import SimilarProjects from '../components/SimilarProjects';
 import SoyceScore from '../components/SoyceScore';
-import { 
-  Github, Star, GitFork, ShieldCheck, ExternalLink, ArrowLeft, 
-  Terminal, Package, Code, GitBranch, Copy, Check, X, 
+import {
+  Github, Star, GitFork, ShieldCheck, ShieldAlert, ExternalLink, ArrowLeft,
+  Terminal, Package, Code, GitBranch, Copy, Check, X,
   Rocket, Briefcase, GraduationCap, TrendingUp, HelpCircle,
   ArrowUpRight, Loader2
 } from 'lucide-react';
@@ -66,7 +66,8 @@ export default function ProjectDetail() {
           license: data.meta.license,
           lastCommit: data.meta.lastCommit,
           openIssues: data.meta.openIssues,
-          url: data.repo.url
+          url: data.repo.url,
+          advisories: data.meta.advisories ?? null,
         });
       } catch (err: any) {
         setError(err.message);
@@ -215,15 +216,39 @@ export default function ProjectDetail() {
                   </div>
                 )}
 
+                {/* Active-advisory banner — only when there's something to alarm about */}
+                {project.advisories && (project.advisories.recentOpen > 0 || (project.advisories.critical ?? 0) > 0) && (
+                  <div className="bg-soy-red text-white border-4 border-black p-6 md:p-8 mb-8 flex flex-col md:flex-row items-start md:items-center gap-4 shadow-[8px_8px_0px_#000]">
+                    <ShieldAlert size={40} className="shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] opacity-70 mb-1">ACTIVE ADVISORY SIGNAL</h3>
+                      <p className="text-xl md:text-3xl font-black uppercase italic tracking-tighter leading-[0.95]">
+                        {project.advisories.openCount} OPEN {project.advisories.openCount === 1 ? 'ADVISORY' : 'ADVISORIES'}
+                        {project.advisories.recentOpen > 0 && <> · {project.advisories.recentOpen} IN LAST 12 MO</>}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 text-[10px] font-black uppercase tracking-widest">
+                      {(project.advisories.critical ?? 0) > 0 && <span className="bg-black text-white px-2 py-1">CRIT {project.advisories.critical}</span>}
+                      {(project.advisories.high ?? 0) > 0 && <span className="bg-amber-500 text-black px-2 py-1 border border-black">HIGH {project.advisories.high}</span>}
+                    </div>
+                  </div>
+                )}
+
                 {/* 4. SIGNAL BREAKDOWN (3-column grid) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-4 border-black mb-12">
-                  <SignalSection 
-                    title="HEALTH" 
-                    value={project.score.overall.toFixed(1)} 
+                  <SignalSection
+                    title="HEALTH"
+                    value={project.score.overall.toFixed(1)}
                     bullets={[
                       "↑ Maintenance velocity sustained",
-                      "↑ Security advisories verified",
-                      "↓ Zero critical vulnerabilities"
+                      project.advisories
+                        ? (project.advisories.openCount === 0
+                            ? "↑ No known advisories"
+                            : `↓ ${project.advisories.openCount} open ${project.advisories.openCount === 1 ? 'advisory' : 'advisories'}`)
+                        : "— Advisory data unavailable",
+                      project.advisories && (project.advisories.critical ?? 0) > 0
+                        ? `↓ ${project.advisories.critical} critical advisory${(project.advisories.critical ?? 0) > 1 ? 's' : ''}`
+                        : "↑ Zero critical advisories"
                     ]}
                   />
                   <SignalSection 

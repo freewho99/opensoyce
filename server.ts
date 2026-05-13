@@ -63,17 +63,18 @@ async function startServer() {
     const hit = cacheGet(key);
     if (hit) return hit;
 
-    const [repoData, commits, contributors, readme, communityProfile, latestRelease] = await Promise.all([
+    const [repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories] = await Promise.all([
       gh.getRepo(owner, repo),
       gh.getCommits(owner, repo),
       gh.getContributors(owner, repo),
       gh.getReadme(owner, repo),
       gh.getCommunityProfile(owner, repo),
-      gh.getLatestRelease(owner, repo)
+      gh.getLatestRelease(owner, repo),
+      gh.getRepoAdvisories(owner, repo)
     ]);
     if (!repoData) return null;
 
-    const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || [], readme, communityProfile, latestRelease);
+    const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || [], readme, communityProfile, latestRelease, repoAdvisories);
     const data = {
       ...scoreResult,
       repo: {

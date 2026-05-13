@@ -6,6 +6,15 @@
  * @property {number} documentation 0.0 - 1.5
  * @property {number} activity     0.0 - 1.0
  *
+ * @typedef {Object} AdvisorySummary
+ * @property {number}   total         Total non-withdrawn published advisories ever filed
+ * @property {number}   openCount     Advisories not withdrawn (we treat all published advisories as "open" since GitHub doesn't track resolved-vs-active)
+ * @property {number}   recentOpen    Advisories published within the last 365 days
+ * @property {number}   critical
+ * @property {number}   high
+ * @property {number}   medium
+ * @property {number}   low
+ *
  * @typedef {Object} ScoreMeta
  * @property {string}   lastCommit  ISO timestamp of the most recent commit
  * @property {number}   totalStars
@@ -15,6 +24,7 @@
  * @property {string}   language
  * @property {string[]} topics
  * @property {number}   contributors Number of contributors observed (capped by fetch page size)
+ * @property {AdvisorySummary | null} advisories  null when the advisory fetch failed; populated summary (possibly all zeroes) when it succeeded
  *
  * @typedef {Object} ScoreResult
  * @property {number}          total      0.0 - 10.0, sum of all pillars, rounded to 1 decimal
@@ -34,9 +44,10 @@
  * @param {{content?: string, encoding?: string} | null} [readme]   GET /repos/{owner}/{repo}/readme (may be null when none exists)
  * @param {any | null} [communityProfile]  GET /repos/{owner}/{repo}/community/profile (may be null)
  * @param {any | null} [latestRelease]     GET /repos/{owner}/{repo}/releases/latest (may be null when no releases)
+ * @param {any[] | null} [repoAdvisories]  GET /repos/{owner}/{repo}/security-advisories (null on fetch failure, [] when none)
  * @returns {ScoreResult}
  */
-export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease) {
+export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories) {
   const now = new Date();
   const safeCommits = Array.isArray(commits) ? commits : [];
   const safeContributors = Array.isArray(contributors) ? contributors : [];
@@ -87,6 +98,8 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   }
 
   security += scoreSecurityExtras(communityProfile, latestRelease, now);
+  security += scoreRepoAdvisories(repoAdvisories, now);
+  if (security < 0) security = 0;
   security = Math.min(2.0, security);
 
   // 4. DOCUMENTATION (max 1.5)
@@ -131,6 +144,7 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
       language: repoData.language || 'Unknown',
       topics: repoData.topics || [],
       contributors: contributorCount,
+      advisories: summarizeAdvisories(repoAdvisories, now),
     },
   };
 }
@@ -222,4 +236,88 @@ function scoreReadme(readme) {
   if (installPattern.test(stripped)) score += 0.1;
 
   return Math.min(0.9, score);
+}
+
+/**
+ * Score the real-CVE sub-signal from GitHub's repo-level advisory list.
+ *
+ * Pure: no I/O, no input mutation.
+ *
+ * Returns a number in [-0.6, +0.5]:
+ *   +0.5 baseline when no published, non-withdrawn advisories exist
+ *   subtract penalty per advisory weighted by severity × recency
+ *
+ * Failure modes:
+ *   null / undefined / non-array → 0.0 (unknown — neither rewarded nor penalized)
+ *   []                          → +0.5 (no self-disclosed CVEs)
+ *
+ * Caveat: this measures CVEs the maintainers themselves disclosed in this
+ * repo's own code. It does NOT measure vulnerabilities in dependencies.
+ *
+ * @param {Array<{severity?: string, state?: string, published_at?: string, withdrawn_at?: string | null}> | null | undefined} advisories
+ * @param {Date} now
+ * @returns {number}
+ */
+function scoreRepoAdvisories(advisories, now) {
+  if (advisories === null || advisories === undefined) return 0;
+  if (!Array.isArray(advisories)) return 0;
+  if (advisories.length === 0) return 0.5;
+
+  const sevWeight = { critical: 0.4, high: 0.25, medium: 0.1, moderate: 0.1, low: 0.05 };
+  let penalty = 0;
+
+  for (const a of advisories) {
+    if (!a || a.withdrawn_at) continue;
+    if (a.state && a.state !== 'published') continue;
+    const sev = (a.severity || '').toLowerCase();
+    const w = sevWeight[sev];
+    if (!w) continue;
+
+    let recencyMult = 0.1;
+    if (a.published_at) {
+      const days = (now.getTime() - new Date(a.published_at).getTime()) / 86400000;
+      if (days <= 180) recencyMult = 1.0;
+      else if (days <= 365) recencyMult = 0.6;
+      else if (days <= 1095) recencyMult = 0.3;
+    }
+    penalty += w * recencyMult;
+  }
+
+  const result = 0.5 - penalty;
+  return result < -0.6 ? -0.6 : result;
+}
+
+/**
+ * Build the AdvisorySummary the UI consumes from the same raw advisory list.
+ *
+ * Returns null when the fetch itself failed (advisories === null/undefined),
+ * so the UI can distinguish "no advisories" from "couldn't tell." When the
+ * list is an empty array, returns a zeroed summary (clearly: "we asked, the
+ * answer was zero").
+ *
+ * @param {Array<any> | null | undefined} advisories
+ * @param {Date} now
+ * @returns {AdvisorySummary | null}
+ */
+function summarizeAdvisories(advisories, now) {
+  if (advisories === null || advisories === undefined) return null;
+  if (!Array.isArray(advisories)) return null;
+
+  const out = { total: 0, openCount: 0, recentOpen: 0, critical: 0, high: 0, medium: 0, low: 0 };
+  for (const a of advisories) {
+    if (!a || a.withdrawn_at) continue;
+    if (a.state && a.state !== 'published') continue;
+    out.total += 1;
+    out.openCount += 1;
+    const sev = (a.severity || '').toLowerCase();
+    if (sev === 'critical') out.critical += 1;
+    else if (sev === 'high') out.high += 1;
+    else if (sev === 'medium' || sev === 'moderate') out.medium += 1;
+    else if (sev === 'low') out.low += 1;
+    if (a.published_at) {
+      const days = (now.getTime() - new Date(a.published_at).getTime()) / 86400000;
+      if (days <= 365) out.recentOpen += 1;
+    }
+  }
+  return out;
 }

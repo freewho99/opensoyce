@@ -97,6 +97,7 @@ export default function Lookup() {
         license: data.meta.license,
         openIssues: data.meta.openIssues,
         lastCommit: data.meta.lastCommit,
+        advisories: data.meta.advisories ?? null,
       });
       
       showToast('Analysis complete!');
@@ -266,6 +267,22 @@ export default function Lookup() {
                         <PillarRow label="Maintenance" value={result.score.maintenance} raw={result.score.raw?.maintenance} max={3.0} />
                         <PillarRow label="Community" value={result.score.community} raw={result.score.raw?.community} max={2.5} />
                         <PillarRow label="Security" value={result.score.security} raw={result.score.raw?.security} max={2.0} />
+                        {result.advisories === undefined ? null : result.advisories === null ? (
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-30 -mt-2 pl-1">
+                            └ ADVISORY DATA UNAVAILABLE
+                          </div>
+                        ) : result.advisories.total === 0 ? (
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-50 -mt-2 pl-1">
+                            └ NO KNOWN ADVISORIES
+                          </div>
+                        ) : (
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic -mt-2 pl-1">
+                            └ <span className={result.advisories.recentOpen > 0 ? 'text-soy-red' : 'opacity-60'}>
+                                {result.advisories.openCount} OPEN / {result.advisories.total} TOTAL
+                              </span>
+                            {(result.advisories.critical ?? 0) > 0 && <span className="ml-2 bg-soy-red text-white px-1.5 py-0.5">CRIT {result.advisories.critical}</span>}
+                          </div>
+                        )}
                         <PillarRow label="Documentation" value={result.score.documentation} raw={result.score.raw?.documentation} max={1.5} />
                         <PillarRow label="Activity" value={result.score.activity || 0} raw={result.score.raw?.activity} max={1.0} />
                        </div>

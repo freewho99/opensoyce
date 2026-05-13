@@ -14,6 +14,16 @@ export type SoyceScore = {
   };
 };
 
+export type AdvisorySummary = {
+  total: number;
+  openCount: number;
+  recentOpen: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -30,6 +40,7 @@ export type Project = {
   scoreTrend: 'up' | 'down' | 'flat';
   openIssues?: number;
   lastCommit?: string;
+  advisories?: AdvisorySummary | null;
   parentId?: string; // ID of the original project if this is a fork
   parentName?: string;
   parentOwner?: string;

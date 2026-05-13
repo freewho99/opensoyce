@@ -54,6 +54,10 @@ export class GitHubService {
     return this.fetchGH(`/repos/${owner}/${repo}/releases/latest`);
   }
 
+  async getRepoAdvisories(owner: string, repo: string) {
+    return this.fetchGH(`/repos/${owner}/${repo}/security-advisories?per_page=100`);
+  }
+
   async getWorkflows(owner: string, repo: string) {
     return this.fetchGH(`/repos/${owner}/${repo}/actions/workflows`);
   }

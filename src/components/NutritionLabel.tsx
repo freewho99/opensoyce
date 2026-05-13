@@ -84,6 +84,14 @@ export default function NutritionLabel({ project }: NutritionLabelProps) {
           <span>License:</span>
           <span>{project.license}</span>
         </div>
+        {project.advisories && project.advisories.total > 0 && (
+          <div className="flex justify-between">
+            <span>Advisories:</span>
+            <span className={project.advisories.recentOpen > 0 || (project.advisories.critical ?? 0) > 0 ? 'text-soy-red' : ''}>
+              {project.advisories.openCount}/{project.advisories.total} OPEN
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 pt-2 border-t border-soy-bottle text-[8px] italic leading-tight text-center opacity-60">
