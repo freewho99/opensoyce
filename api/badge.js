@@ -18,11 +18,13 @@ export default async function handler(req, res) {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   try {
-    const [repoRes, commitsRes, contributorsRes, readmeRes] = await Promise.all([
+    const [repoRes, commitsRes, contributorsRes, readmeRes, communityRes, releaseRes] = await Promise.all([
       fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers }),
       fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=30`, { headers }),
       fetch(`https://api.github.com/repos/${owner}/${repo}/contributors?per_page=30`, { headers }),
       fetch(`https://api.github.com/repos/${owner}/${repo}/readme`, { headers }),
+      fetch(`https://api.github.com/repos/${owner}/${repo}/community/profile`, { headers }),
+      fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, { headers }),
     ]);
 
     if (!repoRes.ok) return res.status(404).send('Not found');
@@ -31,8 +33,10 @@ export default async function handler(req, res) {
     const commits = commitsRes.ok ? await commitsRes.json() : [];
     const contributors = contributorsRes.ok ? await contributorsRes.json() : [];
     const readme = readmeRes.ok ? await readmeRes.json() : null;
+    const communityProfile = communityRes.ok ? await communityRes.json() : null;
+    const latestRelease = releaseRes.ok ? await releaseRes.json() : null;
 
-    const { total } = calculateSoyceScore(repoData, commits, contributors, readme);
+    const { total } = calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease);
     const score = total ?? 0;
     const color = score >= 8 ? '#22c55e' : score >= 6 ? '#f59e0b' : '#E63322';
 

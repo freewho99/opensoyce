@@ -42,14 +42,14 @@ export default function Methodology() {
             <div>
               <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-8">THE SOYCE SCORE</h2>
               <p className="text-xl font-medium opacity-70 mb-12 leading-relaxed">
-                The Soyce Score is a weighted composite computed from nine GitHub repository signals: last commit date, star count, contributor count, fork count, license, open issue count, description / topics / homepage presence, 30-day commit volume, and README content.
+                The Soyce Score is a weighted composite computed from eleven GitHub repository signals: last commit date, star count, contributor count, fork count, license, open issue count, description / topics / homepage presence, 30-day commit volume, README content, SECURITY.md presence, and release recency.
               </p>
 
               <div className="space-y-6">
                 {[
                   { label: 'MAINTENANCE', weight: 30, desc: 'Days since the most recent commit. Recent = high, stale = low.' },
                   { label: 'COMMUNITY', weight: 25, desc: 'Log-scaled star count, contributor count, fork milestone (1k+).' },
-                  { label: 'SECURITY', weight: 20, desc: 'License presence + permissiveness (MIT / Apache / BSD), open issue load, repo metadata hygiene.' },
+                  { label: 'SECURITY', weight: 20, desc: 'License presence + permissiveness (MIT / Apache / BSD), open issue load, SECURITY.md policy (must be at a location GitHub surfaces in its Security tab), and whether a tagged release was published within the last year.' },
                   { label: 'DOCUMENTATION', weight: 15, desc: 'Description, ≥3 topics, homepage URL — and README content: length, heading count, code examples, install instructions.' },
                   { label: 'ACTIVITY', weight: 10, desc: 'Number of commits in the last 30 days (sampled from the most recent 30 commits).' },
                 ].map(item => (

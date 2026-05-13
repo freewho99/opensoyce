@@ -46,6 +46,14 @@ export class GitHubService {
     return this.fetchGH(`/repos/${owner}/${repo}/readme`);
   }
 
+  async getCommunityProfile(owner: string, repo: string) {
+    return this.fetchGH(`/repos/${owner}/${repo}/community/profile`);
+  }
+
+  async getLatestRelease(owner: string, repo: string) {
+    return this.fetchGH(`/repos/${owner}/${repo}/releases/latest`);
+  }
+
   async getWorkflows(owner: string, repo: string) {
     return this.fetchGH(`/repos/${owner}/${repo}/actions/workflows`);
   }

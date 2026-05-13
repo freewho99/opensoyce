@@ -28,13 +28,15 @@
  * Inputs are raw GitHub REST payloads. The function is pure: it does no I/O
  * and mutates none of its arguments.
  *
- * @param {any}   repoData      GET /repos/{owner}/{repo}
- * @param {any[]} commits       GET /repos/{owner}/{repo}/commits (may be empty)
- * @param {any[]} contributors  GET /repos/{owner}/{repo}/contributors (may be empty)
- * @param {{content?: string, encoding?: string} | null} [readme]  GET /repos/{owner}/{repo}/readme (may be null when none exists)
+ * @param {any}   repoData          GET /repos/{owner}/{repo}
+ * @param {any[]} commits           GET /repos/{owner}/{repo}/commits (may be empty)
+ * @param {any[]} contributors      GET /repos/{owner}/{repo}/contributors (may be empty)
+ * @param {{content?: string, encoding?: string} | null} [readme]   GET /repos/{owner}/{repo}/readme (may be null when none exists)
+ * @param {any | null} [communityProfile]  GET /repos/{owner}/{repo}/community/profile (may be null)
+ * @param {any | null} [latestRelease]     GET /repos/{owner}/{repo}/releases/latest (may be null when no releases)
  * @returns {ScoreResult}
  */
-export function calculateSoyceScore(repoData, commits, contributors, readme) {
+export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease) {
   const now = new Date();
   const safeCommits = Array.isArray(commits) ? commits : [];
   const safeContributors = Array.isArray(contributors) ? contributors : [];
@@ -64,17 +66,17 @@ export function calculateSoyceScore(repoData, commits, contributors, readme) {
   if ((repoData.forks_count || 0) >= 1000) community += 0.5;
   community = Math.min(2.5, community);
 
-  // 3. SECURITY (max 2.0) - license presence/permissiveness, issue load, metadata hygiene
+  // 3. SECURITY (max 2.0) - license, issue load, SECURITY.md, release maturity
   let security = 0;
-  if (repoData.license) security += 0.5;
+  if (repoData.license) security += 0.4;
   const licenseId = repoData.license?.spdx_id?.toUpperCase() || '';
-  if (['MIT', 'APACHE-2.0', 'BSD-2-CLAUSE', 'BSD-3-CLAUSE'].includes(licenseId)) security += 0.5;
+  if (['MIT', 'APACHE-2.0', 'BSD-2-CLAUSE', 'BSD-3-CLAUSE'].includes(licenseId)) security += 0.4;
 
   const openIssues = repoData.open_issues_count || 0;
-  if (openIssues < 20) security += 0.5;
-  else if (openIssues < 100) security += 0.3;
+  if (openIssues < 20) security += 0.3;
+  else if (openIssues < 100) security += 0.2;
 
-  if ((repoData.topics && repoData.topics.length > 0) || repoData.description) security += 0.5;
+  security += scoreSecurityExtras(communityProfile, latestRelease, now);
   security = Math.min(2.0, security);
 
   // 4. DOCUMENTATION (max 1.5)
@@ -125,6 +127,38 @@ export function calculateSoyceScore(repoData, commits, contributors, readme) {
 
 function round1(n) {
   return parseFloat(n.toFixed(1));
+}
+
+/**
+ * Score the "real signal" portion of Security: SECURITY.md presence and
+ * release publishing maturity. Returns 0.0 - 0.9.
+ *
+ *   0.4  SECURITY.md or equivalent declared on the community profile
+ *   0.3  >= 1 release ever published
+ *   0.2  most recent release published <= 365 days ago (cumulative)
+ *
+ * @param {any | null | undefined} communityProfile
+ * @param {any | null | undefined} latestRelease
+ * @param {Date} now
+ * @returns {number}
+ */
+function scoreSecurityExtras(communityProfile, latestRelease, now) {
+  let score = 0;
+
+  // SECURITY.md: GitHub's /community/profile endpoint returns
+  // files.security_policy = null when absent, or an object with html_url when present.
+  if (communityProfile && communityProfile.files && communityProfile.files.security_policy) {
+    score += 0.4;
+  }
+
+  if (latestRelease && latestRelease.published_at) {
+    score += 0.3;
+    const releaseDate = new Date(latestRelease.published_at);
+    const days = (now.getTime() - releaseDate.getTime()) / 86400000;
+    if (days <= 365) score += 0.2;
+  }
+
+  return score;
 }
 
 /**
