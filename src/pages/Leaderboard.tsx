@@ -28,7 +28,7 @@ export default function Leaderboard() {
     description: r.description,
     stars: r.stars,
     forks: Math.floor(r.stars / 10), // mock forks if not in data
-    lastScanned: 'Just now',
+    lastScanned: r.lastCommit || 'Today',
     status: 'Verified',
     category: r.category,
     scoreTrend: 'up',
