@@ -19,7 +19,7 @@ export const blogPosts: BlogPost[] = [
     category: "HOT TAKE",
     date: "APRIL 28, 2026",
     readTime: "6 min read",
-    emoji: "🧩",
+    emoji: "\u{1F9E9}",
     tags: ["history", "trust", "npm"],
     content: `In March 2016, a developer named Azer Koculu unpublished 273 packages from npm in a dispute over a naming conflict with Kik. One of those packages was left-pad - 11 lines of code that left-padded a string with zeros or spaces. Within hours, React, Babel, and thousands of other projects were broken worldwide. CI pipelines failed. Production deployments stalled. The internet had a meltdown over a function that could be written in a tweet.
 
@@ -36,7 +36,7 @@ The left-pad incident is now a footnote. But the underlying problem - opacity in
     category: "FRAMEWORK WARS",
     date: "APRIL 15, 2026",
     readTime: "8 min read",
-    emoji: "⚔️",
+    emoji: "\u{2694}\u{FE0F}",
     tags: ["react", "vue", "angular", "maintenance"],
     content: `The React vs Vue vs Angular vs Svelte debate is a massive distraction. While developers argue about syntax and reactivity models, the real signals of project success are being ignored. If you look at the top tier of any framework ecosystem, you'll find that their core library scores on OpenSoyce are remarkably similar - almost all of them sit comfortably above 8.5.
 
@@ -53,7 +53,7 @@ Ultimately, the best framework is the one your team can maintain best. If you're
     category: "DEEP DIVE",
     date: "APRIL 2, 2026",
     readTime: "10 min read",
-    emoji: "📊",
+    emoji: "\u{1F4CA}",
     tags: ["methodology", "metrics", "transparency"],
     content: `A Soyce Score is a 0-10 metric derived from five core pillars: Maintenance, Community, Security, Documentation, and Activity. Each pillar represents a critical health signal. Maintenance tracks how often code is pushed and how long bugs sit open. Community looks at the contributor base. Security audits licenses and known CVEs. Documentation uses AI to judge how well the code is explained. Activity measures the pulse of the last 30 days.
 
@@ -70,7 +70,7 @@ Use the Soyce Score to filter out the noise. If a project has a 3.5, you probabl
     category: "SECURITY",
     date: "MARCH 20, 2026",
     readTime: "7 min read",
-    emoji: "🔒",
+    emoji: "\u{1F512}",
     tags: ["security", "xz-utils", "supply-chain"],
     content: `The security landscape changed forever after the SolarWinds and Log4Shell incidents. More recently, the XZ Utils backdoor proved that attackers are no longer just looking for bugs - they are looking for maintainers. By social engineering their way into a position of trust over years, a state-sponsored actor almost compromised the foundations of Linux worldwide.
 
@@ -87,7 +87,7 @@ In 2026, every engineering team needs a supply chain posture. You wouldn't hire 
     category: "ANALYSIS",
     date: "MARCH 5, 2026",
     readTime: "9 min read",
-    emoji: "🔥",
+    emoji: "\u{1F525}",
     tags: ["burnout", "philosophy", "sustainability"],
     content: `Open source is built on a foundation of volunteers who are often overworked and underappreciated. From OpenSSL to curl to the Faker.js incident, we've seen maintainers reach their breaking point after years of providing free labor to billion-dollar corporations. The imbalance between corporate consumption and contribution is a crisis.
 
@@ -105,7 +105,7 @@ OpenSource sustainability is the biggest challenge facing our industry. If we do
     category: "ANALYSIS",
     date: "MAY 19, 2026",
     readTime: "8 min read",
-    emoji: "🪦",
+    emoji: "\u{1FAA6}",
     tags: ["zombie-dependencies", "npm", "graveyard", "soyce-score", "supply-chain", "maintenance", "technical-debt"],
     content: `You shipped that feature six months ago. It works. Tests pass. Nobody's touched it. Life goes on.
 
@@ -191,7 +191,7 @@ Check the label. Build on what's actually alive.`
     category: "HOT TAKE",
     date: "MAY 26, 2026",
     readTime: "9 min read",
-    emoji: "🌡️",
+    emoji: "\u{1F321}\u{FE0F}",
     tags: ["security", "supply-chain", "github-stars", "heat-check", "cve", "soyce-score", "risk", "npm"],
     content: `It's a Thursday afternoon. You're deep in a Slack thread about the architecture for a new service. Someone drops a GitHub link. "We should use this," they say. "It's got 12,000 stars and everyone's talking about it."
 
@@ -271,7 +271,7 @@ Trending means people are excited. Trustworthy means you can ship on it. The Hea
     category: "DEEP DIVE",
     date: "JUNE 2, 2026",
     readTime: "10 min read",
-    emoji: "🍴",
+    emoji: "\u{1F374}",
     tags: ["forking", "remix", "forkability", "open-source-strategy", "license", "mit", "architecture", "biome", "archon", "astro", "soyce-score", "compare-tool"],
     content: `Every great product built on open source started with a fork decision.
 
@@ -342,7 +342,7 @@ Score before you fork. Build on what's actually solid.`
     category: "HOT TAKE",
     date: "May 12, 2026",
     readTime: "8 min",
-    emoji: "🪱",
+    emoji: "\u{1FAB1}",
     heroImage: "/blog/npm-worm-hero.png",
     tags: ["supply-chain", "npm", "security", "malware"],
     metaDescription: "The Mini Shai-Hulud worm compromised TanStack, Intercom, and PyTorch Lightning across npm and PyPI. Here is the full breakdown and what OpenSoyce scores reveal about your risk.",
@@ -413,7 +413,7 @@ Check the label at opensoyce.com/scanner.
     category: "HOT TAKE",
     date: "May 12, 2026",
     readTime: "9 min",
-    emoji: "🤖",
+    emoji: "\u{1F916}",
     heroImage: "/blog/ai-open-source-hero.png",
     tags: ["ai", "openai", "codex", "open-source", "maintainership"],
     metaDescription: "OpenAI Codex can now commit to your GitHub repo autonomously. What does AI-generated open source code mean for trust, maintenance health scores, and the Soyce Score?",
@@ -489,7 +489,7 @@ Check any package's current health at opensoyce.com.
     category: "ANALYSIS",
     date: "May 10, 2026",
     readTime: "8 min",
-    emoji: "📈",
+    emoji: "\u{1F4C8}",
     heroImage: "/blog/cve-math-hero.png",
     tags: ["cve", "vulnerabilities", "security", "open-source", "risk"],
     metaDescription: "48,185 CVEs were published in 2025 - a 20% increase over 2024. That is 130 new vulnerabilities per day. Here is why the traditional patch-and-pray approach is broken and what to do instead.",
@@ -559,7 +559,7 @@ Check your stack at opensoyce.com/scanner.
     category: "ANALYSIS",
     date: "May 8, 2026",
     readTime: "7 min",
-    emoji: "🔐",
+    emoji: "\u{1F510}",
     heroImage: "/blog/maintainer-lockout-hero.png",
     tags: ["maintainership", "governance", "supply-chain", "open-source", "risk"],
     metaDescription: "When fsnotify contributors were removed from the GitHub org in a maintainer dispute, the downstream concern was not just drama - it was a preview of a supply chain risk. Here is what it means for your team.",
@@ -629,7 +629,7 @@ Check any package's community health score at opensoyce.com.
     category: "DEEP DIVE",
     date: "May 6, 2026",
     readTime: "7 min",
-    emoji: "🔑",
+    emoji: "\u{1F511}",
     heroImage: "/blog/pypi-audit-hero.png",
     tags: ["pypi", "security-audit", "access-control", "supply-chain", "python"],
     metaDescription: "PyPI's second external security audit by Trail of Bits found two high-severity access control bugs. Here is the technical breakdown and what it means for Python package trust.",
@@ -695,7 +695,7 @@ Check any Python package's current Soyce Score at opensoyce.com.
     category: "DEEP DIVE",
     date: "May 12, 2026",
     readTime: "18 min",
-    emoji: "🧬",
+    emoji: "\u{1F9EC}",
     heroImage: "/blog/vscode-family-tree-hero.png",
     tags: ["vs-code", "microsoft", "history", "open-source", "editors", "electron", "cursor", "github-copilot"],
     metaDescription: "The complete evolution and family tree of Visual Studio Code: from Monaco Editor in 2011 to Agent Mode in 2025. How a browser experiment became the world's most popular IDE and spawned an entire ecosystem of forks.",
@@ -933,7 +933,7 @@ Check the health of any open-source dependency behind your development tools at 
     category: 'DEEP DIVE',
     date: 'May 12, 2026',
     readTime: '14 min',
-    emoji: '⚖️',
+    emoji: "\u{2696}\u{FE0F}",
     heroImage: '/blog/licensing-wars-hero.png',
     tags: ['Open Source', 'Licensing', 'MIT', 'GPL', 'Apache', 'AGPL', 'BSL', 'Legal', 'HashiCorp', 'Redis'],
     metaDescription: 'A deep dive into open source license wars: MIT vs GPL vs Apache vs AGPL vs BSL. Real relicensing drama from HashiCorp, Redis, and MongoDB — and how OpenSoyce surfaces license risk in your stack.',
