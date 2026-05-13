@@ -60,12 +60,14 @@ function scanFile(relPath) {
   }
   const hits = [];
   // Convert buffer to a hex string for a single sweep per pattern.
-  // For large files this is still O(n * patterns) but n is tiny in practice.
+  // CRITICAL: only accept matches that start on an EVEN hex index, otherwise
+  // we get phantom matches spanning byte boundaries (e.g. bytes 0xCC 0x3A
+  // would appear to contain "c3a" if scanned naively across the hex string).
   const hex = buf.toString('hex');
   for (const p of PATTERNS) {
     let idx = 0;
     while ((idx = hex.indexOf(p.bytes, idx)) >= 0) {
-      // Translate hex offset back to byte offset, then to line number.
+      if (idx % 2 !== 0) { idx += 1; continue; }
       const byteOffset = idx / 2;
       const upto = buf.subarray(0, byteOffset);
       const lineNumber = upto.toString('utf-8').split('\n').length;
