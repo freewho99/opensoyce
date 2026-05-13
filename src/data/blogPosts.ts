@@ -11,6 +11,7 @@ export type BlogPost = {
   tags: string[];
   metaDescription?: string;
   author?: string;
+  featured?: boolean;
 };
 
 export const blogPosts: BlogPost[] = [

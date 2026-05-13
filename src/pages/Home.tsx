@@ -96,10 +96,10 @@ export default function Home() {
   const [tickerIndex, setTickerIndex] = useState(0);
 
   const tickerMessages = [
-    "LIVE SIGNALS: 30 PROJECTS SCANNED · 6 CATEGORIES · REAL SCORES · UPDATED DAILY",
-    "LIVE SIGNALS: 4 STALE PROJECTS FLAGGED · 2 NEW VERIFIED MAINTAINERS",
-    "LIVE SIGNALS: 7 HIGH-FORKABILITY PROJECTS DETECTED THIS WEEK",
-    "LIVE SIGNALS: 3 NEW AI HARNESS ENTRIES · ARCHON LEADS THE CATEGORY"
+    "FROM THE BOARD: 30 PROJECTS SCANNED · 6 CATEGORIES · REAL SCORES · UPDATED DAILY",
+    "FROM THE BOARD: 4 STALE PROJECTS FLAGGED · 2 NEW VERIFIED MAINTAINERS",
+    "FROM THE BOARD: 7 HIGH-FORKABILITY PROJECTS DETECTED THIS WEEK",
+    "FROM THE BOARD: 3 NEW AI HARNESS ENTRIES · ARCHON LEADS THE CATEGORY"
   ];
 
   React.useEffect(() => {
@@ -246,7 +246,6 @@ export default function Home() {
             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-center">
               {tickerMessages[tickerIndex]}
             </span>
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
           </motion.div>
         </div>
       </div>
@@ -369,7 +368,7 @@ export default function Home() {
               <motion.div
                 key={i}
                 whileHover={{ x: 4, y: -4 }}
-                className="bg-white border-4 border-black p-10 shadow-[8px_8px_0px_#000] relative group overflow-hidden flex flex-col justify-between h-full"
+                className="bg-white border-2 border-black/80 p-10 shadow-[4px_4px_0px_#000] relative group overflow-hidden flex flex-col justify-between h-full"
               >
                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-20 transition-opacity">
                   <Zap size={120} />

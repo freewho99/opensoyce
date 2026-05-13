@@ -159,7 +159,7 @@ export default function Lookup() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         {/* Form Column */}
         <div className="lg:col-span-12 xl:col-span-12 h-fit">
-          <form onSubmit={handleAnalyze} className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#302C26] space-y-6">
+          <form onSubmit={handleAnalyze} className="bg-white border-2 border-soy-bottle/40 p-8 space-y-6">
             <div className="flex items-center gap-3 mb-4">
               <Github className="text-soy-red" size={32} />
               <h2 className="text-2xl font-bold uppercase italic tracking-tight">Source</h2>

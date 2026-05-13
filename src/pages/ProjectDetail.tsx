@@ -558,7 +558,7 @@ function SignalSection({ title, value, bullets, borderLeft = false }: { title: s
 
 function UseCaseCard({ type, title, description, tagline, icon, repo }: { type: string, title: string, description: string, tagline: string, icon: React.ReactNode, repo: string }) {
   return (
-    <div className="bg-white border-4 border-black p-10 flex flex-col h-full shadow-[8px_8px_0px_#000] hover:shadow-[12px_12px_0px_#D12D2D] transition-all group">
+    <div className="bg-white border-2 border-black/80 p-10 flex flex-col h-full shadow-[4px_4px_0px_#000] hover:shadow-[12px_12px_0px_#D12D2D] hover:border-4 hover:border-black transition-all group">
        <div className="flex justify-between items-start mb-8">
           <div className="text-black group-hover:text-soy-red transition-colors">{icon}</div>
           <span className="text-[10px] font-black bg-black text-white px-3 py-1 uppercase tracking-widest italic">{type}</span>
