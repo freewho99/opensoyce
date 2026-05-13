@@ -10,6 +10,7 @@ import Scan from './pages/Scan';
 import Lookup from './pages/Lookup';
 import Watchlist from './pages/Watchlist';
 import CLI from './pages/CLI';
+import Scanner from './pages/Scanner';
 import Compare from './pages/Compare';
 import Recommend from './pages/Recommend';
 import Pricing from './pages/Pricing';
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/cli" element={<CLI />} />
           <Route path="/scan" element={<Scan />} />
+          <Route path="/scanner" element={<Scanner />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/recommend" element={<Recommend />} />
           <Route path="/recipes" element={<Recommend />} />
@@ -115,7 +117,7 @@ export default function App() {
             style={{ left: '50%', transform: 'translateX(-50%)' }}
           >
             <span className="text-2xl font-black uppercase italic tracking-tighter">
-              {darkSauceMode ? '🔥 DARK SAUCE MODE ACTIVATED' : '❄️ LIGHT SAUCE MODE RESTORED'}
+              {darkSauceMode ? 'ð¥ DARK SAUCE MODE ACTIVATED' : 'âï¸ LIGHT SAUCE MODE RESTORED'}
             </span>
           </motion.div>
         )}
