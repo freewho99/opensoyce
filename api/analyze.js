@@ -1,9 +1,13 @@
 import { calculateSoyceScore } from '../src/shared/scoreCalculator.js';
+import { isValidGithubName } from '../src/shared/validateRepo.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const { owner, repo } = req.body || {};
   if (!owner || !repo) return res.status(400).json({ error: 'Owner and repo are required' });
+  if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
+    return res.status(400).json({ error: 'INVALID_OWNER_OR_REPO' });
+  }
 
   const token = process.env.GITHUB_TOKEN;
   const headers = {

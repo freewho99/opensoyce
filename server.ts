@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { GitHubService } from "./src/server/github.js";
 import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
+import { isValidGithubName } from "./src/shared/validateRepo.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,6 +86,9 @@ async function startServer() {
     if (!owner || !repo) {
       return res.status(400).json({ error: 'Owner and repo are required' });
     }
+    if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
+      return res.status(400).json({ error: 'INVALID_OWNER_OR_REPO' });
+    }
 
     try {
       const data = await getCachedAnalysis(owner, repo);
@@ -113,6 +117,9 @@ async function startServer() {
 
   app.get("/api/badge/:owner/:repo.svg", async (req, res) => {
     const { owner, repo } = req.params;
+    if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
+      return res.status(400).send('Invalid owner or repo');
+    }
     try {
       const data = await getCachedAnalysis(owner, repo);
       if (!data) return res.status(404).send('Not found');
@@ -143,6 +150,9 @@ async function startServer() {
   // analysis, so the response shape no longer depends on cache state.
   app.get("/api/github/:owner/:repo", async (req, res) => {
     const { owner, repo } = req.params;
+    if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
+      return res.status(400).json({ error: 'INVALID_OWNER_OR_REPO' });
+    }
     try {
       const data = await getCachedAnalysis(owner, repo);
       if (!data) return res.status(404).json({ error: 'Not found' });

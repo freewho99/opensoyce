@@ -234,7 +234,7 @@ export default function Layout() {
       {drawerOpen && (
         <button
           type="button"
-          aria-label="Close menu"
+          aria-label="Dismiss menu"
           onClick={() => setDrawerOpen(false)}
           className="lg:hidden fixed inset-0 top-14 z-30 bg-black/40 cursor-default"
         />

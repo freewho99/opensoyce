@@ -1,11 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { 
-  ShieldCheck, Activity, Users, BookOpen, 
-  TrendingUp, ArrowRight, Info, AlertTriangle,
-  FlaskConical, CheckCircle2, GitFork
-} from 'lucide-react';
+import { ArrowRight, AlertTriangle } from 'lucide-react';
 import { trackEvent } from '../utils/analytics';
 
 export default function Methodology() {
@@ -46,16 +42,16 @@ export default function Methodology() {
             <div>
               <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-8">THE SOYCE SCORE</h2>
               <p className="text-xl font-medium opacity-70 mb-12 leading-relaxed">
-                The Soyce Score is a weighted composite index built from over 20 proprietary signals gathered from the GitHub API and community metadata.
+                The Soyce Score is a weighted composite computed from eight GitHub repository signals: last commit date, star count, contributor count, fork count, license, open issue count, description / topics / homepage presence, and 30-day commit volume.
               </p>
-              
+
               <div className="space-y-6">
                 {[
-                  { label: 'MAINTENANCE', weight: 30, desc: 'Commit recency, release frequency, and versioning hygiene.' },
-                  { label: 'COMMUNITY', weight: 25, desc: 'Contributor diversity, issue responsiveness, and star velocity.' },
-                  { label: 'SECURITY', weight: 20, desc: 'Vulnerability history, dependency health, and security.md existence.' },
-                  { label: 'DOCUMENTATION', weight: 15, desc: 'Readme length, example clarity, and API reference completeness.' },
-                  { label: 'ACTIVITY', weight: 10, desc: 'Recent pull request volume and CI pipeline health.' },
+                  { label: 'MAINTENANCE', weight: 30, desc: 'Days since the most recent commit. Recent = high, stale = low.' },
+                  { label: 'COMMUNITY', weight: 25, desc: 'Log-scaled star count, contributor count, fork milestone (1k+).' },
+                  { label: 'SECURITY', weight: 20, desc: 'License presence + permissiveness (MIT / Apache / BSD), open issue load, repo metadata hygiene.' },
+                  { label: 'DOCUMENTATION', weight: 15, desc: 'Presence of description, ≥3 topics, and a homepage URL. (Note: does not yet parse README.md.)' },
+                  { label: 'ACTIVITY', weight: 10, desc: 'Number of commits in the last 30 days (sampled from the most recent 30 commits).' },
                 ].map(item => (
                   <div key={item.label} className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000]">
                     <div className="flex justify-between items-center mb-2">
@@ -78,36 +74,6 @@ export default function Methodology() {
                  <ScoreRange label="BELOW 5.0" status="STALE" desc="Inactive for >18 months or abandoned by maintainers." color="text-soy-red" />
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* WHAT EACH SIGNAL MEANS */}
-      <section className="py-20 px-4 bg-white border-y-4 border-black">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-16 text-center">THE FOUR PILLARS</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <PillarCard 
-              icon={<ShieldCheck size={40} />}
-              title="HEALTH"
-              desc="Is the project actively maintained? Are security advisories handled? Is the build passing?"
-            />
-            <PillarCard 
-              icon={<GitFork size={40} />}
-              title="FORKABILITY"
-              desc="Is the code modular? Is the license permissive? Is it easy to strip and reuse the core infra?"
-              highlight
-            />
-            <PillarCard 
-              icon={<Activity size={40} />}
-              title="MOMENTUM"
-              desc="Are commits accelerating? Are stars growing organically? Are issues being triaged quickly?"
-            />
-            <PillarCard 
-              icon={<BookOpen size={40} />}
-              title="ADOPTION"
-              desc="Would a production team trust this today? Is there a clear upgrade path and API stability?"
-            />
           </div>
         </div>
       </section>
@@ -186,24 +152,23 @@ export default function Methodology() {
       <section className="py-24 px-4 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter mb-4">EMBEDDABLE BADGES — COMING SOON</h2>
-            <p className="text-xl font-bold uppercase tracking-widest text-soy-red italic">Every OpenSoyce-verified project will display its live Soyce Score as an embeddable badge.</p>
+            <h2 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter mb-4">EMBEDDABLE BADGES</h2>
+            <p className="text-xl font-bold uppercase tracking-widest text-soy-red italic">Any analyzed project gets a live Soyce Score badge. Color shifts with the number.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-20">
-            <BadgePreview color="bg-emerald-500" label="USE READY" score="9.5" />
-            <BadgePreview color="bg-blue-500" label="FORKABLE" score="8.3" />
-            <BadgePreview color="bg-orange-500" label="HIGH MOMENTUM" icon="🚀" />
-            <BadgePreview color="bg-gray-400" label="STALE" score="3.2" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-20 justify-items-center">
+            <BadgePreview color="#22c55e" score="9.5" caption="SCORE ≥ 8" />
+            <BadgePreview color="#f59e0b" score="6.8" caption="SCORE ≥ 6" />
+            <BadgePreview color="#E63322" score="3.2" caption="SCORE < 6" />
           </div>
 
           <div className="max-w-4xl mx-auto text-center">
-            <Link 
-              to="/claim" 
-              onClick={() => trackEvent('badge_claim_click', { source: 'badge_preview', page: '/methodology' })}
+            <Link
+              to="/lookup"
+              onClick={() => trackEvent('badge_lookup_click', { source: 'badge_preview', page: '/methodology' })}
               className="inline-flex items-center gap-4 bg-soy-red text-white px-12 py-6 text-xl font-black uppercase italic tracking-widest hover:bg-black transition-all shadow-[10px_10px_0px_#000]"
             >
-              CLAIM YOUR PROJECT TO UNLOCK BADGES →
+              ANALYZE A REPO TO GET A BADGE →
             </Link>
           </div>
         </div>
@@ -240,16 +205,6 @@ function ScoreRange({ label, status, desc, color }: { label: string, status: str
   );
 }
 
-function PillarCard({ icon, title, desc, highlight = false }: { icon: React.ReactNode, title: string, desc: string, highlight?: boolean }) {
-  return (
-    <div className={`p-10 border-4 border-black flex flex-col items-center text-center group transition-all ${highlight ? 'bg-soy-red text-white shadow-[8px_8px_0px_#000]' : 'bg-white hover:bg-soy-label'}`}>
-      <div className={`mb-6 ${highlight ? 'text-white' : 'text-soy-red group-hover:scale-110 transition-transform'}`}>{icon}</div>
-      <h3 className="text-2xl font-black uppercase italic mb-4 tracking-tight">{title}</h3>
-      <p className="text-xs font-bold uppercase tracking-widest leading-relaxed opacity-70">{desc}</p>
-    </div>
-  );
-}
-
 function VocabCard({ title, score, desc }: { title: string, score: string, desc: string }) {
   return (
     <div className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000]">
@@ -262,22 +217,20 @@ function VocabCard({ title, score, desc }: { title: string, score: string, desc:
   );
 }
 
-function BadgePreview({ color, label, score, icon }: { color: string, label: string, score?: string, icon?: string }) {
+function BadgePreview({ color, score, caption }: { color: string, score: string, caption: string }) {
   return (
-    <div className="space-y-4">
-      <div className={`inline-flex items-center overflow-hidden rounded-full border-4 border-black shadow-[4px_4px_0px_#000]`}>
-        <div className="bg-black text-white px-3 py-1.5 text-[8px] font-black uppercase tracking-widest border-r-2 border-white/20">
-          OpenSoyce
-        </div>
-        <div className={`${color} text-white px-3 py-1.5 text-[8px] font-black uppercase tracking-widest flex items-center gap-1`}>
-          {label} {score && `· ${score}`} {icon && icon}
-        </div>
-      </div>
-      <div className="bg-soy-label p-4 border-2 border-black font-mono text-[8px] overflow-x-auto whitespace-nowrap">
-        <code>
-          [![OpenSoyce](https://opensoyce.com/badge/example.svg)](https://opensoyce.com/projects/example)
-        </code>
-      </div>
+    <div className="space-y-4 text-center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="160" height="22" className="mx-auto">
+        <rect width="160" height="22" rx="3" fill="#1a1a1a" />
+        <path fill={color} d="M110 0h50v22H110z" />
+        <rect width="160" height="22" rx="3" fill="none" stroke="#ffffff" strokeOpacity="0.1" />
+        <g fill="#fff" textAnchor="middle" fontFamily="ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,liberation mono,courier new,monospace" fontSize="9" fontWeight="bold">
+          <text x="55" y="15" fill="#ffffff" letterSpacing="0.1em">SOYCE SCORE</text>
+          <text x="135" y="15" fill="#ffffff" fontSize="10">{score}</text>
+        </g>
+        <line x1="110" y1="0" x2="110" y2="22" stroke="#ffffff" strokeOpacity="0.2" />
+      </svg>
+      <div className="text-[10px] font-black uppercase tracking-widest opacity-60">{caption}</div>
     </div>
   );
 }

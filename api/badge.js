@@ -1,17 +1,21 @@
 import { calculateSoyceScore } from '../src/shared/scoreCalculator.js';
+import { isValidGithubName } from '../src/shared/validateRepo.js';
 
 export default async function handler(req, res) {
   const match = req.url.match(/\/api\/badge\/([^/]+)\/([^/.?]+)/);
   const owner = match?.[1];
   const repo = match?.[2];
   if (!owner || !repo) return res.status(400).send('Missing owner or repo');
+  if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
+    return res.status(400).send('Invalid owner or repo');
+  }
 
   const token = process.env.GITHUB_TOKEN;
   const headers = {
-    Authorization: token ? `Bearer ${token}` : undefined,
     'User-Agent': 'opensoyce',
     'Accept': 'application/vnd.github+json',
   };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   try {
     const [repoRes, commitsRes, contributorsRes] = await Promise.all([

@@ -1,10 +1,14 @@
 import { calculateSoyceScore } from '../src/shared/scoreCalculator.js';
+import { isValidGithubName } from '../src/shared/validateRepo.js';
 
 export default async function handler(req, res) {
   const parts = req.url.replace('/api/github/', '').split('/');
   const owner = parts[0];
   const repo = parts[1]?.split('?')[0];
   if (!owner || !repo) return res.status(400).json({ error: 'Missing owner or repo' });
+  if (!isValidGithubName(owner) || !isValidGithubName(repo)) {
+    return res.status(400).json({ error: 'INVALID_OWNER_OR_REPO' });
+  }
 
   const token = process.env.GITHUB_TOKEN;
   const headers = {

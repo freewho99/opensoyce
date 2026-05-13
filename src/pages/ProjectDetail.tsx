@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { MOCK_RECIPES } from '../constants';
 import NutritionLabel from '../components/NutritionLabel';
 import SimilarProjects from '../components/SimilarProjects';
+import SoyceScore from '../components/SoyceScore';
 import { 
   Github, Star, GitFork, ShieldCheck, ExternalLink, ArrowLeft, 
   Terminal, Package, Code, GitBranch, Copy, Check, X, 
@@ -160,12 +161,8 @@ export default function ProjectDetail() {
             </a>
           </div>
           <div className="flex items-center gap-4">
-            <div className="hidden md:block text-right">
-              <div className="text-[10px] font-black uppercase tracking-widest text-[#E63322]">SOYCE SCORE</div>
-              <div className="text-xs font-bold uppercase opacity-60">{getBadge(project.score.overall)}</div>
-            </div>
-            <div className="bg-[#E63322] px-4 py-2 text-3xl font-black italic shadow-[-4px_4px_0px_white]">
-              {(project.score.overall ?? 0).toFixed(1)}
+            <div className="shadow-[-4px_4px_0px_white]">
+              <SoyceScore value={project.score.overall ?? 0} size="sm" earlyBreakout={!!curated?.earlyBreakout} link />
             </div>
           </div>
         </div>

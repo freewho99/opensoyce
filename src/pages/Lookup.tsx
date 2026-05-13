@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, Github, AlertCircle, Loader2, Copy, Check, Eye, EyeOff, ArrowRight, ArrowUpRight } from 'lucide-react';
 import NutritionLabel from '../components/NutritionLabel';
 import SimilarProjects from '../components/SimilarProjects';
+import SoyceScore from '../components/SoyceScore';
 import { Project } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWatchlist } from '../context/WatchlistContext';
@@ -236,11 +237,8 @@ export default function Lookup() {
                           <span>{result.id}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 bg-soy-red text-white p-4 shadow-[4px_4px_0px_#000]">
-                        <div className="flex flex-col items-center leading-none">
-                          <span className="text-5xl font-black italic tracking-tighter">{(result.score.overall ?? 0).toFixed(1)}</span>
-                          <span className="text-[8px] font-black uppercase tracking-[0.2em] mt-1 opacity-80">SOYCE SCORE</span>
-                        </div>
+                      <div className="shadow-[4px_4px_0px_#000]">
+                        <SoyceScore value={result.score.overall ?? 0} size="md" link />
                       </div>
                     </div>
 
