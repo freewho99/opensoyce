@@ -13,6 +13,137 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+    slug: 'package-lock-secrets-supply-chain',
+    title: 'Your package-lock.json Is Lying to You',
+    subtitle: 'The 847 dependencies you never audited are running in production right now.',
+    category: 'DEEP DIVE',
+    emoji: "\u{1F9F5}",
+    readTime: '11 min',
+    date: 'May 12, 2026',
+    featured: false,
+    heroImage: '/blog/package-lock-hero.png',
+    metaDescription: 'Most teams review their direct dependencies. Almost no one reads their package-lock.json. Here is what lives inside that file and why it matters more than your package.json.',
+    content: `
+## THE FILE YOU CHECK IN BUT NEVER READ
+
+Every JavaScript project ships with it. Thousands of lines of nested JSON. SHA hashes, resolved URLs, integrity checksums. Your CI pipeline validates it. Your Renovate bot updates it. Your team merges PRs that touch it without reading a single line.
+
+That file is your package-lock.json, and it contains the full dependency graph of everything running in your production application.
+
+Most developers can name their direct dependencies off the top of their head. lodash. axios. express. The usual suspects. But ask them how many total packages are installed in their project and the answer is almost always wrong. Usually by a factor of ten.
+
+The average Node.js web application installs 847 packages. The median team has audited approximately zero of them past the first level.
+
+## THE DIFFERENCE BETWEEN WHAT YOU CHOSE AND WHAT YOU GOT
+
+Here is the thing nobody explains when they teach npm: your package.json is a wish list. Your package-lock.json is what actually got installed.
+
+You added \`axios\` to your project. Axios has 5 direct dependencies: follow-redirects, form-data, proxy-from-env, and a few others. Each of those has their own dependencies. By the time the resolution algorithm finishes, a single \`npm install axios\` can pull in 40+ packages.
+
+Now multiply that across every dependency in your project. The dependency tree does not grow linearly — it explodes.
+
+### THE NUMBERS THAT SHOULD SCARE YOU
+
+Let us look at what a typical Next.js project actually installs:
+
+Next.js itself declares around 60 direct dependencies. Those 60 packages have their own dependencies. By the time \`node_modules\` finishes populating, you are looking at 800 to 1,200 packages for a basic Next.js application with a handful of UI libraries.
+
+Your package.json might list 40 packages. Your lockfile might contain 900.
+
+That gap — the 860 packages you did not explicitly choose — is your attack surface.
+
+## WHAT LIVES IN THE LOCKFILE
+
+The package-lock.json format gives you several critical signals for every package:
+
+**Resolved URL**: Where npm actually downloaded the tarball from. This should always be registry.npmjs.org. If it is not, someone has been tampering with your dependency resolution.
+
+**Integrity hash**: A SHA-512 of the package content. If this does not match what is in the registry, the package was modified after publish.
+
+**Requires/Dependencies**: The full sub-dependency graph. This is where you find the packages that did not make your conscious decision list.
+
+Most developers scan their package.json. Almost no one parses their lockfile looking for anomalies in resolved URLs or mismatched integrity hashes. Tools like OpenSoyce Scanner exist specifically because humans will not — and should not have to — read 40,000 lines of JSON by hand.
+
+### THE TYPOSQUAT PROBLEM
+
+Lockfiles also encode a subtle but serious attack vector: package name confusion.
+
+If an attacker publishes \`crossenv\` to npm (targeting the legitimate \`cross-env\`), and a developer accidentally types the wrong name in their package.json, the lockfile will faithfully record the malicious package's resolved URL and hash. Everything will look normal. The hash will validate. CI will pass.
+
+The package will just be running attacker code.
+
+In 2017, the \`crossenv\` attack affected dozens of packages before it was caught. Similar typosquat attacks happen every few months. In most cases, the lockfile was the only artifact that would have shown something was wrong — if anyone had looked.
+
+## THE MAINTENANCE DEBT YOU CANNOT SEE
+
+Beyond the security angle, lockfiles expose a maintenance problem that package.json hides entirely.
+
+Your package.json might specify \`"react": "^18.0.0"\`. Clean. Current. But what version of React is actually pinned in your lockfile? If you have not run \`npm update\` in six months, it might be 18.0.0 — not 18.2.0 — and you are missing two major patch versions worth of bug fixes.
+
+Multiply this across 800 packages and you have a maintenance debt that is invisible from the surface but very real in production.
+
+The Soyce Score accounts for this. When OpenSoyce evaluates a repository, it looks not just at what version a project declares, but at the gap between declared and available versions across the entire dependency tree. A project that has not updated its lockfile in 18 months shows that signal clearly — even if its package.json specifies semver ranges that look current.
+
+### PHANTOM DEPENDENCIES: WHEN THE LOCKFILE IS A LIE IN THE OTHER DIRECTION
+
+There is also the inverse problem. Phantom dependencies.
+
+Because node_modules is a flat directory, you can \`require\` a package that you never explicitly installed — as long as some other package installed it as a transitive dependency. This works fine until the package that depends on it removes it from their own dependency list.
+
+Suddenly your code breaks, not because you changed anything, but because someone else's dependency graph changed.
+
+If you have not audited your lockfile to understand which of your imports are phantom dependencies, you are running on borrowed time.
+
+## HOW TO ACTUALLY READ YOUR LOCKFILE
+
+You should not literally read 40,000 lines of JSON. But you should be able to answer these questions about your project:
+
+**How many total packages are installed?** Run \`npm ls --all 2>/dev/null | wc -l\`. If the number surprises you, that is the point.
+
+**Are any packages resolved from non-registry sources?** Grep your lockfile for \`"resolved"\` values that do not start with \`https://registry.npmjs.org\`. Any git or GitHub URLs in there should be explicitly documented.
+
+**Which packages have known CVEs?** \`npm audit\` covers this for your direct dependencies. It does not always cover everything in the tree.
+
+**Which packages are severely out of date?** \`npm outdated\` shows you. Most teams run this and then close the terminal.
+
+The answer to "how do I actually do this at scale" is tooling. OpenSoyce Scanner takes a package.json and generates Soyce Scores for every dependency — flagging maintenance risk, security signals, and activity health across the full list, not just the packages you consciously chose.
+
+## THE SIGNAL HIDDEN IN TIMESTAMPS
+
+One thing your lockfile does not directly encode, but your dependency health tool should surface: the publish timestamps of every package in your tree.
+
+A package that has not published a new version in 36 months is not necessarily abandoned. But if that package has 11 open CVEs and the last commit to its GitHub repository was in 2021, that silence is a signal worth investigating.
+
+This is what the Graveyard is for. It is not a list of bad packages. It is a list of packages where the combination of stale commits, unresponded issues, and CVE accumulation suggests that no one is home — and you should probably care.
+
+### THE TWO-WEEK RULE
+
+Here is a practical framework for thinking about lockfile risk:
+
+If a critical security vulnerability were discovered today in one of your 800 transitive dependencies, how long would it take your team to:
+
+1. Know about it
+2. Understand which of your projects is affected
+3. Ship a fix to production
+
+For most teams, the honest answer is "weeks." Not because anyone is negligent, but because the tooling to answer those questions at scale does not exist in most engineering workflows.
+
+The goal of a Soyce Score is not to give you a number to put in a dashboard. It is to compress that "weeks" answer into something that could be "hours" — because the evaluation is already done, continuously, for every package in your tree.
+
+## WHAT TO DO ABOUT THIS
+
+The actionable version of this article is short:
+
+Run an audit of your dependency tree today. Not just \`npm audit\` — a real inventory of every package installed, its version, its last release date, its open issue count, and whether it has active maintainers.
+
+If you are looking at more than 100 packages and thinking "there is no way I can evaluate all of these," that is the exact problem OpenSoyce Scanner is designed to solve. Drop in your package.json. Get a Soyce Score per dependency. See which ones are green, which are yellow, and which ones are quietly running code that nobody has touched in four years.
+
+Your package-lock.json is not lying to you intentionally. It is just showing you what you installed. The problem is that almost no one looks.
+
+Run the Scanner. Check the Label. Know what you are building on.
+    `,
+  },
+  {
     slug: "why-left-pad-broke-the-internet",
     title: "WHY LEFT-PAD BROKE THE INTERNET (AND WHAT WE LEARNED)",
     subtitle: "A story of 11 lines of code and the absolute fragility of our ecosystem.",
