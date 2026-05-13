@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { 
-  ArrowRight, ShieldCheck, Zap, Activity, Star, 
+import {
+  ArrowRight, ShieldCheck, Zap, Star,
   ArrowUpRight, Rocket, Skull, AlertCircle, Info,
   Flame, TrendingUp, RefreshCw
 } from 'lucide-react';
@@ -212,20 +212,20 @@ export default function Home() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-4 border-black">
-            <FeatureItem 
+            <FeatureItem
               icon={<ShieldCheck className="text-soy-red" size={40} />}
               title="Soyce Score"
-              description="A simple 0–10 score built from maintenance, security, community, and documentation signals."
+              description="A 0–10 score built from maintenance, community, security, documentation, and activity signals."
             />
-            <FeatureItem 
+            <FeatureItem
               icon={<Zap className="text-soy-red" size={40} />}
               title="Nutrition Labels"
               description="See repo health at a glance without digging through issues, commits, and dependency files."
             />
-            <FeatureItem 
-              icon={<Activity className="text-soy-red" size={40} />}
-              title="Live Monitoring"
-              description="Real-time GitHub webhook sync keeping your project visibility as fresh as your latest commit."
+            <FeatureItem
+              icon={<RefreshCw className="text-soy-red" size={40} />}
+              title="Fresh Analysis"
+              description="Analyze any GitHub repo on demand. Live data, 5-minute cache, and an embeddable badge for your README."
               last
             />
           </div>

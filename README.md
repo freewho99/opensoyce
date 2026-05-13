@@ -34,3 +34,15 @@ A "nutrition label" for open-source GitHub repositories. Enter `owner/repo`, get
 - `api/` — Vercel serverless functions used in production
 - `src/shared/scoreCalculator.js` — single scoring algorithm shared by both runtimes
 - `src/pages/Lookup.tsx` — the repo lookup UI
+
+## Encoding check
+
+The blog content has repeatedly had its emoji and em-dashes mangled into Latin-1-style byte sequences by an editor that doesn't preserve UTF-8 on save. `.gitattributes` can't prevent this because the mangled bytes are technically valid UTF-8.
+
+A scanner is available:
+
+```sh
+npm run check:mojibake
+```
+
+Exits non-zero and lists offending files + lines if mangled byte sequences are present. Run before committing content edits; consider wiring into a pre-commit hook locally. The real fix is to use an editor that writes UTF-8 correctly (VS Code with default settings does; some web-based editors and AI Studio export paths do not).
