@@ -42,6 +42,10 @@ export class GitHubService {
     return this.fetchGH(`/repos/${owner}/${repo}/contributors?per_page=30`);
   }
 
+  async getReadme(owner: string, repo: string) {
+    return this.fetchGH(`/repos/${owner}/${repo}/readme`);
+  }
+
   async getWorkflows(owner: string, repo: string) {
     return this.fetchGH(`/repos/${owner}/${repo}/actions/workflows`);
   }

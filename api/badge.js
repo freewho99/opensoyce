@@ -18,10 +18,11 @@ export default async function handler(req, res) {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   try {
-    const [repoRes, commitsRes, contributorsRes] = await Promise.all([
+    const [repoRes, commitsRes, contributorsRes, readmeRes] = await Promise.all([
       fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers }),
       fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=30`, { headers }),
       fetch(`https://api.github.com/repos/${owner}/${repo}/contributors?per_page=30`, { headers }),
+      fetch(`https://api.github.com/repos/${owner}/${repo}/readme`, { headers }),
     ]);
 
     if (!repoRes.ok) return res.status(404).send('Not found');
@@ -29,8 +30,9 @@ export default async function handler(req, res) {
     const repoData = await repoRes.json();
     const commits = commitsRes.ok ? await commitsRes.json() : [];
     const contributors = contributorsRes.ok ? await contributorsRes.json() : [];
+    const readme = readmeRes.ok ? await readmeRes.json() : null;
 
-    const { total } = calculateSoyceScore(repoData, commits, contributors);
+    const { total } = calculateSoyceScore(repoData, commits, contributors, readme);
     const score = total ?? 0;
     const color = score >= 8 ? '#22c55e' : score >= 6 ? '#f59e0b' : '#E63322';
 

@@ -31,9 +31,10 @@
  * @param {any}   repoData      GET /repos/{owner}/{repo}
  * @param {any[]} commits       GET /repos/{owner}/{repo}/commits (may be empty)
  * @param {any[]} contributors  GET /repos/{owner}/{repo}/contributors (may be empty)
+ * @param {{content?: string, encoding?: string} | null} [readme]  GET /repos/{owner}/{repo}/readme (may be null when none exists)
  * @returns {ScoreResult}
  */
-export function calculateSoyceScore(repoData, commits, contributors) {
+export function calculateSoyceScore(repoData, commits, contributors, readme) {
   const now = new Date();
   const safeCommits = Array.isArray(commits) ? commits : [];
   const safeContributors = Array.isArray(contributors) ? contributors : [];
@@ -76,11 +77,14 @@ export function calculateSoyceScore(repoData, commits, contributors) {
   if ((repoData.topics && repoData.topics.length > 0) || repoData.description) security += 0.5;
   security = Math.min(2.0, security);
 
-  // 4. DOCUMENTATION (max 1.5) - description, topics, homepage
+  // 4. DOCUMENTATION (max 1.5)
+  //    - metadata flags (description, topics, homepage): up to 0.6
+  //    - README content scoring: up to 0.9
   let documentation = 0;
-  if (repoData.description) documentation += 0.5;
-  if (repoData.topics && repoData.topics.length >= 3) documentation += 0.5;
-  if (repoData.homepage) documentation += 0.5;
+  if (repoData.description) documentation += 0.2;
+  if (repoData.topics && repoData.topics.length >= 3) documentation += 0.2;
+  if (repoData.homepage) documentation += 0.2;
+  documentation += scoreReadme(readme);
   documentation = Math.min(1.5, documentation);
 
   // 5. ACTIVITY (max 1.0) - commits in the last 30 days from the page we fetched
@@ -121,4 +125,57 @@ export function calculateSoyceScore(repoData, commits, contributors) {
 
 function round1(n) {
   return parseFloat(n.toFixed(1));
+}
+
+/**
+ * Score a README payload from GET /repos/{owner}/{repo}/readme.
+ *
+ * Returns 0.0 - 0.9. Awarded:
+ *   0.2 README exists at all
+ *   0.1 length >= 300 chars
+ *   0.1 length >= 1500 chars (cumulative — long README gets both)
+ *   0.15 >= 2 headings (lines starting with #)
+ *   0.15 >= 1 fenced code block (```)
+ *   0.1 has a heading containing install/setup/getting started/quick start
+ *
+ * @param {{content?: string, encoding?: string} | null | undefined} readme
+ * @returns {number}
+ */
+function scoreReadme(readme) {
+  if (!readme || typeof readme.content !== 'string' || readme.content.length === 0) return 0;
+
+  let text;
+  if (readme.encoding === 'base64') {
+    try {
+      // Strip whitespace GitHub inserts every 60 chars in base64 output.
+      const clean = readme.content.replace(/\s/g, '');
+      text = typeof Buffer !== 'undefined'
+        ? Buffer.from(clean, 'base64').toString('utf-8')
+        : atob(clean);
+    } catch {
+      return 0;
+    }
+  } else {
+    text = readme.content;
+  }
+
+  // Strip HTML comments to avoid rewarding a single giant <!-- ... --> blob.
+  const stripped = text.replace(/<!--[\s\S]*?-->/g, '');
+  const length = stripped.length;
+
+  let score = 0.2; // exists
+  if (length >= 300) score += 0.1;
+  if (length >= 1500) score += 0.1;
+
+  const headings = (stripped.match(/^#{1,6}\s+\S/gm) || []);
+  if (headings.length >= 2) score += 0.15;
+
+  const codeBlocks = (stripped.match(/```/g) || []).length;
+  // Each fenced block uses two ``` fences, so >= 2 markers means >= 1 block.
+  if (codeBlocks >= 2) score += 0.15;
+
+  const installPattern = /^#{1,6}\s+.*\b(install|installation|setup|getting[\s-]+started|quick[\s-]+start|quickstart|usage)\b/im;
+  if (installPattern.test(stripped)) score += 0.1;
+
+  return Math.min(0.9, score);
 }
