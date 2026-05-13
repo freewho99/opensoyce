@@ -81,9 +81,13 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   const issueTriage = scoreIssueTriage(recentIssues, now);
   const maintenance = Math.min(3.0, commitRecency + releaseRecency + issueTriage);
 
-  // 2. COMMUNITY (max 2.5) - stars (log-scaled), contributor count, fork milestone
+  // 2. COMMUNITY (max 2.5) - stars (log-scaled to 500k), contributor count, fork milestone
+  // Phase-2 recalibration: log divisor moved 100k → 500k so the top 1% of
+  // popular projects (>100k stars) actually spread out. Under the old ceiling
+  // every project above 100k saturated at 1.5; React at 230k now earns ~1.27,
+  // a 1M-star project would still cap at 1.5.
   const stars = repoData.stargazers_count || 0;
-  let community = Math.min(1.5, (Math.log10(stars + 1) / Math.log10(100000)) * 1.5);
+  let community = Math.min(1.5, (Math.log10(stars + 1) / Math.log10(500000)) * 1.5);
 
   const contributorCount = safeContributors.length;
   if (contributorCount >= 10) community += 0.5;
@@ -93,11 +97,15 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   if ((repoData.forks_count || 0) >= 1000) community += 0.5;
   community = Math.min(2.5, community);
 
-  // 3. SECURITY (max 2.0) - license, issue load, SECURITY.md, release maturity
+  // 3. SECURITY (max 2.0) - license, issue load, SECURITY.md, advisories
+  // Phase-2 recalibration: license rewards halved (0.4→0.2 each). Paperwork
+  // was over-rewarded — a fully-clean repo with no advisories used to earn
+  // 0.8 just for having an MIT license. Real signals (SECURITY.md, low
+  // issues-per-star, advisory cleanliness) now carry the pillar.
   let security = 0;
-  if (repoData.license) security += 0.4;
+  if (repoData.license) security += 0.2;
   const licenseId = repoData.license?.spdx_id?.toUpperCase() || '';
-  if (['MIT', 'APACHE-2.0', 'BSD-2-CLAUSE', 'BSD-3-CLAUSE'].includes(licenseId)) security += 0.4;
+  if (['MIT', 'APACHE-2.0', 'BSD-2-CLAUSE', 'BSD-3-CLAUSE'].includes(licenseId)) security += 0.2;
 
   // Issue-to-popularity ratio. The previous absolute-count check rewarded
   // abandonment: a 0-star unmaintained repo with 0 issues earned the bonus.
@@ -119,12 +127,17 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   security = Math.min(2.0, security);
 
   // 4. DOCUMENTATION (max 1.5)
-  //    - metadata flags (description, topics, homepage): up to 0.6
-  //    - README content scoring: up to 0.9
+  // Phase-2 recalibration: three "filled-in-once" GitHub metadata flags
+  // (description, topics, homepage) used to award 0.2 each (0.6 free for any
+  // serious repo). Now they're collapsed into a single 0.2 "metadata complete"
+  // signal — all three must be present. README content scoring picks up the
+  // freed weight (ceiling 0.9 → 1.3) so the pillar finally measures actual
+  // documentation, not the GitHub settings page.
   let documentation = 0;
-  if (repoData.description) documentation += 0.2;
-  if (repoData.topics && repoData.topics.length >= 3) documentation += 0.2;
-  if (repoData.homepage) documentation += 0.2;
+  const hasDescription = !!repoData.description;
+  const hasTopics = repoData.topics && repoData.topics.length >= 3;
+  const hasHomepage = !!repoData.homepage;
+  if (hasDescription && hasTopics && hasHomepage) documentation += 0.2;
   documentation += scoreReadme(readme);
   documentation = Math.min(1.5, documentation);
 
@@ -134,11 +147,15 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
     return (now.getTime() - cDate.getTime()) / 86400000 <= 30;
   }).length;
 
+  // Phase-2 recalibration: floor lowered 0.1 → 0.0 so truly abandoned
+  // projects can finally land in the STALE band. Previously every project
+  // earned at least 0.1 here, which lifted abandoned repos above the
+  // floor of the score range.
   let activity;
   if (last30DaysCommits >= 10) activity = 1.0;
   else if (last30DaysCommits >= 5) activity = 0.7;
   else if (last30DaysCommits >= 1) activity = 0.4;
-  else activity = 0.1;
+  else activity = 0.0;
 
   const total = round1(maintenance + community + security + documentation + activity);
 
@@ -176,19 +193,20 @@ function round1(n) {
 }
 
 /**
- * Score the SECURITY.md sub-signal of the Security pillar. Returns 0.0 – 0.4.
+ * Score the SECURITY.md sub-signal of the Security pillar. Returns 0.0 – 0.5.
  *
- * Release-recency was moved to the Maintenance pillar — releases measure
- * "still shipping?", not "secure?".
+ * Release-recency moved to Maintenance — releases measure "still shipping?",
+ * not "secure?". Phase 2 boosted this from 0.4 → 0.5 to absorb part of the
+ * weight redistributed from license rewards.
  *
- *   0.4  SECURITY.md or equivalent declared on the community profile
+ *   0.5  SECURITY.md or equivalent declared on the community profile
  *
  * @param {any | null | undefined} communityProfile
  * @returns {number}
  */
 function scoreSecurityExtras(communityProfile) {
   if (communityProfile && communityProfile.files && communityProfile.files.security_policy) {
-    return 0.4;
+    return 0.5;
   }
   return 0;
 }
@@ -283,21 +301,26 @@ function scoreReadme(readme) {
   const stripped = text.replace(/<!--[\s\S]*?-->/g, '');
   const length = stripped.length;
 
+  // Phase-2 weights bumped from a 0.9 ceiling to a 1.3 ceiling so genuine
+  // README content can carry the Documentation pillar after the metadata-flag
+  // collapse upstream. Added a deep-doc signal (≥5 headings) so multi-section
+  // README projects can reach the full ceiling.
   let score = 0.2; // exists
-  if (length >= 300) score += 0.1;
-  if (length >= 1500) score += 0.1;
+  if (length >= 300) score += 0.15;
+  if (length >= 1500) score += 0.15;
 
   const headings = (stripped.match(/^#{1,6}\s+\S/gm) || []);
-  if (headings.length >= 2) score += 0.15;
+  if (headings.length >= 2) score += 0.2;
+  if (headings.length >= 5) score += 0.2;  // deep doc
 
   const codeBlocks = (stripped.match(/```/g) || []).length;
   // Each fenced block uses two ``` fences, so >= 2 markers means >= 1 block.
-  if (codeBlocks >= 2) score += 0.15;
+  if (codeBlocks >= 2) score += 0.25;
 
   const installPattern = /^#{1,6}\s+.*\b(install|installation|setup|getting[\s-]+started|quick[\s-]+start|quickstart|usage)\b/im;
-  if (installPattern.test(stripped)) score += 0.1;
+  if (installPattern.test(stripped)) score += 0.15;
 
-  return Math.min(0.9, score);
+  return Math.min(1.3, score);
 }
 
 /**

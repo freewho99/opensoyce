@@ -24,7 +24,7 @@ export default function Methodology() {
           >
             HOW OPENSOYCE SCORES PROJECTS
           </motion.h1>
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
@@ -32,6 +32,20 @@ export default function Methodology() {
           >
             "OpenSoyce is not a security audit. It is a signal layer for builders."
           </motion.p>
+        </div>
+      </section>
+
+      {/* SCORE RECALIBRATION v2 CALLOUT */}
+      <section className="px-4 -mt-4 mb-4">
+        <div className="max-w-4xl mx-auto bg-soy-bottle text-soy-label border-4 border-soy-bottle p-6 md:p-8 shadow-[6px_6px_0px_#E63322]">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+            <div className="bg-soy-red text-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] shrink-0">
+              v2 SCORING · MAY 2026
+            </div>
+            <p className="text-sm md:text-base font-medium leading-snug">
+              Score distributions were recalibrated to spread out the 7–9 cluster and to actually use the 0–2 floor. Cosmetic metadata flags (license presence, GitHub description, etc.) award fewer points; real content signals (README depth, advisory cleanliness, SECURITY.md, star count past 100k) carry more. <strong className="text-white">Existing embedded badges will render different numbers</strong> on next cache refresh — this is intentional, not a regression.
+            </p>
+          </div>
         </div>
       </section>
 
