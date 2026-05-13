@@ -39,24 +39,48 @@ export default function BlogPost() {
             <img
               src={imgMatch[1]}
               alt={imgMatch[2]}
-              className="w-full h-auto rounded-sm border-4 border-soy-bottle shadow-[8px_8px_0px_#000] object-contain"
+              className="w-full rounded-lg object-contain max-h-[600px]"
             />
-            <figcaption className="text-[10px] font-black uppercase tracking-widest opacity-50 mt-3 text-center italic">
+            <figcaption className="text-center text-xs font-black uppercase tracking-widest opacity-50 mt-3">
               {imgMatch[2]}
             </figcaption>
           </figure>
         );
       }
-      // Bold text support: **text**
-      const parts = para.split(/\*\*(.+?)\*\*/g);
+      if (para.startsWith('### ')) {
+        return (
+          <h3 key={i} className="text-2xl font-black uppercase italic tracking-tight mt-10 mb-4 text-soy-bottle">
+            {para.slice(4)}
+          </h3>
+        );
+      }
+      if (para.startsWith('## ')) {
+        return (
+          <h2 key={i} className="text-3xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle border-b-2 border-soy-red pb-3">
+            {para.slice(3)}
+          </h2>
+        );
+      }
+      if (para.startsWith('# ')) {
+        return (
+          <h1 key={i} className="text-4xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle">
+            {para.slice(2)}
+          </h1>
+        );
+      }
+      const parts = para.split(/(\*\*[^*]+\*\*)/g);
       return (
-        <p key={i} className="text-[18px] leading-[1.8] font-medium text-soy-bottle/90">
-          {parts.map((part, j) => j % 2 === 1 ? <strong key={j} className="font-black text-soy-bottle">{part}</strong> : part)}
+        <p key={i} className="text-lg leading-relaxed mb-6 opacity-90">
+          {parts.map((part, j) => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+              return <strong key={j} className="font-black text-soy-bottle">{part.slice(2, -2)}</strong>;
+            }
+            return part;
+          })}
         </p>
       );
     });
   };
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-20">
       <Link
