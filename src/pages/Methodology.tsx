@@ -49,7 +49,7 @@ export default function Methodology() {
                 {[
                   { label: 'MAINTENANCE', weight: 30, desc: 'Days since the most recent commit. Recent = high, stale = low.' },
                   { label: 'COMMUNITY', weight: 25, desc: 'Log-scaled star count, contributor count, fork milestone (1k+).' },
-                  { label: 'SECURITY', weight: 20, desc: 'License presence + permissiveness (MIT / Apache / BSD), open issue load, SECURITY.md policy (must be at a location GitHub surfaces in its Security tab), and whether a tagged release was published within the last year.' },
+                  { label: 'SECURITY', weight: 20, desc: 'License presence + permissiveness (MIT / Apache / BSD), low issues-per-star ratio on actively-maintained projects, SECURITY.md policy (must be at a location GitHub surfaces in its Security tab), and whether a tagged release was published within the last year.' },
                   { label: 'DOCUMENTATION', weight: 15, desc: 'Description, ≥3 topics, homepage URL — and README content: length, heading count, code examples, install instructions.' },
                   { label: 'ACTIVITY', weight: 10, desc: 'Number of commits in the last 30 days (sampled from the most recent 30 commits).' },
                 ].map(item => (

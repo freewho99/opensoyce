@@ -72,9 +72,19 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   const licenseId = repoData.license?.spdx_id?.toUpperCase() || '';
   if (['MIT', 'APACHE-2.0', 'BSD-2-CLAUSE', 'BSD-3-CLAUSE'].includes(licenseId)) security += 0.4;
 
+  // Issue-to-popularity ratio. The previous absolute-count check rewarded
+  // abandonment: a 0-star unmaintained repo with 0 issues earned the bonus.
+  // Now we use issues-per-star AND require recent maintenance (last commit
+  // within 365 days) so an abandoned-but-tidy repo doesn't earn this bonus.
+  // For tiny repos (<50 stars) the ratio isn't meaningful, no bonus awarded.
   const openIssues = repoData.open_issues_count || 0;
-  if (openIssues < 20) security += 0.3;
-  else if (openIssues < 100) security += 0.2;
+  const starCount = repoData.stargazers_count || 0;
+  const isActivelyMaintained = diffDays <= 365;
+  if (starCount >= 50 && isActivelyMaintained) {
+    const issuesPerStar = openIssues / starCount;
+    if (issuesPerStar < 0.005) security += 0.3;
+    else if (issuesPerStar < 0.02) security += 0.15;
+  }
 
   security += scoreSecurityExtras(communityProfile, latestRelease, now);
   security = Math.min(2.0, security);

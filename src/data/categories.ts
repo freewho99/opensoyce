@@ -315,17 +315,43 @@ export const CATEGORIES: Category[] = [
 ];
 
 // Lookup function — pure logic, no AI
+// Weak keywords that should never single-handedly categorize a repo (they
+// appear across many ecosystems). These match the topic but don't earn a
+// category match on their own; multiple keyword hits are required when only
+// weak words intersect. Without this guard, anything with `react` as a topic
+// gets categorized as META-FRAMEWORKS because the framework category lists
+// `react` as a keyword.
+const WEAK_KEYWORDS = new Set([
+  'react', 'javascript', 'typescript', 'js', 'ts', 'web', 'nodejs', 'node',
+  'frontend', 'backend', 'open-source', 'oss', 'library', 'tool', 'framework'
+]);
+
 export function findCategoryForRepo(owner: string, repo: string, topics: string[] = []): Category | null {
-  // Step 1: exact match
+  // Step 1: exact match — a curated entry always wins.
   const exact = CATEGORIES.find(c =>
     c.projects.some(p => p.owner.toLowerCase() === owner.toLowerCase() && p.repo.toLowerCase() === repo.toLowerCase())
   );
   if (exact) return exact;
-  // Step 2: topic keyword intersection
-  const byTopic = CATEGORIES.find(c =>
-    c.keywords.some(k => topics.map(t => t.toLowerCase()).includes(k.toLowerCase()))
-  );
-  return byTopic || null;
+
+  // Step 2: rank categories by keyword-intersection score. Strong keyword
+  // matches count as 2; weak keywords (see WEAK_KEYWORDS) count as 0.5.
+  // A category needs a score >= 1 to win — i.e. either one strong match or
+  // two weak ones.
+  const lowerTopics = topics.map(t => t.toLowerCase());
+  const topicSet = new Set(lowerTopics);
+  let best: { category: Category; score: number } | null = null;
+  for (const c of CATEGORIES) {
+    let score = 0;
+    for (const k of c.keywords) {
+      const lk = k.toLowerCase();
+      if (!topicSet.has(lk)) continue;
+      score += WEAK_KEYWORDS.has(lk) ? 0.5 : 2;
+    }
+    if (score >= 1 && (!best || score > best.score)) {
+      best = { category: c, score };
+    }
+  }
+  return best ? best.category : null;
 }
 
 export function getSimilarProjects(owner: string, repo: string, topics: string[] = []): { category: Category; others: CategoryProject[] } | null {

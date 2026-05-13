@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 type Question = {
   id: number;
   text: string;
-  options: { label: string; value: string; points: number; isHonestBad?: boolean }[];
+  options: { label: string; value: string; points: number; isLowSignal?: boolean }[];
 };
 
 const QUESTIONS: Question[] = [
@@ -21,7 +21,7 @@ const QUESTIONS: Question[] = [
       { label: "DAILY", value: "daily", points: 1.0 },
       { label: "WEEKLY", value: "weekly", points: 0.8 },
       { label: "MONTHLY", value: "monthly", points: 0.4 },
-      { label: "RARELY", value: "rarely", points: 0.1, isHonestBad: true }
+      { label: "RARELY", value: "rarely", points: 0.1, isLowSignal: true }
     ]
   },
   {
@@ -29,7 +29,7 @@ const QUESTIONS: Question[] = [
     text: "Do you have a SECURITY.md or vulnerability disclosure policy?",
     options: [
       { label: "YES", value: "yes", points: 1.0 },
-      { label: "NO", value: "no", points: 0.0, isHonestBad: true },
+      { label: "NO", value: "no", points: 0.0, isLowSignal: true },
       { label: "IN PROGRESS", value: "in-progress", points: 0.5 }
     ]
   },
@@ -40,7 +40,7 @@ const QUESTIONS: Question[] = [
       { label: "UNDER 24H", value: "under-24h", points: 1.0 },
       { label: "1-3 DAYS", value: "1-3d", points: 0.7 },
       { label: "1 WEEK+", value: "1w+", points: 0.3 },
-      { label: "I DON'T TRACK IT", value: "no-track", points: 0.0, isHonestBad: true }
+      { label: "I DON'T TRACK IT", value: "no-track", points: 0.0, isLowSignal: true }
     ]
   },
   {
@@ -49,7 +49,7 @@ const QUESTIONS: Question[] = [
     options: [
       { label: "STRICTLY", value: "strictly", points: 1.0 },
       { label: "LOOSELY", value: "loosely", points: 0.6 },
-      { label: "NO", value: "no", points: 0.0, isHonestBad: true }
+      { label: "NO", value: "no", points: 0.0, isLowSignal: true }
     ]
   },
   {
@@ -58,7 +58,7 @@ const QUESTIONS: Question[] = [
     options: [
       { label: "YES, ALWAYS", value: "yes", points: 1.0 },
       { label: "SOMETIMES", value: "sometimes", points: 0.5 },
-      { label: "NO", value: "no", points: 0.0, isHonestBad: true }
+      { label: "NO", value: "no", points: 0.0, isLowSignal: true }
     ]
   },
   {
@@ -66,7 +66,7 @@ const QUESTIONS: Question[] = [
     text: "Do you have automated tests with >60% coverage?",
     options: [
       { label: "YES", value: "yes", points: 1.0 },
-      { label: "NO", value: "no", points: 0.0, isHonestBad: true },
+      { label: "NO", value: "no", points: 0.0, isLowSignal: true },
       { label: "PARTIAL", value: "partial", points: 0.6 }
     ]
   },
@@ -75,7 +75,7 @@ const QUESTIONS: Question[] = [
     text: "Is your project's license clearly stated in the root?",
     options: [
       { label: "YES", value: "yes", points: 1.0 },
-      { label: "NO", value: "no", points: 0.0, isHonestBad: true }
+      { label: "NO", value: "no", points: 0.0, isLowSignal: true }
     ]
   },
   {
@@ -83,7 +83,7 @@ const QUESTIONS: Question[] = [
     text: "Do you have a CODE_OF_CONDUCT.md?",
     options: [
       { label: "YES", value: "yes", points: 1.0 },
-      { label: "NO", value: "no", points: 0.0, isHonestBad: true },
+      { label: "NO", value: "no", points: 0.0, isLowSignal: true },
       { label: "DRAFTING ONE", value: "drafting", points: 0.4 }
     ]
   },
@@ -91,7 +91,7 @@ const QUESTIONS: Question[] = [
     id: 9,
     text: "How many active maintainers does this project have?",
     options: [
-      { label: "JUST ME", value: "me", points: 0.3, isHonestBad: true },
+      { label: "JUST ME", value: "me", points: 0.3, isLowSignal: true },
       { label: "2-3", value: "2-3", points: 0.8 },
       { label: "4+", value: "4+", points: 1.0 },
       { label: "IT VARIES", value: "varies", points: 0.5 }
@@ -104,7 +104,7 @@ const QUESTIONS: Question[] = [
       { label: "YES, BATTLE-TESTED", value: "yes", points: 1.0 },
       { label: "MOSTLY", value: "mostly", points: 0.7 },
       { label: "BETA", value: "beta", points: 0.4 },
-      { label: "EXPERIMENTAL", value: "experimental", points: 0.2, isHonestBad: true }
+      { label: "EXPERIMENTAL", value: "experimental", points: 0.2, isLowSignal: true }
     ]
   }
 ];
@@ -159,19 +159,22 @@ export default function Claim() {
 
   const calculateResults = () => {
     let totalPoints = 0;
-    let honestBadCount = 0;
+    let lowSignalCount = 0;
 
     QUESTIONS.forEach(q => {
       const answerValue = answers[q.id];
       const option = q.options.find(o => o.value === answerValue);
       if (option) {
         totalPoints += option.points;
-        if (option.isHonestBad) honestBadCount++;
+        if (option.isLowSignal) lowSignalCount++;
       }
     });
 
     setAuditScore(totalPoints); // totalPoints is 0-10 since max points per Q is 1.0 and 10 Qs
-    setIsTransparent(honestBadCount >= 3);
+    // Transparency: self-reporting maturity gaps (solo maintainer, no triage process,
+    // beta status) earns the "transparent maintainer" badge. The point isn't that
+    // those answers are bad — it's that admitting them honestly is a good signal.
+    setIsTransparent(lowSignalCount >= 3);
     setStep(3);
   };
 

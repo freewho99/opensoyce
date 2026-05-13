@@ -104,7 +104,7 @@ export default function ProjectDetail() {
   const delta = history.length > 1 ? project.score.overall - history[history.length - 2] : 0;
 
   const curated = CATEGORIES.flatMap(c => c.projects).find(p => p.owner.toLowerCase() === owner?.toLowerCase() && p.repo.toLowerCase() === repo?.toLowerCase());
-  const whyItsHot = curated?.whyItsHot || "LIVE GITHUB DATA — NO EDITORIAL NOTE AVAILABLE";
+  const whyItsHot = curated?.whyItsHot;
 
   const getLicenseInfo = (license?: string) => {
     if (!license || license === 'Unknown') return { text: "LICENSE UNKNOWN — VERIFY BEFORE USE", color: "text-soy-red", bg: "bg-soy-red/10", border: "border-soy-red" };
@@ -147,8 +147,17 @@ export default function ProjectDetail() {
     );
   }
 
+  // Detect when the page is rendering stale fallback data because the live
+  // fetch failed (e.g. 429 from the rate limiter, GitHub rate-limit, network).
+  const isFallback = !!error && !liveData;
+
   return (
     <div className="bg-soy-label min-h-screen">
+      {isFallback && (
+        <div className="bg-amber-500 text-black border-b-2 border-black px-4 py-2 text-[11px] font-black uppercase tracking-widest text-center">
+          <span className="opacity-70">Live analysis failed:</span> {error}. <span className="opacity-70">Showing cached data — score may be stale.</span>
+        </div>
+      )}
       {/* 1. HEADER BAND (black bar) */}
       <header className="bg-black text-white h-20 flex items-center border-b-4 border-black sticky top-16 z-40">
         <div className="max-w-7xl mx-auto px-4 w-full flex justify-between items-center">
@@ -193,16 +202,18 @@ export default function ProjectDetail() {
                   {project.description}
                 </p>
 
-                {/* 3. WHY IT'S HOT (red band) */}
-                <div className="bg-[#E63322] text-white p-8 md:p-12 mb-12 relative overflow-hidden">
-                  <div className="absolute -right-10 -bottom-10 opacity-10">
-                    <TrendingUp size={240} />
+                {/* 3. WHY IT'S HOT (red band) — only when there's a real editorial note. */}
+                {whyItsHot && (
+                  <div className="bg-[#E63322] text-white p-8 md:p-12 mb-12 relative overflow-hidden">
+                    <div className="absolute -right-10 -bottom-10 opacity-10">
+                      <TrendingUp size={240} />
+                    </div>
+                    <h3 className="text-xs font-black uppercase tracking-[0.4em] mb-4 opacity-70">WHY IT'S HOT</h3>
+                    <p className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter leading-[0.9]">
+                      {whyItsHot}
+                    </p>
                   </div>
-                  <h3 className="text-xs font-black uppercase tracking-[0.4em] mb-4 opacity-70">WHY IT'S HOT</h3>
-                  <p className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter leading-[0.9]">
-                    {whyItsHot}
-                  </p>
-                </div>
+                )}
 
                 {/* 4. SIGNAL BREAKDOWN (3-column grid) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-4 border-black mb-12">
