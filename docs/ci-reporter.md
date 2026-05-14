@@ -179,16 +179,44 @@ repos at the default scoring concurrency.
 ### Required artifacts
 
 `opensoyce-report.md` and `opensoyce-report.json` upload via
-`actions/upload-artifact@v4` and remain attached to the workflow run for
+`actions/upload-artifact@v7` and remain attached to the workflow run for
 the default retention window.
 
 ### What was verified by the dogfood PR
 
-<!-- filled in after the dogfood PR observation lands -->
+PR [#1](https://github.com/freewho99/opensoyce/pull/1) added
+`minimist@1.2.5` (HIGH advisory, fix at 1.2.6) as a devDependency on a
+throwaway branch and fired the active workflow twice.
 
-- [ ] Workflow triggers on `package-lock.json` change
-- [ ] Scanner runs and exits 0 with `--fail-on none`
-- [ ] PR comment appears with the v3d Risk Profile
-- [ ] Comment includes the seeded `minimist@1.2.5` advisory
-- [ ] Re-running the workflow updates the SAME comment (no duplicates)
-- [ ] `opensoyce-report.md` and `opensoyce-report.json` upload as artifacts
+- [x] Workflow triggers on `package-lock.json` change (fired on PR open,
+  ~22 s wall time including `npm ci`)
+- [x] Scanner runs and exits 0 with `--fail-on none`
+- [x] PR comment appears with the v3d Risk Profile
+- [x] Comment includes the seeded `minimist@1.2.5` advisory: severity HIGH,
+  Maintainer Trust HIGH ("minimist is vulnerable and its source repo is
+  RISKY"), recommended action names minimist
+- [x] Re-running the workflow updates the SAME comment (no duplicates) —
+  verified by `created_at` staying constant while `updated_at` advanced
+- [x] `opensoyce-report.md` and `opensoyce-report.json` upload as artifacts
+  (4.8 KB zip in the verified run)
+
+### Findings from dogfood
+
+- **Node 20 deprecation warning** surfaced in the first run.
+  `actions/checkout`, `actions/setup-node`, and `actions/upload-artifact`
+  were on `@v4`, which runs on Node 20 — deprecated by GitHub on June 2
+  2026. Bumped all three to their Node 24 majors (`@v6` / `@v6` / `@v7`)
+  and the explicit `node-version` to `22` so the scanner uses a non-EOL
+  runtime. The example template was updated to match — if you copied the
+  example before this date, do the same bump.
+- **`workflow_dispatch` correctly skips the comment step.** The gate
+  `if: github.event_name == 'pull_request'` on the comment step lets the
+  manual-fire path complete cleanly (artifacts upload, no attempt to
+  comment on a non-existent PR). Verified.
+- **First-run wall time was ~22 s** on the dogfood scan (281-package
+  tree, 25 selected deps scored, cold GitHub-API cache). That's well
+  under the 30–60 s ceiling noted above.
+- **Other comment authors don't confuse the marker logic.** The dogfood
+  PR also got a `vercel[bot]` deploy-preview comment; the marker-based
+  `jq` selector ignored it cleanly and only updated OpenSoyce's own
+  comment on re-run.

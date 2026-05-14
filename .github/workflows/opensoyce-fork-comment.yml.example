@@ -65,14 +65,14 @@ jobs:
       - name: Checkout base SHA (NOT the PR head)
         # We deliberately check out the base commit so the scanner code and
         # the deps we `npm ci` are OURS, not the contributor's.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install OpenSoyce deps from base
         # `npm ci` against OUR lockfile, not the contributor's.
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: opensoyce-report
           path: |
