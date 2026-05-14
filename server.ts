@@ -7,6 +7,35 @@ import { GitHubService } from "./src/server/github.js";
 import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
 import { isValidGithubName } from "./src/shared/validateRepo.js";
 import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat } from "./src/shared/scanLockfile.js";
+import { resolveDepIdentity } from "./src/shared/resolveDepIdentity.js";
+
+/**
+ * Resolve GitHub identity for each vulnerable package only. We deliberately
+ * skip non-vulnerable packages — every entry hits the npm registry, so doing
+ * the full dep tree would add 30+ sequential roundtrips for no current product
+ * value. Failures default to NONE without breaking the response.
+ */
+async function attachIdentitiesToVulnerabilities(vulns: any[]): Promise<any[]> {
+  if (!Array.isArray(vulns) || vulns.length === 0) return vulns || [];
+  const results = await Promise.allSettled(
+    vulns.map(v => resolveDepIdentity(v.package, { version: v.version }))
+  );
+  return vulns.map((v, i) => {
+    const r = results[i];
+    if (r.status === 'fulfilled' && r.value) {
+      const ident = r.value;
+      const merged: any = {
+        ...v,
+        resolvedRepo: ident.resolvedRepo,
+        confidence: ident.confidence,
+        source: ident.source,
+      };
+      if (ident.directory) merged.directory = ident.directory;
+      return merged;
+    }
+    return { ...v, resolvedRepo: null, confidence: 'NONE', source: null };
+  });
+}
 
 // Severity tiering for /api/scan response sort. Lower index = higher severity.
 const SCAN_SEVERITY_ORDER = ['critical', 'high', 'medium', 'moderate', 'low', 'unknown'];
@@ -192,6 +221,17 @@ async function startServer() {
     } catch (e) {
       console.error('OSV failure', e);
       return res.status(503).json({ error: 'OSV_UNAVAILABLE' });
+    }
+
+    // Resolve identity for the vulnerable packages only. Wrapped so that a
+    // resolver crash never poisons the scan response.
+    try {
+      vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || []);
+    } catch (e) {
+      console.error('Identity resolver failure (non-fatal)', e);
+      vulnerabilities = (vulnerabilities || []).map(v => ({
+        ...v, resolvedRepo: null, confidence: 'NONE', source: null
+      }));
     }
 
     res.status(200).json({

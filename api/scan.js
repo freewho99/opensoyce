@@ -1,4 +1,31 @@
 import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat } from '../src/shared/scanLockfile.js';
+import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
+
+/**
+ * Resolve GitHub identity for each vulnerable package only. Skipping the full
+ * dep tree keeps npm-registry traffic minimal. Failures default to NONE.
+ */
+async function attachIdentitiesToVulnerabilities(vulns) {
+  if (!Array.isArray(vulns) || vulns.length === 0) return vulns || [];
+  const results = await Promise.allSettled(
+    vulns.map(v => resolveDepIdentity(v.package, { version: v.version }))
+  );
+  return vulns.map((v, i) => {
+    const r = results[i];
+    if (r.status === 'fulfilled' && r.value) {
+      const ident = r.value;
+      const merged = {
+        ...v,
+        resolvedRepo: ident.resolvedRepo,
+        confidence: ident.confidence,
+        source: ident.source,
+      };
+      if (ident.directory) merged.directory = ident.directory;
+      return merged;
+    }
+    return { ...v, resolvedRepo: null, confidence: 'NONE', source: null };
+  });
+}
 
 // Severity tiering for response sort. Lower index = higher severity.
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'moderate', 'low', 'unknown'];
@@ -57,6 +84,15 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error('OSV failure', e);
     return res.status(503).json({ error: 'OSV_UNAVAILABLE' });
+  }
+
+  try {
+    vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || []);
+  } catch (e) {
+    console.error('Identity resolver failure (non-fatal)', e);
+    vulnerabilities = (vulnerabilities || []).map(v => ({
+      ...v, resolvedRepo: null, confidence: 'NONE', source: null
+    }));
   }
 
   res.status(200).json({

@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -12,6 +13,10 @@ import {
 } from 'lucide-react';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
+// Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
+// forward-compat with future inference logic in v2.1+.
+type ResolverConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+type ResolverSource = 'npm.repository' | 'npm.homepage' | 'npm.bugs';
 
 interface Vulnerability {
   package: string;
@@ -20,6 +25,12 @@ interface Vulnerability {
   ids: string[];
   summary: string;
   fixedIn?: string;
+  // Identity fields added by the Dependency Identity Resolver. Absent on
+  // older responses; render defensively.
+  resolvedRepo?: string | null;
+  confidence?: ResolverConfidence;
+  source?: ResolverSource | null;
+  directory?: string;
 }
 
 interface ScanResponse {
@@ -441,6 +452,87 @@ function ResultsPanel({
           )}
         </div>
       )}
+
+      {!clean && <DependencyIdentityPreview vulns={result.vulnerabilities} />}
+    </div>
+  );
+}
+
+/**
+ * Preview surface for the v1 resolver. Only renders vulnerable packages that
+ * resolved to a GitHub repo (HIGH or MEDIUM). NONE packages are silently
+ * omitted — this is an opt-in preview, not a coverage report.
+ *
+ * Intentionally shows no Soyce score. Scanner v2.1 will attach per-dependency
+ * scoring here once the identity layer is proven.
+ */
+function DependencyIdentityPreview({ vulns }: { vulns: Vulnerability[] }) {
+  const resolved = vulns.filter(
+    (v) =>
+      !!v.resolvedRepo &&
+      (v.confidence === 'HIGH' || v.confidence === 'MEDIUM'),
+  );
+  if (resolved.length === 0) return null;
+
+  // De-dupe by package: the same dep can show up multiple times if it has
+  // more than one advisory, but its identity is the same.
+  const seen = new Set<string>();
+  const unique: Vulnerability[] = [];
+  for (const v of resolved) {
+    if (seen.has(v.package)) continue;
+    seen.add(v.package);
+    unique.push(v);
+  }
+
+  return (
+    <div
+      className="mt-10 bg-white border-4 border-soy-bottle p-6 md:p-8 shadow-[6px_6px_0px_#000]"
+      data-testid="dependency-identity-preview"
+    >
+      <div className="text-[10px] font-black uppercase tracking-[0.4em] opacity-50 mb-1">
+        DEPENDENCY IDENTITY (PREVIEW)
+      </div>
+      <h3 className="text-xl md:text-2xl font-black uppercase italic tracking-tight mb-1">
+        Resolved Source Repos
+      </h3>
+      <p className="text-xs md:text-sm font-bold uppercase tracking-widest opacity-50 mb-5">
+        Soyce scoring per dependency arrives in v2.1.
+      </p>
+
+      <ul className="space-y-2">
+        {unique.map((v) => {
+          const isHigh = v.confidence === 'HIGH';
+          const chip = isHigh
+            ? 'bg-emerald-500 text-black'
+            : 'bg-amber-500 text-black';
+          return (
+            <li
+              key={v.package}
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b-2 border-soy-bottle/10 last:border-b-0"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="font-black text-sm md:text-base uppercase italic tracking-tight break-all">
+                  {v.package}
+                </span>
+                <span className="opacity-40 font-mono text-xs">→</span>
+                <a
+                  href={`https://github.com/${v.resolvedRepo}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs md:text-sm text-soy-red hover:text-soy-bottle break-all"
+                >
+                  {v.resolvedRepo}
+                </a>
+              </div>
+              <span
+                className={`self-start sm:self-auto px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${chip}`}
+              >
+                {v.confidence}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -448,7 +540,15 @@ function ResultsPanel({
 function VulnRow({ v }: { v: Vulnerability }) {
   const sev = SEVERITY_ORDER.includes(v.severity) ? v.severity : 'unknown';
   const styles = SEVERITY_STYLES[sev];
-  const lookupHref = `/lookup?q=${encodeURIComponent(v.package)}`;
+  // Identity-aware routing: when the resolver gave us a HIGH/MEDIUM repo,
+  // jump straight to /projects/<owner>/<repo> (which hydrates on demand via
+  // /api/analyze). Otherwise fall back to /lookup, preserving the original
+  // dead-end-prone behavior only when we genuinely have nothing better.
+  const hasResolved =
+    !!v.resolvedRepo && (v.confidence === 'HIGH' || v.confidence === 'MEDIUM');
+  const lookupHref = hasResolved
+    ? `/projects/${v.resolvedRepo}`
+    : `/lookup?q=${encodeURIComponent(v.package)}`;
 
   return (
     <div className="bg-white border-4 border-soy-bottle p-4 md:p-6 shadow-[4px_4px_0px_#000]">
@@ -501,13 +601,13 @@ function VulnRow({ v }: { v: Vulnerability }) {
             <span className="opacity-50">NO FIX RECORDED</span>
           )}
         </div>
-        <a
-          href={lookupHref}
+        <Link
+          to={lookupHref}
           className="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-widest text-soy-red hover:text-soy-bottle"
         >
           Analyze in Lookup
           <ArrowUpRight size={14} />
-        </a>
+        </Link>
       </div>
     </div>
   );
