@@ -1,0 +1,135 @@
+# OpenSoyce scan — ADVANCED OPT-IN: PR comments on forked PRs.
+#
+# ============================================================================
+# SECURITY WARNING — READ BEFORE ENABLING
+# ============================================================================
+#
+# This workflow uses `pull_request_target`, which is the ONLY GitHub event
+# that grants a fork-PR run write access to the base repo (so it can post a
+# comment). It comes with a sharp edge:
+#
+#   pull_request_target runs in the BASE REPO context, using BASE REPO
+#   secrets, with a GITHUB_TOKEN that has write access to issues, comments,
+#   pull requests, and more.
+#
+# If you naively `actions/checkout` the PR head (the contributor's fork),
+# you would execute attacker-controlled code with your write token attached.
+# A malicious contributor could exfiltrate secrets, push to your branches,
+# or open PRs against your private repos.
+#
+# This example uses the SAFE pattern:
+#   1. Check out the base SHA only (`github.event.pull_request.base.sha`).
+#      That is YOUR code, not the contributor's.
+#   2. Fetch ONLY the lockfile from the PR head via `git fetch` + `git show`,
+#      writing it to disk WITHOUT running it. A lockfile is data, not code —
+#      `npm ci` against it never runs install scripts because we never call
+#      `npm ci` against the contributor's lockfile in this workflow. We run
+#      `npm ci` against OUR base-SHA lockfile to install OpenSoyce's own
+#      scanner deps, then point the scanner CLI at the contributor's
+#      lockfile as a data file.
+#   3. Never execute, build, or test the contributor's code in this run.
+#
+# Even with this pattern, audit before enabling:
+#   - Pin every action by full commit SHA, not by tag. A compromised v4 tag
+#     would otherwise inherit your write token.
+#   - Restrict who can trigger workflows (`Settings > Actions > General >
+#     Fork pull request workflows from outside collaborators` → require
+#     approval for first-time contributors).
+#   - If your scanner ever shells out to package install scripts on the
+#     contributor's lockfile, STOP. That is the foot-gun this comment is
+#     warning you about.
+#
+# If you do NOT need fork-PR comments, prefer the default
+# `.github/workflows/opensoyce-scan.yml` which uses plain `pull_request` and
+# fails closed (read-only token, no comment) on fork PRs. That is the safe
+# default for almost every repo.
+#
+# ============================================================================
+
+name: OpenSoyce scan (fork-aware)
+
+on:
+  pull_request_target:
+    paths:
+      - package-lock.json
+      - "**/package-lock.json"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base SHA (NOT the PR head)
+        # We deliberately check out the base commit so the scanner code and
+        # the deps we `npm ci` are OURS, not the contributor's.
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install OpenSoyce deps from base
+        # `npm ci` against OUR lockfile, not the contributor's.
+        run: npm ci
+
+      - name: Fetch contributor lockfile as data (no checkout, no install)
+        # Pull just the lockfile blob from the PR head into a temp file. We
+        # never `git checkout` the PR head, never run install scripts against
+        # it, never execute it. It is treated as inert text the scanner
+        # parses.
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 "https://github.com/${PR_HEAD_REPO}.git" "${PR_HEAD_SHA}"
+          # Extract just package-lock.json from the PR head tree.
+          git show "${PR_HEAD_SHA}:package-lock.json" > pr-package-lock.json
+          # Sanity-check: it must be valid JSON and under the 5MB cap the
+          # scanner enforces.
+          node -e "const fs=require('fs'); const b=fs.statSync('pr-package-lock.json').size; if (b > 5000000) { console.error('lockfile exceeds 5MB cap'); process.exit(1); } JSON.parse(fs.readFileSync('pr-package-lock.json','utf8'));"
+
+      - name: Run scanner against contributor lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/opensoyce-scan-report.mjs pr-package-lock.json \
+            --fail-on none \
+            --out opensoyce-report.md \
+            --json opensoyce-report.json
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opensoyce-report
+          path: |
+            opensoyce-report.md
+            opensoyce-report.json
+
+      - name: Post or update PR comment
+        # pull_request_target grants `pull-requests: write` on fork PRs, so
+        # this step works where the default workflow's plain pull_request
+        # cannot.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          MARKER='<!-- opensoyce-report -->'
+          BODY=$(printf '%s\n\n%s' "$MARKER" "$(cat opensoyce-report.md)")
+          EXISTING_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
+            | head -n1)
+          if [ -n "$EXISTING_ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING_ID" \
+              -f body="$BODY"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"
+          fi

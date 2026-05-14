@@ -1,0 +1,96 @@
+# OpenSoyce dependency-risk PR comment — ACTIVE workflow.
+#
+# This is the dogfood activation of CI Reporter v1 on the OpenSoyce repo
+# itself. It runs on PRs that touch any package-lock.json and on manual
+# workflow_dispatch, scans the lockfile via scripts/opensoyce-scan-report.mjs,
+# and posts (or updates) a single PR comment with the v3d Risk Profile.
+#
+# Threshold defaults to --fail-on none for the initial rollout: the report
+# is informational only, never blocks a merge. Once the team trusts the
+# output, escalate to --fail-on high-vuln or review-required by editing the
+# scanner step below.
+#
+# IMPORTANT: this workflow uses `pull_request` (not `pull_request_target`).
+# That means forked-PR runs receive a read-only GITHUB_TOKEN and CANNOT post
+# the comment. See .github/workflows/opensoyce-fork-comment.yml.example for
+# the advanced opt-in pattern that handles forks (with security caveats).
+
+name: OpenSoyce scan
+
+on:
+  pull_request:
+    paths:
+      - package-lock.json
+      - "**/package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install OpenSoyce deps
+        # OpenSoyce's CLI imports the shared scoring modules, so it needs its
+        # own dependency tree installed. `npm ci` keeps the install
+        # reproducible against the committed lockfile.
+        run: npm ci
+
+      - name: Run scanner
+        # GITHUB_TOKEN is automatically available on PR runs and works for
+        # the GitHub repo-health endpoints (8 read-only calls per repo).
+        # --fail-on none means the report is informational — the workflow
+        # always exits 0 unless the scanner itself crashes.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/opensoyce-scan-report.mjs package-lock.json \
+            --fail-on none \
+            --out opensoyce-report.md \
+            --json opensoyce-report.json
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opensoyce-report
+          path: |
+            opensoyce-report.md
+            opensoyce-report.json
+
+      - name: Post or update PR comment
+        # Only attempts to comment when this run is for a real pull_request
+        # event. workflow_dispatch runs upload the artifact and stop.
+        if: github.event_name == 'pull_request' && github.event.pull_request.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          MARKER='<!-- opensoyce-report -->'
+          # The REST PATCH endpoint needs the numeric comment id, but
+          # `gh pr view --json comments` returns the GraphQL node id under
+          # `.id`. Hit /issues/{n}/comments directly to get the REST id and
+          # body in one shot, then jq for the comment that carries our marker.
+          BODY=$(printf '%s\n\n%s' "$MARKER" "$(cat opensoyce-report.md)")
+          EXISTING_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
+            | head -n1)
+          if [ -n "$EXISTING_ID" ]; then
+            # Update the existing comment in place (idempotent re-runs).
+            gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING_ID" \
+              -f body="$BODY"
+          else
+            # First run on this PR: create a new comment.
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"
+          fi

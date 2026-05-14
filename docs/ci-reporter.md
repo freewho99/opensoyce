@@ -120,3 +120,75 @@ The markdown report is built by `buildMarkdownReport` (see
 If OSV is unavailable, the report still renders — the Uncertainty section
 lists "OSV vulnerability data was unavailable for this scan." and the
 Vulnerability Exposure dimension goes to `UNKNOWN` (never `LOW`).
+
+## Dogfooded on OpenSoyce
+
+**Dogfooded:** 2026-05-14
+**Active workflow:** `.github/workflows/opensoyce-scan.yml`
+**Advanced opt-in:** `.github/workflows/opensoyce-fork-comment.yml.example`
+
+OpenSoyce now runs its own CI Reporter on every PR that touches a
+`package-lock.json`. The active workflow is committed to `main` and fires on
+`pull_request` plus `workflow_dispatch` (so we can re-fire it manually
+during validation).
+
+### Required permissions
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+```
+
+The auto-issued `GITHUB_TOKEN` covers both. No PAT is needed for public
+repos at the default scoring concurrency.
+
+### Recommended defaults
+
+- Start with `--fail-on none`. The report is informational only — never
+  blocks a merge. This is what the dogfood workflow ships with.
+- Once the team trusts the output, escalate to `--fail-on high-vuln` (block
+  on any HIGH/CRITICAL advisory) or `--fail-on review-required` (block when
+  the v3d summary label is `REVIEW_REQUIRED`).
+- Keep the artifact upload on (`opensoyce-report.md` and
+  `opensoyce-report.json`) so reviewers can pull the full JSON when the PR
+  comment gets truncated.
+
+### Known limitations
+
+- **Forked PRs.** The default workflow uses `pull_request`, which issues a
+  read-only `GITHUB_TOKEN` for fork-PR runs. The scanner runs and the
+  artifact uploads, but the comment-post step silently fails. If you need
+  comments on fork PRs, copy
+  `.github/workflows/opensoyce-fork-comment.yml.example` to `.yml` and
+  read the security warning at the top of that file FIRST —
+  `pull_request_target` is a foot-gun if used naively.
+- **First-run cost.** On a cold cache, every selected dep's repo health
+  call goes to the wire at concurrency=5. Expect ~30–60 s on a medium
+  lockfile. Subsequent runs in the same process hit the 5-minute in-process
+  cache, but a fresh CI runner is always a cold start.
+- **Rate limit.** The workflow consumes the repo's `GITHUB_TOKEN`
+  repo-health budget. For very large dependency trees (1000+ packages),
+  pass a separate PAT via `--github-token` to get a higher rate-limit
+  ceiling.
+- **No-fix-version advisories.** When an OSV advisory genuinely has no
+  fixed version, the recommended action reads "escalate or wait for
+  upstream patch." That can feel unactionable, but it is the truth — not a
+  tool failure. The team should know that going in.
+
+### Required artifacts
+
+`opensoyce-report.md` and `opensoyce-report.json` upload via
+`actions/upload-artifact@v4` and remain attached to the workflow run for
+the default retention window.
+
+### What was verified by the dogfood PR
+
+<!-- filled in after the dogfood PR observation lands -->
+
+- [ ] Workflow triggers on `package-lock.json` change
+- [ ] Scanner runs and exits 0 with `--fail-on none`
+- [ ] PR comment appears with the v3d Risk Profile
+- [ ] Comment includes the seeded `minimist@1.2.5` advisory
+- [ ] Re-running the workflow updates the SAME comment (no duplicates)
+- [ ] `opensoyce-report.md` and `opensoyce-report.json` upload as artifacts
