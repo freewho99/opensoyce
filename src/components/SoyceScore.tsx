@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { verdictFor as sharedVerdictFor } from '../shared/verdict.js';
 
 export type SoyceVerdict = 'USE READY' | 'FORKABLE' | 'HIGH MOMENTUM' | 'STABLE' | 'WATCHLIST' | 'RISKY' | 'STALE';
 
@@ -8,17 +9,11 @@ export type SoyceVerdict = 'USE READY' | 'FORKABLE' | 'HIGH MOMENTUM' | 'STABLE'
 // WATCHLIST ≥ 7.0, RISKY ≥ 5.0) punished healthy stable libraries — winston
 // at 6.8 was labeled "RISKY" while being a perfectly maintained logger.
 // The new bands add a STABLE tier and let RISKY mean what it says.
+//
+// Implementation lives in src/shared/verdict.js so server.ts and api/scan.js
+// can reuse the same band logic without dragging React through the graph.
 export function verdictFor(score: number, opts?: { earlyBreakout?: boolean }): SoyceVerdict {
-  if (score >= 8.5) return 'USE READY';
-  if (score >= 7.0) return 'FORKABLE';
-  // earlyBreakout: a sub-8.5 project with strong rising-signal curation.
-  // Renders as HIGH MOMENTUM in any of the lower tiers so the breakout
-  // story isn't swallowed by a STABLE / WATCHLIST label.
-  if (opts?.earlyBreakout) return 'HIGH MOMENTUM';
-  if (score >= 5.5) return 'STABLE';
-  if (score >= 4.0) return 'WATCHLIST';
-  if (score >= 2.5) return 'RISKY';
-  return 'STALE';
+  return sharedVerdictFor(score, opts) as SoyceVerdict;
 }
 
 interface SoyceScoreProps {

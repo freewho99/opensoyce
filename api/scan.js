@@ -1,5 +1,7 @@
 import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat } from '../src/shared/scanLockfile.js';
 import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
+import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
+import { verdictFor } from '../src/shared/verdict.js';
 
 /**
  * Resolve GitHub identity for each vulnerable package only. Skipping the full
@@ -25,6 +27,108 @@ async function attachIdentitiesToVulnerabilities(vulns) {
     }
     return { ...v, resolvedRepo: null, confidence: 'NONE', source: null };
   });
+}
+
+/**
+ * Bounded-concurrency map. Mirrors server.ts so the Vercel function also
+ * never fans out to all GitHub endpoints for every vuln at once. Per-item
+ * errors are captured so one failure can't poison the batch.
+ */
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let i = 0;
+  const workerCount = Math.min(limit, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      try {
+        results[idx] = { ok: true, value: await fn(items[idx], idx) };
+      } catch (error) {
+        results[idx] = { ok: false, error };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function splitOwnerRepo(slug) {
+  if (typeof slug !== 'string') return null;
+  const parts = slug.split('/');
+  if (parts.length !== 2) return null;
+  const [owner, repo] = parts;
+  if (!owner || !repo) return null;
+  return { owner, repo };
+}
+
+// Per-request analysis memo. Vercel functions are stateless across requests
+// so we get no cross-request caching here, but a single scan can ref the same
+// repo multiple times (e.g. two advisories on lodash) — memo keeps that to
+// one analysis call.
+function makeAnalysisMemo(headers) {
+  const cache = new Map();
+  return async function getAnalysis(owner, repo) {
+    const key = `${owner}/${repo}`;
+    if (cache.has(key)) return cache.get(key);
+    const p = analyzeRepo(owner, repo, headers);
+    cache.set(key, p);
+    return p;
+  };
+}
+
+/**
+ * Scanner v2.1a — attach Soyce score + verdict + signals to each HIGH/MEDIUM
+ * resolved vuln. Errors are captured per-vuln so a failing analysis can never
+ * fail the whole scan.
+ */
+async function attachRepoHealthToVulnerabilities(vulns) {
+  const headers = githubHeaders(process.env.GITHUB_TOKEN);
+  const getAnalysis = makeAnalysisMemo(headers);
+
+  const enriched = vulns.map(v => ({ ...v, repoHealth: null, repoHealthError: null }));
+  const eligible = [];
+
+  enriched.forEach((v, idx) => {
+    const isResolved = (v.confidence === 'HIGH' || v.confidence === 'MEDIUM') && !!v.resolvedRepo;
+    if (!isResolved) {
+      v.repoHealthError = 'IDENTITY_NONE';
+      return;
+    }
+    const parts = splitOwnerRepo(v.resolvedRepo);
+    if (!parts) {
+      v.repoHealthError = 'IDENTITY_NONE';
+      return;
+    }
+    eligible.push({ idx, owner: parts.owner, repo: parts.repo });
+  });
+
+  const outcomes = await mapWithConcurrency(eligible, 5, ({ owner, repo }) => getAnalysis(owner, repo));
+
+  eligible.forEach((target, i) => {
+    const outcome = outcomes[i];
+    const v = enriched[target.idx];
+    if (!outcome.ok) {
+      v.repoHealthError = 'ANALYSIS_FAILED';
+      return;
+    }
+    const data = outcome.value;
+    if (!data || typeof data.total !== 'number' || !data.breakdown) {
+      v.repoHealthError = 'ANALYSIS_FAILED';
+      return;
+    }
+    v.repoHealth = {
+      soyceScore: data.total,
+      verdict: verdictFor(data.total, { earlyBreakout: false }),
+      signals: {
+        maintenance: data.breakdown.maintenance ?? 0,
+        security: data.breakdown.security ?? 0,
+        activity: data.breakdown.activity ?? 0,
+      },
+    };
+    v.repoHealthError = null;
+  });
+
+  return enriched;
 }
 
 // Severity tiering for response sort. Lower index = higher severity.
@@ -92,6 +196,17 @@ export default async function handler(req, res) {
     console.error('Identity resolver failure (non-fatal)', e);
     vulnerabilities = (vulnerabilities || []).map(v => ({
       ...v, resolvedRepo: null, confidence: 'NONE', source: null
+    }));
+  }
+
+  try {
+    vulnerabilities = await attachRepoHealthToVulnerabilities(vulnerabilities || []);
+  } catch (e) {
+    console.error('Repo health attachment failure (non-fatal)', e);
+    vulnerabilities = (vulnerabilities || []).map(v => ({
+      ...v,
+      repoHealth: null,
+      repoHealthError: 'ANALYSIS_FAILED',
     }));
   }
 

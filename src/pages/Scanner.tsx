@@ -18,6 +18,28 @@ type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 type ResolverConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
 type ResolverSource = 'npm.repository' | 'npm.homepage' | 'npm.bugs';
 
+// Verdict labels match the canonical band set in src/shared/verdict.js.
+type RepoVerdict =
+  | 'USE READY'
+  | 'FORKABLE'
+  | 'HIGH MOMENTUM'
+  | 'STABLE'
+  | 'WATCHLIST'
+  | 'RISKY'
+  | 'STALE';
+
+interface RepoHealth {
+  soyceScore: number;
+  verdict: RepoVerdict;
+  signals: {
+    maintenance: number;
+    security: number;
+    activity: number;
+  };
+}
+
+type RepoHealthError = 'IDENTITY_NONE' | 'ANALYSIS_FAILED';
+
 interface Vulnerability {
   package: string;
   version: string;
@@ -31,6 +53,12 @@ interface Vulnerability {
   confidence?: ResolverConfidence;
   source?: ResolverSource | null;
   directory?: string;
+  // Scanner v2.1a — repo health (paired with advisory severity per-row).
+  // Mutually exclusive: when `repoHealth` is set, `repoHealthError` is null,
+  // and vice versa. Both absent on responses from older servers — render
+  // defensively (sub-block hidden).
+  repoHealth?: RepoHealth | null;
+  repoHealthError?: RepoHealthError | null;
 }
 
 interface ScanResponse {
@@ -453,89 +481,24 @@ function ResultsPanel({
         </div>
       )}
 
-      {!clean && <DependencyIdentityPreview vulns={result.vulnerabilities} />}
     </div>
   );
 }
 
-/**
- * Preview surface for the v1 resolver. Only renders vulnerable packages that
- * resolved to a GitHub repo (HIGH or MEDIUM). NONE packages are silently
- * omitted — this is an opt-in preview, not a coverage report.
- *
- * Intentionally shows no Soyce score. Scanner v2.1 will attach per-dependency
- * scoring here once the identity layer is proven.
- */
-function DependencyIdentityPreview({ vulns }: { vulns: Vulnerability[] }) {
-  const resolved = vulns.filter(
-    (v) =>
-      !!v.resolvedRepo &&
-      (v.confidence === 'HIGH' || v.confidence === 'MEDIUM'),
-  );
-  if (resolved.length === 0) return null;
-
-  // De-dupe by package: the same dep can show up multiple times if it has
-  // more than one advisory, but its identity is the same.
-  const seen = new Set<string>();
-  const unique: Vulnerability[] = [];
-  for (const v of resolved) {
-    if (seen.has(v.package)) continue;
-    seen.add(v.package);
-    unique.push(v);
-  }
-
-  return (
-    <div
-      className="mt-10 bg-white border-4 border-soy-bottle p-6 md:p-8 shadow-[6px_6px_0px_#000]"
-      data-testid="dependency-identity-preview"
-    >
-      <div className="text-[10px] font-black uppercase tracking-[0.4em] opacity-50 mb-1">
-        DEPENDENCY IDENTITY (PREVIEW)
-      </div>
-      <h3 className="text-xl md:text-2xl font-black uppercase italic tracking-tight mb-1">
-        Resolved Source Repos
-      </h3>
-      <p className="text-xs md:text-sm font-bold uppercase tracking-widest opacity-50 mb-5">
-        Soyce scoring per dependency arrives in v2.1.
-      </p>
-
-      <ul className="space-y-2">
-        {unique.map((v) => {
-          const isHigh = v.confidence === 'HIGH';
-          const chip = isHigh
-            ? 'bg-emerald-500 text-black'
-            : 'bg-amber-500 text-black';
-          return (
-            <li
-              key={v.package}
-              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b-2 border-soy-bottle/10 last:border-b-0"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="font-black text-sm md:text-base uppercase italic tracking-tight break-all">
-                  {v.package}
-                </span>
-                <span className="opacity-40 font-mono text-xs">→</span>
-                <a
-                  href={`https://github.com/${v.resolvedRepo}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs md:text-sm text-soy-red hover:text-soy-bottle break-all"
-                >
-                  {v.resolvedRepo}
-                </a>
-              </div>
-              <span
-                className={`self-start sm:self-auto px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${chip}`}
-              >
-                {v.confidence}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
+// Verdict-band chip colors. Mirrors the score-band semantics in
+// src/shared/verdict.js: green = trust, amber = caution, red = avoid.
+// The "REPO" prefix is mandatory at call sites so this never visually collides
+// with the advisory severity pill (which is also green/amber/red but means
+// something entirely different).
+const VERDICT_CHIP: Record<RepoVerdict, string> = {
+  'USE READY': 'bg-emerald-500 text-black',
+  'FORKABLE': 'bg-emerald-500 text-black',
+  'STABLE': 'bg-emerald-500 text-black',
+  'HIGH MOMENTUM': 'bg-amber-500 text-black',
+  'WATCHLIST': 'bg-amber-500 text-black',
+  'RISKY': 'bg-soy-red text-white',
+  'STALE': 'bg-soy-red text-white',
+};
 
 function VulnRow({ v }: { v: Vulnerability }) {
   const sev = SEVERITY_ORDER.includes(v.severity) ? v.severity : 'unknown';
@@ -608,6 +571,86 @@ function VulnRow({ v }: { v: Vulnerability }) {
           Analyze in Lookup
           <ArrowUpRight size={14} />
         </Link>
+      </div>
+
+      {/* REPO HEALTH sub-block (Scanner v2.1a). Distinct from the advisory
+          metadata above: advisory = "is this version of the dep vulnerable?",
+          repo health = "are the maintainers actively fixing things?". */}
+      <RepoHealthBlock v={v} />
+    </div>
+  );
+}
+
+/**
+ * Per-vuln repo health block. Three states:
+ *   1. `repoHealth` present       → score + verdict + signals (the success path)
+ *   2. `repoHealthError` set      → muted fallback message; NEVER renders as green
+ *   3. neither present (defensive)→ block hidden (only happens against an older
+ *                                   server that predates v2.1a)
+ */
+function RepoHealthBlock({ v }: { v: Vulnerability }) {
+  if (!v.repoHealth && !v.repoHealthError) return null;
+
+  const labelRow = (
+    <div className="text-[10px] font-black uppercase tracking-[0.4em] opacity-50 mb-2">
+      REPO HEALTH
+    </div>
+  );
+
+  if (v.repoHealthError === 'IDENTITY_NONE') {
+    return (
+      <div className="mt-4 pt-3 border-t-2 border-soy-bottle/10">
+        {labelRow}
+        <div className="bg-soy-label/20 border-2 border-soy-bottle/20 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-soy-bottle/60">
+          Repo identity unresolved — no health context available.
+        </div>
+      </div>
+    );
+  }
+
+  if (v.repoHealthError === 'ANALYSIS_FAILED') {
+    return (
+      <div className="mt-4 pt-3 border-t-2 border-soy-bottle/10">
+        {labelRow}
+        <div className="bg-soy-label/20 border-2 border-soy-bottle/20 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-soy-bottle/70 flex items-center gap-2">
+          <AlertCircle size={14} className="shrink-0" />
+          GitHub analysis unavailable — try again in a minute.
+        </div>
+      </div>
+    );
+  }
+
+  if (!v.repoHealth) return null;
+  const { soyceScore, verdict, signals } = v.repoHealth;
+  const chip = VERDICT_CHIP[verdict] || 'bg-soy-label text-black';
+
+  return (
+    <div className="mt-4 pt-3 border-t-2 border-soy-bottle/10">
+      {labelRow}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {v.resolvedRepo ? (
+            <a
+              href={`https://github.com/${v.resolvedRepo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs md:text-sm text-soy-red hover:text-soy-bottle break-all"
+            >
+              {v.resolvedRepo}
+            </a>
+          ) : null}
+          <span
+            className={`self-start px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${chip}`}
+          >
+            REPO: {verdict}
+          </span>
+          <span className="font-mono text-xs md:text-sm font-bold tracking-tight">
+            Soyce {soyceScore.toFixed(1)}
+          </span>
+        </div>
+        <div className="font-mono italic text-[11px] tracking-tight opacity-70">
+          Maint {signals.maintenance.toFixed(1)} / Sec {signals.security.toFixed(1)} / Activity {signals.activity.toFixed(1)}
+        </div>
       </div>
     </div>
   );

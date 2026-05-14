@@ -8,6 +8,7 @@ import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
 import { isValidGithubName } from "./src/shared/validateRepo.js";
 import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat } from "./src/shared/scanLockfile.js";
 import { resolveDepIdentity } from "./src/shared/resolveDepIdentity.js";
+import { verdictFor } from "./src/shared/verdict.js";
 
 /**
  * Resolve GitHub identity for each vulnerable package only. We deliberately
@@ -35,6 +36,50 @@ async function attachIdentitiesToVulnerabilities(vulns: any[]): Promise<any[]> {
     }
     return { ...v, resolvedRepo: null, confidence: 'NONE', source: null };
   });
+}
+
+/**
+ * Bounded-concurrency map. Used by Scanner v2.1a so a 20-vuln scan doesn't
+ * fan out 20 GitHub analyses in parallel (each is 8 GH endpoints). Errors are
+ * captured per-item so one failing repo never poisons the batch.
+ *
+ * @template T, R
+ * @param {T[]} items
+ * @param {number} limit
+ * @param {(item: T, idx: number) => Promise<R>} fn
+ * @returns {Promise<({ ok: true, value: R } | { ok: false, error: unknown })[]>}
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, idx: number) => Promise<R>,
+): Promise<({ ok: true; value: R } | { ok: false; error: unknown })[]> {
+  const results: ({ ok: true; value: R } | { ok: false; error: unknown })[] = new Array(items.length);
+  let i = 0;
+  const workerCount = Math.min(limit, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      try {
+        const value = await fn(items[idx], idx);
+        results[idx] = { ok: true, value };
+      } catch (error) {
+        results[idx] = { ok: false, error };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/** Parse "owner/repo" into a tuple. Returns null on malformed input. */
+function splitOwnerRepo(slug: string | null | undefined): { owner: string; repo: string } | null {
+  if (typeof slug !== 'string') return null;
+  const parts = slug.split('/');
+  if (parts.length !== 2) return null;
+  const [owner, repo] = parts;
+  if (!owner || !repo) return null;
+  return { owner, repo };
 }
 
 // Severity tiering for /api/scan response sort. Lower index = higher severity.
@@ -231,6 +276,72 @@ async function startServer() {
       console.error('Identity resolver failure (non-fatal)', e);
       vulnerabilities = (vulnerabilities || []).map(v => ({
         ...v, resolvedRepo: null, confidence: 'NONE', source: null
+      }));
+    }
+
+    // Scanner v2.1a — attach repo health (Soyce score + verdict + signals) to
+    // each HIGH/MEDIUM resolved vuln. Bounded concurrency keeps the GitHub
+    // fan-out predictable (5 parallel analyses). Per-vuln errors land in
+    // `repoHealthError` rather than failing the response. Non-resolved vulns
+    // are marked IDENTITY_NONE so the UI can render a distinct fallback that
+    // never reads as "safe".
+    try {
+      const eligible: { idx: number; owner: string; repo: string }[] = [];
+      const enriched: any[] = (vulnerabilities || []).map(v => ({
+        ...v,
+        repoHealth: null,
+        repoHealthError: null,
+      }));
+
+      enriched.forEach((v, idx) => {
+        const isResolved = (v.confidence === 'HIGH' || v.confidence === 'MEDIUM') && !!v.resolvedRepo;
+        if (!isResolved) {
+          v.repoHealthError = 'IDENTITY_NONE';
+          return;
+        }
+        const parts = splitOwnerRepo(v.resolvedRepo);
+        if (!parts) {
+          v.repoHealthError = 'IDENTITY_NONE';
+          return;
+        }
+        eligible.push({ idx, owner: parts.owner, repo: parts.repo });
+      });
+
+      const outcomes = await mapWithConcurrency(eligible, 5, async ({ owner, repo }) => {
+        return await getCachedAnalysis(owner, repo);
+      });
+
+      eligible.forEach((target, i) => {
+        const outcome = outcomes[i];
+        const v = enriched[target.idx];
+        if (!outcome.ok) {
+          v.repoHealthError = 'ANALYSIS_FAILED';
+          return;
+        }
+        const data = outcome.value;
+        if (!data || typeof data.total !== 'number' || !data.breakdown) {
+          v.repoHealthError = 'ANALYSIS_FAILED';
+          return;
+        }
+        v.repoHealth = {
+          soyceScore: data.total,
+          verdict: verdictFor(data.total, { earlyBreakout: false }),
+          signals: {
+            maintenance: data.breakdown.maintenance ?? 0,
+            security: data.breakdown.security ?? 0,
+            activity: data.breakdown.activity ?? 0,
+          },
+        };
+        v.repoHealthError = null;
+      });
+
+      vulnerabilities = enriched;
+    } catch (e) {
+      console.error('Repo health attachment failure (non-fatal)', e);
+      vulnerabilities = (vulnerabilities || []).map(v => ({
+        ...v,
+        repoHealth: null,
+        repoHealthError: 'ANALYSIS_FAILED',
       }));
     }
 
