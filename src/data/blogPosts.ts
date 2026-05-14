@@ -12,11 +12,13 @@ export type BlogPost = {
   metaDescription?: string;
   author?: string;
   featured?: boolean;
+  primaryProductAction?: 'scanner' | 'lookup' | 'methodology' | 'leaderboards' | 'compare';
 };
 
 export const blogPosts: BlogPost[] = [
   {
     slug: 'shadow-dependencies-the-breach-you-never-saw-coming',
+    primaryProductAction: 'scanner',
     title: "The Open Source Dependency You Forgot About Is Already Compromised",
     subtitle: "YOUR package.json HAS 12 LINES. YOUR NODE_MODULES HAS 800 PACKAGES. ONE OF THEM IS NOT LIKE THE OTHERS.",
     category: 'SECURITY',
@@ -72,7 +74,7 @@ And here's the thing: your security audit covers the direct deps. The CVE scanne
 
 This is exactly why we built the Soyce Scanner. Not to tell you whether \`react\` is healthy — you know that. It's to surface the vulnerabilities sitting in the transitive deps you forgot existed.
 
-Paste your \`package-lock.json\` into the Scanner and it walks the full resolved dependency tree — every transitive, every pinned version — and cross-references each \`(name, version)\` pair against the OSV vulnerability database. You get back the known CVEs hiding in your install, ranked by severity. The lockfile is non-negotiable: a \`package.json\` is your wishlist; the lockfile is what actually got installed.
+Paste your \`package-lock.json\` into the [Scanner](/scanner) and it walks the full resolved dependency tree — every transitive, every pinned version — and cross-references each \`(name, version)\` pair against the OSV vulnerability database. You get back the known CVEs hiding in your install, ranked by severity. The lockfile is non-negotiable: a \`package.json\` is your wishlist; the lockfile is what actually got installed.
 
 The current Scanner is advisory-matching only — known vulnerabilities, with severity, CVE IDs, and the fixed-in version when available. It does **not** (yet) score each dependency on Soyce health pillars; if you want the maintenance / community / activity read on a specific package, click through to \`/lookup\` for the repo-level deep dive.
 
@@ -106,6 +108,7 @@ The breach you never saw coming is sitting in your node_modules right now. It's 
   },
   {
     slug: 'package-lock-secrets-supply-chain',
+    primaryProductAction: 'scanner',
     title: 'Your package-lock.json Is Lying to You',
     subtitle: 'The 847 dependencies you never audited are running in production right now.',
     category: 'DEEP DIVE',
@@ -238,6 +241,7 @@ Run the Scanner. Check the Label. Know what you are building on.
   },
   {
     slug: "why-left-pad-broke-the-internet",
+    primaryProductAction: "methodology",
     title: "WHY LEFT-PAD BROKE THE INTERNET (AND WHAT WE LEARNED)",
     subtitle: "A story of 11 lines of code and the absolute fragility of our ecosystem.",
     category: "HOT TAKE",
@@ -255,6 +259,7 @@ The left-pad incident is now a footnote. But the underlying problem - opacity in
   },
   {
     slug: "framework-wars-are-over",
+    primaryProductAction: "compare",
     title: "THE FRAMEWORK WARS ARE OVER (EVERYONE LOST)",
     subtitle: "Maintenance discipline matters more than your view library.",
     category: "FRAMEWORK WARS",
@@ -268,10 +273,11 @@ What actually differentiates a "good" choice from a "bad" one isn't the framewor
 
 Instead of hunting for the latest framework that promises 5% better TTI, we should be auditing our existing dependencies for rot. The "winner" of the framework wars isn't the library that has the most GitHub stars; it's the one that will still be shipping security patches and maintaining a stable API three years from now.
 
-Ultimately, the best framework is the one your team can maintain best. If you're building a mission-critical application, you shouldn't care about what's trending on Twitter. You should care about commit velocity, documentation freshness, and the responsiveness of the maintainers. The wars are over; it's time to get back to building reliable software.`
+Ultimately, the best framework is the one your team can maintain best. If you're building a mission-critical application, you shouldn't care about what's trending on Twitter. You should care about commit velocity, documentation freshness, and the responsiveness of the maintainers. Drop your candidates into [Compare](/compare) and weigh them across all 13 signals. The wars are over; it's time to get back to building reliable software.`
   },
   {
     slug: "how-to-read-a-soyce-score",
+    primaryProductAction: "lookup",
     title: "HOW TO READ A SOYCE SCORE (AND WHAT IT WON'T TELL YOU)",
     subtitle: "A transparency report on the numbers that drive your decisions.",
     category: "DEEP DIVE",
@@ -285,7 +291,7 @@ However, a score is just a starting point. It's a quantitative summary, not a qu
 
 We built this system to be a "Nutrition Label." Just like a label on a cereal box tells you the sugar content but not how it tastes, OpenSoyce tells you the health of the project's management but not the quality of its code. You still need to open the source code, check the issue tracker for architectural debates, and see if the philosophy aligns with your team's.
 
-Use the Soyce Score to filter out the noise. If a project has a 3.5, you probably shouldn't even look at the code - it's decaying. But for projects in the 7-10 range, the score is just your invitation to do a deeper manual audit. Trust the data to filter, trust your gut to choose.`
+Use the Soyce Score to filter out the noise. If a project has a 3.5, you probably shouldn't even look at the code - it's decaying. But for projects in the 7-10 range, the score is just your invitation to do a deeper manual audit. See how each [pillar is weighted](/methodology) and try [a real lookup](/lookup) yourself. Trust the data to filter, trust your gut to choose.`
   },
   {
     slug: "supply-chain-security-open-source",
@@ -561,6 +567,7 @@ Score before you fork. Build on what's actually solid.`
 
   {
     slug: "npm-worm-mini-shai-hulud-tanstack",
+    primaryProductAction: "scanner",
     title: "THE NPM WORM THAT HIT TANSTACK AND INTERCOM IN THE SAME WEEK",
     subtitle: "A self-replicating supply chain attack crossed four package registries. Here is what actually happened and how your stack scores against it.",
     category: "HOT TAKE",
@@ -1152,6 +1159,7 @@ Check the health of any open-source dependency behind your development tools at 
 
   {
     slug: 'open-source-licensing-wars-mit-vs-gpl-vs-apache',
+    primaryProductAction: 'compare',
     title: 'OPEN SOURCE LICENSING WARS: PICK YOUR SHIELD WISELY',
     subtitle: 'MIT, GPL, Apache, AGPL, and BSL walk into a bar. Only one of them lets you leave without a lawyer.',
     category: 'DEEP DIVE',

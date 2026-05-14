@@ -2,7 +2,105 @@ import React from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { blogPosts } from '../data/blogPosts';
-import { ArrowLeft, Clock, Calendar, Share2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, Calendar, Share2 } from 'lucide-react';
+
+type ProductActionKey = 'scanner' | 'lookup' | 'methodology' | 'leaderboards' | 'compare';
+
+const PRODUCT_ACTIONS: Record<ProductActionKey, {
+  headline: string;
+  body: string;
+  ctaLabel: string;
+  ctaPath: string;
+  chipLabel: string;
+}> = {
+  scanner: {
+    headline: "Scan your package-lock.json",
+    body: "Find known vulnerabilities in your resolved dependency tree. OSV-backed advisory matching, npm-only.",
+    ctaLabel: "OPEN SCANNER",
+    ctaPath: "/scanner",
+    chipLabel: "SCANNER",
+  },
+  lookup: {
+    headline: "Look up a GitHub repo",
+    body: "Score any repo on 13 GitHub signals across maintenance, community, security, documentation, and activity.",
+    ctaLabel: "OPEN LOOKUP",
+    ctaPath: "/lookup",
+    chipLabel: "LOOKUP",
+  },
+  methodology: {
+    headline: "See how the score is built",
+    body: "Read the v2 scoring methodology — what each pillar measures, why scores changed, and what the verdict bands mean.",
+    ctaLabel: "READ METHODOLOGY",
+    ctaPath: "/methodology",
+    chipLabel: "METHODOLOGY",
+  },
+  leaderboards: {
+    headline: "Browse the leaderboards",
+    body: "See the highest-scoring open-source projects across categories. Filter, compare, and discover.",
+    ctaLabel: "OPEN LEADERBOARDS",
+    ctaPath: "/leaderboards",
+    chipLabel: "LEADERBOARDS",
+  },
+  compare: {
+    headline: "Compare projects side-by-side",
+    body: "Pull two or more repos into a comparison view and weigh them across all 13 signals.",
+    ctaLabel: "OPEN COMPARE",
+    ctaPath: "/compare",
+    chipLabel: "COMPARE",
+  },
+};
+
+const PRODUCT_ACTION_ORDER: ProductActionKey[] = ['scanner', 'lookup', 'methodology', 'leaderboards', 'compare'];
+
+// Render inline tokens: markdown links [text](url) and bold **text**.
+// Defensive against unmatched brackets — falls through as literal text.
+function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
+  const tokenRe = /(\[[^\]\n]+\]\([^)\s]+\)|\*\*[^*\n]+\*\*)/g;
+  const segments = text.split(tokenRe);
+  return segments.map((segment, idx) => {
+    if (!segment) return null;
+    // Markdown link
+    const linkMatch = segment.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+    if (linkMatch) {
+      const [, label, url] = linkMatch;
+      const linkClass = 'text-soy-red hover:underline font-bold';
+      if (url.startsWith('/')) {
+        return (
+          <Link key={`${keyPrefix}-${idx}`} to={url} className={linkClass}>
+            {label}
+          </Link>
+        );
+      }
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return (
+          <a
+            key={`${keyPrefix}-${idx}`}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={linkClass}
+          >
+            {label}
+          </a>
+        );
+      }
+      return (
+        <a key={`${keyPrefix}-${idx}`} href={url} className={linkClass}>
+          {label}
+        </a>
+      );
+    }
+    // Bold
+    if (segment.startsWith('**') && segment.endsWith('**') && segment.length >= 4) {
+      return (
+        <strong key={`${keyPrefix}-${idx}`} className="font-black text-soy-bottle">
+          {segment.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <React.Fragment key={`${keyPrefix}-${idx}`}>{segment}</React.Fragment>;
+  });
+}
 
 export default function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
@@ -72,15 +170,9 @@ export default function BlogPost() {
           </h1>
         );
       }
-      const parts = trimmed.split(/(\*\*[^*]+\*\*)/g);
       return (
         <p key={i} className="text-lg leading-relaxed mb-6 opacity-90">
-          {parts.map((part, j) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-              return <strong key={j} className="font-black text-soy-bottle">{part.slice(2, -2)}</strong>;
-            }
-            return part;
-          })}
+          {renderInline(trimmed, `p-${i}`)}
         </p>
       );
     });
@@ -142,12 +234,56 @@ export default function BlogPost() {
           {/* Main Content */}
           <div className="md:col-span-8 space-y-8">
             {renderContent(post.content)}
+
+            {/* Product CTA Block — only renders if primaryProductAction is set */}
+            {post.primaryProductAction && PRODUCT_ACTIONS[post.primaryProductAction] && (
+              <aside
+                data-testid="product-cta-block"
+                className="my-12 bg-soy-red text-white border-4 border-black shadow-[8px_8px_0px_#000] p-8 md:p-10"
+              >
+                <h3 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter leading-none mb-4">
+                  {PRODUCT_ACTIONS[post.primaryProductAction].headline}
+                </h3>
+                <p className="text-base md:text-lg font-bold leading-relaxed mb-8 opacity-90">
+                  {PRODUCT_ACTIONS[post.primaryProductAction].body}
+                </p>
+                <Link
+                  to={PRODUCT_ACTIONS[post.primaryProductAction].ctaPath}
+                  className="inline-flex items-center gap-4 bg-black text-white px-8 py-4 text-lg font-black uppercase italic tracking-widest hover:bg-white hover:text-black transition-all group"
+                >
+                  {PRODUCT_ACTIONS[post.primaryProductAction].ctaLabel}
+                  <ArrowRight className="group-hover:translate-x-2 transition-transform" />
+                </Link>
+              </aside>
+            )}
+
             <div className="pt-12 flex flex-wrap gap-3">
               {post.tags.map(tag => (
                 <span key={tag} className="bg-soy-label text-[10px] font-black uppercase tracking-widest px-3 py-1 border border-soy-bottle/10">
                   #{tag}
                 </span>
               ))}
+            </div>
+
+            {/* Related Tools Strip — always renders */}
+            <div
+              data-testid="related-tools-strip"
+              className="border-t-2 border-black/20 mt-12 pt-6"
+            >
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50 mb-3">Related Tools</p>
+              <div className="flex flex-wrap gap-3">
+                {PRODUCT_ACTION_ORDER
+                  .filter(key => key !== post.primaryProductAction)
+                  .map(key => (
+                    <Link
+                      key={key}
+                      to={PRODUCT_ACTIONS[key].ctaPath}
+                      className="inline-flex items-center px-4 py-2 text-[11px] font-black uppercase italic tracking-[0.2em] border-2 border-black bg-white text-black hover:bg-soy-red hover:text-white hover:border-soy-red transition-colors"
+                    >
+                      {PRODUCT_ACTIONS[key].chipLabel}
+                    </Link>
+                  ))}
+              </div>
             </div>
           </div>
 

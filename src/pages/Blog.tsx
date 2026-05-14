@@ -4,9 +4,55 @@ import { motion } from 'motion/react';
 import { blogPosts } from '../data/blogPosts';
 import { ArrowRight, MessageSquare } from 'lucide-react';
 
+type StartHereCard = {
+  id: string;
+  prompt: string;
+  readFirstSlug: string;
+  thenTryPath: string;
+  thenTryLabel: string;
+};
+
+const START_HERE_CARDS: StartHereCard[] = [
+  {
+    id: 'choose-repo',
+    prompt: 'I want to decide whether to adopt a specific open-source library.',
+    readFirstSlug: 'how-to-read-a-soyce-score',
+    thenTryPath: '/lookup',
+    thenTryLabel: 'LOOKUP',
+  },
+  {
+    id: 'check-deps',
+    prompt: "I want to find known vulnerabilities in my own project.",
+    readFirstSlug: 'shadow-dependencies-the-breach-you-never-saw-coming',
+    thenTryPath: '/scanner',
+    thenTryLabel: 'SCANNER',
+  },
+  {
+    id: 'compare-tools',
+    prompt: 'I want to weigh two options before committing.',
+    readFirstSlug: 'open-source-licensing-wars-mit-vs-gpl-vs-apache',
+    thenTryPath: '/compare',
+    thenTryLabel: 'COMPARE',
+  },
+];
+
+const START_HERE_HEADLINES: Record<string, string> = {
+  'choose-repo': 'Choose a repo safely',
+  'check-deps': "Check my app's dependencies",
+  'compare-tools': 'Compare tools and frameworks',
+};
+
 export default function Blog() {
   const featuredPost = blogPosts[0];
   const otherPosts = blogPosts.slice(1);
+
+  // Resolve each Start Here card's article at render time. Skip silently if not found.
+  const resolvedStartHereCards = START_HERE_CARDS
+    .map(card => {
+      const post = blogPosts.find(p => p.slug === card.readFirstSlug);
+      return post ? { card, post } : null;
+    })
+    .filter((entry): entry is { card: StartHereCard; post: typeof blogPosts[number] } => entry !== null);
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -30,6 +76,53 @@ export default function Blog() {
           ANALYSIS. OPINIONS. SCORECARDS.
         </p>
       </header>
+
+      {/* Start Here Section — routes readers into product surfaces */}
+      {resolvedStartHereCards.length > 0 && (
+        <section data-testid="start-here-section" className="mb-24">
+          <div className="mb-10">
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter mb-3">
+              START HERE
+            </h2>
+            <p className="text-sm md:text-base font-bold uppercase tracking-widest opacity-60 italic">
+              Pick the prompt that matches what you're trying to do.
+            </p>
+            <div className="h-1 bg-soy-red w-full mt-6" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {resolvedStartHereCards.map(({ card, post }) => (
+              <div
+                key={card.id}
+                data-testid={`start-here-card-${card.id}`}
+                className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000] hover:shadow-[12px_12px_0px_#E63322] transition-all flex flex-col h-full"
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-soy-red mb-4">
+                  {START_HERE_HEADLINES[card.id]}
+                </p>
+                <h3 className="text-xl font-black uppercase italic tracking-tighter leading-tight mb-8 flex-1">
+                  "{card.prompt}"
+                </h3>
+                <div className="space-y-3 border-t-2 border-black/10 pt-5">
+                  <Link
+                    to={`/blog/${post.slug}`}
+                    className="flex items-center justify-between text-[11px] font-black uppercase tracking-[0.2em] text-black hover:text-soy-red transition-colors group"
+                  >
+                    <span>READ FIRST</span>
+                    <ArrowRight size={14} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                  <Link
+                    to={card.thenTryPath}
+                    className="flex items-center justify-between bg-black text-white px-4 py-3 text-[12px] font-black uppercase italic tracking-[0.2em] hover:bg-soy-red transition-colors group"
+                  >
+                    <span>THEN TRY: {card.thenTryLabel}</span>
+                    <ArrowRight size={14} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Featured Post */}
       <section className="mb-24">
