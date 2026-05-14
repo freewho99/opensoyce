@@ -6,6 +6,26 @@ import { fileURLToPath } from "url";
 import { GitHubService } from "./src/server/github.js";
 import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
 import { isValidGithubName } from "./src/shared/validateRepo.js";
+import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat } from "./src/shared/scanLockfile.js";
+
+// Severity tiering for /api/scan response sort. Lower index = higher severity.
+const SCAN_SEVERITY_ORDER = ['critical', 'high', 'medium', 'moderate', 'low', 'unknown'];
+function scanSeverityRank(sev: string | undefined): number {
+  const key = (sev || 'unknown').toLowerCase();
+  const normalized = key === 'moderate' ? 'medium' : key;
+  const idx = SCAN_SEVERITY_ORDER.indexOf(normalized);
+  return idx === -1 ? SCAN_SEVERITY_ORDER.length : idx;
+}
+function sortScanVulnerabilities(vulns: any[]): any[] {
+  return [...vulns].sort((a, b) => {
+    const sa = scanSeverityRank(a.severity);
+    const sb = scanSeverityRank(b.severity);
+    if (sa !== sb) return sa - sb;
+    const na = (a.package || a.name || '').toLowerCase();
+    const nb = (b.package || b.name || '').toLowerCase();
+    return na.localeCompare(nb);
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,8 +34,12 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Middleware for parsing JSON
-  app.use(express.json());
+  // Middleware for parsing JSON. Default 100KB is too small for /api/scan
+  // which accepts package-lock.json paste (typical real lockfiles are
+  // 100KB–2MB). 6MB ceiling here lets the route handler's own 5MB business
+  // check actually fire — without this bump, Express would 413 first and
+  // the route would never see the body.
+  app.use(express.json({ limit: '6mb' }));
 
   // Per-IP rate limit on the three scoring routes (the only ones that hit
   // GitHub). 30 requests/minute is generous for human use, cheap for abuse.
@@ -133,6 +157,50 @@ async function startServer() {
       }
       res.status(500).json({ error: error.message });
     }
+  });
+
+  app.post("/api/scan", scoringLimiter, async (req, res) => {
+    const { lockfile } = req.body || {};
+    if (typeof lockfile !== 'string') {
+      return res.status(400).json({ error: 'UNPARSEABLE_LOCKFILE' });
+    }
+    if (lockfile.length > 5_000_000) {
+      return res.status(413).json({ error: 'TOO_LARGE' });
+    }
+
+    const format = detectLockfileFormat(lockfile);
+    if (format === 'package-json') {
+      return res.status(400).json({ error: 'PACKAGE_JSON_NOT_SUPPORTED' });
+    }
+    if (format === 'yarn-v1' || format === 'yarn-v2') {
+      return res.status(400).json({ error: 'YARN_COMING_SOON' });
+    }
+    if (format === 'unknown' || format === undefined || format === null) {
+      return res.status(400).json({ error: 'UNPARSEABLE_LOCKFILE' });
+    }
+
+    let parsed;
+    try {
+      parsed = parseNpmLockfile(lockfile);
+    } catch (e) {
+      return res.status(400).json({ error: 'UNPARSEABLE_LOCKFILE' });
+    }
+
+    let vulnerabilities;
+    try {
+      vulnerabilities = await queryOsvBatch(parsed.all);
+    } catch (e) {
+      console.error('OSV failure', e);
+      return res.status(503).json({ error: 'OSV_UNAVAILABLE' });
+    }
+
+    res.status(200).json({
+      totalDeps: parsed.all.length,
+      directDeps: parsed.direct.length,
+      vulnerabilities: sortScanVulnerabilities(vulnerabilities || []),
+      scannedAt: new Date().toISOString(),
+      cacheHit: false,
+    });
   });
 
   app.get("/api/search", async (req, res) => {

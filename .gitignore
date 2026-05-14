@@ -8,5 +8,6 @@ coverage/
 !.env.example
 .claude/
 .playwright-mcp/
+.scan-fixtures/
 *.png
 !public/**/*.png

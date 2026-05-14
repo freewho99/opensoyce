@@ -68,13 +68,15 @@ Each of those 800 packages has:
 
 And here's the thing: your security audit covers the direct deps. The CVE scanner flags the famous ones. Nobody reviews \`string-width\`, even though it's installed 47 times across your dependency tree.
 
-## WHERE THE SOYCE SCORE SAVES YOU
+## WHERE THE SOYCE SCANNER COMES IN
 
-This is exactly why we built the Soyce Scanner. Not to tell you whether \`react\` is healthy — you know that. It's to surface the ones you forgot existed.
+This is exactly why we built the Soyce Scanner. Not to tell you whether \`react\` is healthy — you know that. It's to surface the vulnerabilities sitting in the transitive deps you forgot existed.
 
-When you paste your \`package.json\` into the Scanner, it doesn't just check your direct deps. It's looking at maintenance freshness, star count, last commit, license clarity — the signals that separate "this package is actively stewarded" from "this package is a time bomb waiting for someone to get bored or angry."
+Paste your \`package-lock.json\` into the Scanner and it walks the full resolved dependency tree — every transitive, every pinned version — and cross-references each \`(name, version)\` pair against the OSV vulnerability database. You get back the known CVEs hiding in your install, ranked by severity. The lockfile is non-negotiable: a \`package.json\` is your wishlist; the lockfile is what actually got installed.
 
-The goal isn't zero transitive deps. That's impossible. The goal is **informed risk**. Knowing that \`left-pad\`-equivalent packages are in your tree before they unpad your production.
+The current Scanner is advisory-matching only — known vulnerabilities, with severity, CVE IDs, and the fixed-in version when available. It does **not** (yet) score each dependency on Soyce health pillars; if you want the maintenance / community / activity read on a specific package, click through to \`/lookup\` for the repo-level deep dive.
+
+The goal isn't zero transitive deps. That's impossible. The goal is **informed risk**. Knowing which of your 800 packages has an unpatched CVE before someone else finds out.
 
 ## THE THREE QUESTIONS YOU SHOULD ASK
 
@@ -93,14 +95,14 @@ This sounds crass but it's real. Packages maintained by funded companies or used
 
 You can't audit 800 packages manually. Nobody can. But you can:
 
-- **Run the Soyce Scanner on your actual \`package.json\`** — takes 30 seconds, shows you which deps are aging or archived
-- **Lock your indirect deps** with \`npm shrinkwrap\` or commit your lockfile
+- **Run the Soyce Scanner on your \`package-lock.json\`** — walks every resolved dep, shows you which ones have known CVEs and their severity
+- **Commit your lockfile** so what you scanned is what gets installed
 - **Set up automated alerts** for new dep versions hitting your tree
-- **Treat any dep with 0 stars and a 3-year-old last commit as dead code** — because it is
+- **For the deps the Scanner doesn't flag, sample-audit the suspicious ones** via \`/lookup\` — the Soyce Score covers maintenance, community, and security posture at the repo level
 
 The breach you never saw coming is sitting in your node_modules right now. It's been there since the last time someone ran \`npm install\`. And it'll be there until you look.
 
-**Paste your package.json in the Scanner. Find it before it finds you.**`
+**Paste your package-lock.json in the Scanner. Find it before it finds you.**`
   },
   {
     slug: 'package-lock-secrets-supply-chain',
