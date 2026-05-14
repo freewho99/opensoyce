@@ -9,6 +9,7 @@ import { isValidGithubName } from "./src/shared/validateRepo.js";
 import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat, buildInventory } from "./src/shared/scanLockfile.js";
 import { resolveDepIdentity } from "./src/shared/resolveDepIdentity.js";
 import { verdictFor } from "./src/shared/verdict.js";
+import { selectHealthCandidates } from "./src/shared/selectHealthCandidates.js";
 
 /**
  * Resolve GitHub identity for each vulnerable package only. We deliberately
@@ -80,6 +81,125 @@ function splitOwnerRepo(slug: string | null | undefined): { owner: string; repo:
   const [owner, repo] = parts;
   if (!owner || !repo) return null;
   return { owner, repo };
+}
+
+/**
+ * Scanner v3b -- selective dependency health scoring.
+ *
+ * Picks up to `budget` non-vulnerable inventory packages, resolves each one's
+ * GitHub identity, and (when confidence is HIGH/MEDIUM) calls the cached
+ * analyzer to attach a Soyce score + verdict + signals. Per-row try/catch
+ * means a single bad analysis can never poison the whole result. The 24h
+ * caches inside resolveDepIdentity and getCachedAnalysis carry across scans
+ * for free.
+ *
+ * The "unknown is not a verdict" rule is enforced here: when identity is
+ * unresolved we emit status:'IDENTITY_UNRESOLVED' with soyceScore null. We do
+ * NOT compute a "missing identity" penalty score.
+ */
+type SelectedHealthRow = {
+  package: string;
+  version: string;
+  direct: boolean;
+  scope: 'prod' | 'dev' | 'optional' | 'unknown';
+  primaryReason: string;
+  secondaryReasons: string[];
+  resolvedRepo: string | null;
+  confidence: 'HIGH' | 'MEDIUM' | 'NONE';
+  soyceScore: number | null;
+  verdict: string | null;
+  signals: { maintenance: number; security: number; activity: number } | null;
+  status: 'SCORED' | 'IDENTITY_UNRESOLVED' | 'SCORE_UNAVAILABLE';
+};
+
+async function selectAndScoreHealth(
+  inventory: any,
+  vulnerablePackageNames: Set<string>,
+  getAnalysis: (owner: string, repo: string) => Promise<any>,
+): Promise<{ scored: SelectedHealthRow[]; skippedBudget: number; qualifyingTotal: number; budget: number }> {
+  const BUDGET = 25;
+  const { selected, skippedBudget, qualifyingTotal } = selectHealthCandidates({
+    inventory,
+    vulnerablePackageNames,
+    budget: BUDGET,
+  });
+
+  // Concurrency 5 mirrors v2.1a. Each worker resolves identity then (if good)
+  // pulls a cached analysis. Per-row outcome is captured in the row's status
+  // field, never thrown.
+  const outcomes = await mapWithConcurrency(selected, 5, async (cand) => {
+    const ident = await resolveDepIdentity(cand.package, { version: cand.version });
+    const resolvedRepo = ident && ident.resolvedRepo ? ident.resolvedRepo : null;
+    const confidence: 'HIGH' | 'MEDIUM' | 'NONE' = ident && (ident.confidence === 'HIGH' || ident.confidence === 'MEDIUM')
+      ? ident.confidence
+      : 'NONE';
+
+    if (!resolvedRepo || confidence === 'NONE') {
+      return {
+        resolvedRepo: null,
+        confidence: 'NONE' as const,
+        analysis: null,
+        analysisFailed: false,
+      };
+    }
+    const parts = splitOwnerRepo(resolvedRepo);
+    if (!parts) {
+      return { resolvedRepo: null, confidence: 'NONE' as const, analysis: null, analysisFailed: false };
+    }
+    try {
+      const data = await getAnalysis(parts.owner, parts.repo);
+      return { resolvedRepo, confidence, analysis: data, analysisFailed: !data };
+    } catch {
+      return { resolvedRepo, confidence, analysis: null, analysisFailed: true };
+    }
+  });
+
+  const scored: SelectedHealthRow[] = selected.map((cand, i) => {
+    const base: SelectedHealthRow = {
+      package: cand.package,
+      version: cand.version,
+      direct: cand.direct,
+      scope: cand.scope,
+      primaryReason: cand.primaryReason,
+      secondaryReasons: cand.secondaryReasons,
+      resolvedRepo: null,
+      confidence: 'NONE',
+      soyceScore: null,
+      verdict: null,
+      signals: null,
+      status: 'IDENTITY_UNRESOLVED',
+    };
+    const outcome = outcomes[i];
+    if (!outcome || !outcome.ok) {
+      // Top-level worker failure -- treat as score unavailable rather than
+      // a fake unresolved-identity. We tried, the resolve/analysis path
+      // crashed, the user deserves to know.
+      base.status = 'SCORE_UNAVAILABLE';
+      return base;
+    }
+    const v = outcome.value;
+    base.resolvedRepo = v.resolvedRepo;
+    base.confidence = v.confidence;
+    if (!v.resolvedRepo || v.confidence === 'NONE') {
+      base.status = 'IDENTITY_UNRESOLVED';
+      return base;
+    }
+    if (v.analysisFailed || !v.analysis || typeof v.analysis.total !== 'number' || !v.analysis.breakdown) {
+      base.status = 'SCORE_UNAVAILABLE';
+      return base;
+    }
+    base.soyceScore = v.analysis.total;
+    base.verdict = verdictFor(v.analysis.total, { earlyBreakout: false });
+    base.signals = {
+      maintenance: v.analysis.breakdown.maintenance ?? 0,
+      security: v.analysis.breakdown.security ?? 0,
+      activity: v.analysis.breakdown.activity ?? 0,
+    };
+    base.status = 'SCORED';
+    return base;
+  });
+
+  return { scored, skippedBudget, qualifyingTotal, budget: BUDGET };
 }
 
 // Severity tiering for /api/scan response sort. Lower index = higher severity.
@@ -358,6 +478,28 @@ async function startServer() {
       inventoryError = 'INVENTORY_FAILED';
     }
 
+    // Scanner v3b -- selective dependency health scoring. Top-25 picker over
+    // the non-vulnerable inventory subset. Errors here NEVER fail the scan;
+    // the whole block is wrapped and a failure sets selectedHealthError.
+    let selectedHealth: any = null;
+    let selectedHealthError: string | null = null;
+    try {
+      if (inventory && Array.isArray((inventory as any).packages)) {
+        const vulnerableNames = new Set<string>(
+          (vulnerabilities || []).map((v: any) => v.package).filter(Boolean),
+        );
+        selectedHealth = await selectAndScoreHealth(
+          inventory,
+          vulnerableNames,
+          getCachedAnalysis,
+        );
+      }
+    } catch (e) {
+      console.error('Selected health scoring failure (non-fatal)', e);
+      selectedHealth = null;
+      selectedHealthError = 'SELECTED_HEALTH_FAILED';
+    }
+
     const payload: any = {
       totalDeps: parsed.all.length,
       directDeps: parsed.direct.length,
@@ -365,8 +507,10 @@ async function startServer() {
       scannedAt: new Date().toISOString(),
       cacheHit: false,
       inventory,
+      selectedHealth,
     };
     if (inventoryError) payload.inventoryError = inventoryError;
+    if (selectedHealthError) payload.selectedHealthError = selectedHealthError;
     res.status(200).json(payload);
   });
 

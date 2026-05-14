@@ -96,6 +96,40 @@ interface Inventory {
   totals: InventoryTotals;
 }
 
+// Scanner v3b -- Selected Dependency Health. Top-25 picker over the
+// non-vulnerable inventory subset; each row carries its own status so the
+// UI can render score / unresolved / unavailable copy without inferring
+// a band from absence.
+type SelectedHealthReason =
+  | 'DIRECT_PROD'
+  | 'DIRECT_DEV'
+  | 'MULTI_VERSION'
+  | 'IDENTITY_UNRESOLVED'
+  | 'HIGH_FAN_IN';
+type SelectedHealthStatus = 'SCORED' | 'IDENTITY_UNRESOLVED' | 'SCORE_UNAVAILABLE';
+
+interface SelectedHealthRow {
+  package: string;
+  version: string;
+  direct: boolean;
+  scope: InventoryScope;
+  primaryReason: SelectedHealthReason;
+  secondaryReasons: SelectedHealthReason[];
+  resolvedRepo: string | null;
+  confidence: 'HIGH' | 'MEDIUM' | 'NONE';
+  soyceScore: number | null;
+  verdict: RepoVerdict | null;
+  signals: { maintenance: number; security: number; activity: number } | null;
+  status: SelectedHealthStatus;
+}
+
+interface SelectedHealth {
+  scored: SelectedHealthRow[];
+  skippedBudget: number;
+  qualifyingTotal: number;
+  budget: number;
+}
+
 interface ScanResponse {
   totalDeps: number;
   directDeps: number;
@@ -104,6 +138,8 @@ interface ScanResponse {
   cacheHit: boolean;
   inventory?: Inventory | null;
   inventoryError?: 'INVENTORY_FAILED';
+  selectedHealth?: SelectedHealth | null;
+  selectedHealthError?: 'SELECTED_HEALTH_FAILED';
 }
 
 type ApiErrorCode =
@@ -526,6 +562,19 @@ function ResultsPanel({
         </div>
       )}
 
+      {/* Scanner v3b -- Selected Dependency Health. Sits between the vuln
+          list and the v3a inventory. Renders the top-25 non-vulnerable
+          candidates with their own scored / unresolved / unavailable copy.
+          Older servers may not return `selectedHealth`; we render defensively. */}
+      {result.selectedHealth && (
+        <SelectedHealthPanel data={result.selectedHealth} />
+      )}
+      {!result.selectedHealth && result.selectedHealthError && (
+        <div className="mt-6 bg-soy-label/20 border-4 border-soy-bottle/30 p-4 text-[11px] font-black uppercase tracking-widest text-soy-bottle/70">
+          Selected dependency health unavailable for this scan -- analysis still completed.
+        </div>
+      )}
+
       {/* Scanner v3a -- Dependency Inventory. Renders below the vuln list.
           Only repo-health data already gathered on vulnerable rows feeds the
           identity chip here; we do NOT fetch identity for non-vulnerable
@@ -769,6 +818,162 @@ function InventoryPanel({
           );
         })}
         <div style={{ height: bottomSpacer }} />
+      </div>
+    </div>
+  );
+}
+
+// Scanner v3b -- Selected Dependency Health panel.
+//
+// Honesty constraints baked into the copy:
+//   - Subtitle MUST contain "intentionally limited" + name the reason
+//     (scan speed and API budget). We never imply we scored the whole tree.
+//   - IDENTITY_UNRESOLVED rows show the literal "identity unresolved" line --
+//     no score number, no inferred band. This is a review signal, not a verdict.
+//   - SCORE_UNAVAILABLE rows say "score unavailable -- analysis failed" --
+//     also no inferred band.
+//   - Skipped-budget chip is a single line at the bottom; no row-by-row
+//     listing of who didn't make the cut, no "score more" button.
+const REASON_LABEL: Record<SelectedHealthReason, string> = {
+  DIRECT_PROD: 'DIRECT PROD',
+  DIRECT_DEV: 'DIRECT DEV',
+  MULTI_VERSION: 'MULTI VERSION',
+  IDENTITY_UNRESOLVED: 'NO REPO FIELD',
+  HIGH_FAN_IN: 'HIGH FAN-IN',
+};
+
+function SelectedHealthPanel({ data }: { data: SelectedHealth }) {
+  const { scored, skippedBudget, qualifyingTotal, budget } = data;
+  return (
+    <div className="mt-8 bg-white border-4 border-soy-bottle p-6 md:p-8 shadow-[8px_8px_0px_#000]">
+      <div className="mb-4">
+        <h3 className="text-xl md:text-2xl font-bold uppercase italic tracking-tight">
+          Selected Dependency Health
+        </h3>
+        <p className="mt-1 text-[11px] md:text-xs font-bold uppercase tracking-widest text-soy-bottle/60">
+          OpenSoyce scored the dependencies most likely to affect adoption risk.
+          Full-tree scoring is intentionally limited to protect scan speed and API budget.
+        </p>
+      </div>
+
+      {/* Stat strip */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 pb-4 border-b-2 border-soy-bottle/10 text-[11px] font-black uppercase tracking-widest">
+        <div className="text-soy-bottle">
+          <span>{scored.length}</span>{' '}
+          <span className="opacity-50">SCORED</span>
+          <span className="mx-1 opacity-30">/</span>
+          <span>{qualifyingTotal}</span>{' '}
+          <span className="opacity-50">QUALIFYING</span>
+        </div>
+        <span className="bg-soy-label text-soy-bottle border-2 border-soy-bottle px-2 py-0.5 text-[10px] font-black uppercase tracking-widest">
+          BUDGET {budget}
+        </span>
+      </div>
+
+      {scored.length === 0 ? (
+        <div className="bg-soy-label/20 border-2 border-soy-bottle/20 px-3 py-3 text-[11px] font-bold uppercase tracking-widest text-soy-bottle/60">
+          No candidates qualified for scoring. Vulnerable rows are scored separately above.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {scored.map((row) => (
+            <li key={`${row.package}@${row.version}`}>
+              <SelectedHealthRowView row={row} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {skippedBudget > 0 && (
+        <div className="mt-4 pt-4 border-t-2 border-soy-bottle/10">
+          <span className="bg-soy-label/40 text-soy-bottle border-2 border-soy-bottle/40 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest">
+            {skippedBudget} MORE CANDIDATES NOT SCORED (BUDGET {budget})
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
+  // Reuse the existing VERDICT_CHIP map -- do NOT duplicate verdictFor or
+  // its band colors. Status-driven rendering: SCORED uses verdict + score,
+  // IDENTITY_UNRESOLVED uses literal copy, SCORE_UNAVAILABLE uses its own copy.
+  const verdictChipClass =
+    row.status === 'SCORED' && row.verdict ? VERDICT_CHIP[row.verdict] : null;
+
+  return (
+    <div className="bg-soy-label/10 border-2 border-soy-bottle/20 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs md:text-sm font-bold text-soy-bottle break-all">
+          {row.package}
+        </span>
+        <span className="font-mono text-[11px] opacity-60">@ {row.version || '—'}</span>
+        <span
+          className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${
+            row.direct
+              ? 'bg-soy-bottle text-white'
+              : 'bg-soy-label/40 text-soy-bottle border-soy-bottle/40'
+          }`}
+        >
+          {row.direct ? 'DIRECT' : 'TRANS'}
+        </span>
+        <span
+          className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${SCOPE_CHIP[row.scope]}`}
+        >
+          {SCOPE_LABEL[row.scope]}
+        </span>
+        <span className="bg-soy-label text-soy-bottle border-2 border-soy-bottle px-2 py-0.5 text-[10px] font-black uppercase tracking-widest">
+          {REASON_LABEL[row.primaryReason] || row.primaryReason}
+        </span>
+        {row.secondaryReasons.length > 0 && (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-soy-bottle/50">
+            + {row.secondaryReasons.map(r => REASON_LABEL[r] || r).join(' / ')}
+          </span>
+        )}
+      </div>
+
+      {/* Status zone -- separate row so the copy / chips never collide with
+          the metadata above. Each branch is mutually exclusive. */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {row.status === 'SCORED' && row.soyceScore !== null && row.verdict && (
+          <>
+            {row.resolvedRepo && (
+              <a
+                href={`https://github.com/${row.resolvedRepo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[11px] text-soy-red hover:text-soy-bottle break-all"
+              >
+                {row.resolvedRepo}
+              </a>
+            )}
+            <span
+              className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${verdictChipClass || 'bg-soy-label text-black'}`}
+            >
+              REPO: {row.verdict}
+            </span>
+            <span className="font-mono text-[11px] font-bold tracking-tight text-soy-bottle">
+              Soyce {row.soyceScore.toFixed(1)}
+            </span>
+            {row.signals && (
+              <span className="font-mono italic text-[10px] tracking-tight opacity-60">
+                Maint {row.signals.maintenance.toFixed(1)} / Sec {row.signals.security.toFixed(1)} / Act {row.signals.activity.toFixed(1)}
+              </span>
+            )}
+          </>
+        )}
+        {row.status === 'IDENTITY_UNRESOLVED' && (
+          <span className="text-[11px] font-bold uppercase tracking-widest text-soy-bottle/60">
+            identity unresolved -- OpenSoyce cannot verify source health
+          </span>
+        )}
+        {row.status === 'SCORE_UNAVAILABLE' && (
+          <span className="text-[11px] font-bold uppercase tracking-widest text-soy-bottle/60 flex items-center gap-2">
+            <AlertCircle size={12} className="shrink-0" />
+            score unavailable -- analysis failed
+          </span>
+        )}
       </div>
     </div>
   );

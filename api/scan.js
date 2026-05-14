@@ -2,6 +2,7 @@ import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat, buildInventory }
 import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
 import { verdictFor } from '../src/shared/verdict.js';
+import { selectHealthCandidates } from '../src/shared/selectHealthCandidates.js';
 
 /**
  * Resolve GitHub identity for each vulnerable package only. Skipping the full
@@ -131,6 +132,90 @@ async function attachRepoHealthToVulnerabilities(vulns) {
   return enriched;
 }
 
+/**
+ * Scanner v3b -- selective dependency health scoring (Vercel mirror).
+ *
+ * Mirrors server.ts selectAndScoreHealth. Picks up to 25 non-vulnerable
+ * inventory packages, resolves identity, then (HIGH/MEDIUM only) attaches
+ * Soyce score + verdict + signals via the per-request memo. Per-row try/catch
+ * keeps a single bad analysis from poisoning the response. "unknown is not a
+ * verdict": unresolved identity emits status:'IDENTITY_UNRESOLVED' with
+ * soyceScore null -- no negative score is computed.
+ */
+async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalysis) {
+  const BUDGET = 25;
+  const { selected, skippedBudget, qualifyingTotal } = selectHealthCandidates({
+    inventory,
+    vulnerablePackageNames,
+    budget: BUDGET,
+  });
+
+  const outcomes = await mapWithConcurrency(selected, 5, async (cand) => {
+    const ident = await resolveDepIdentity(cand.package, { version: cand.version });
+    const resolvedRepo = ident && ident.resolvedRepo ? ident.resolvedRepo : null;
+    const confidence = ident && (ident.confidence === 'HIGH' || ident.confidence === 'MEDIUM')
+      ? ident.confidence
+      : 'NONE';
+    if (!resolvedRepo || confidence === 'NONE') {
+      return { resolvedRepo: null, confidence: 'NONE', analysis: null, analysisFailed: false };
+    }
+    const parts = splitOwnerRepo(resolvedRepo);
+    if (!parts) {
+      return { resolvedRepo: null, confidence: 'NONE', analysis: null, analysisFailed: false };
+    }
+    try {
+      const data = await getAnalysis(parts.owner, parts.repo);
+      return { resolvedRepo, confidence, analysis: data, analysisFailed: !data };
+    } catch {
+      return { resolvedRepo, confidence, analysis: null, analysisFailed: true };
+    }
+  });
+
+  const scored = selected.map((cand, i) => {
+    const row = {
+      package: cand.package,
+      version: cand.version,
+      direct: cand.direct,
+      scope: cand.scope,
+      primaryReason: cand.primaryReason,
+      secondaryReasons: cand.secondaryReasons,
+      resolvedRepo: null,
+      confidence: 'NONE',
+      soyceScore: null,
+      verdict: null,
+      signals: null,
+      status: 'IDENTITY_UNRESOLVED',
+    };
+    const outcome = outcomes[i];
+    if (!outcome || !outcome.ok) {
+      row.status = 'SCORE_UNAVAILABLE';
+      return row;
+    }
+    const v = outcome.value;
+    row.resolvedRepo = v.resolvedRepo;
+    row.confidence = v.confidence;
+    if (!v.resolvedRepo || v.confidence === 'NONE') {
+      row.status = 'IDENTITY_UNRESOLVED';
+      return row;
+    }
+    if (v.analysisFailed || !v.analysis || typeof v.analysis.total !== 'number' || !v.analysis.breakdown) {
+      row.status = 'SCORE_UNAVAILABLE';
+      return row;
+    }
+    row.soyceScore = v.analysis.total;
+    row.verdict = verdictFor(v.analysis.total, { earlyBreakout: false });
+    row.signals = {
+      maintenance: v.analysis.breakdown.maintenance ?? 0,
+      security: v.analysis.breakdown.security ?? 0,
+      activity: v.analysis.breakdown.activity ?? 0,
+    };
+    row.status = 'SCORED';
+    return row;
+  });
+
+  return { scored, skippedBudget, qualifyingTotal, budget: BUDGET };
+}
+
 // Severity tiering for response sort. Lower index = higher severity.
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'moderate', 'low', 'unknown'];
 
@@ -222,6 +307,25 @@ export default async function handler(req, res) {
     inventoryError = 'INVENTORY_FAILED';
   }
 
+  // Scanner v3b -- selective dependency health. Errors here never fail the
+  // scan. A failed block sets selectedHealth:null + selectedHealthError.
+  let selectedHealth = null;
+  let selectedHealthError = null;
+  try {
+    if (inventory && Array.isArray(inventory.packages)) {
+      const vulnerableNames = new Set(
+        (vulnerabilities || []).map(v => v.package).filter(Boolean),
+      );
+      const headers = githubHeaders(process.env.GITHUB_TOKEN);
+      const getAnalysis = makeAnalysisMemo(headers);
+      selectedHealth = await selectAndScoreHealth(inventory, vulnerableNames, getAnalysis);
+    }
+  } catch (e) {
+    console.error('Selected health scoring failure (non-fatal)', e);
+    selectedHealth = null;
+    selectedHealthError = 'SELECTED_HEALTH_FAILED';
+  }
+
   const payload = {
     totalDeps: parsed.all.length,
     directDeps: parsed.direct.length,
@@ -229,7 +333,9 @@ export default async function handler(req, res) {
     scannedAt: new Date().toISOString(),
     cacheHit: false,
     inventory,
+    selectedHealth,
   };
   if (inventoryError) payload.inventoryError = inventoryError;
+  if (selectedHealthError) payload.selectedHealthError = selectedHealthError;
   res.status(200).json(payload);
 }
