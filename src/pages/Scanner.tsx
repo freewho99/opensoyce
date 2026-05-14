@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShieldAlert,
@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   Package,
 } from 'lucide-react';
+import { summarizeScan } from '../shared/scanSummary.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
@@ -420,6 +421,11 @@ function ResultsPanel({
   grouped: Record<Severity, Vulnerability[]>;
 }) {
   const clean = totalVulns === 0;
+  // Scanner v2.1b — interpretation panel. Pure summary, derived from the same
+  // vulnerabilities array the per-row list iterates. Memoized only because the
+  // panel rerenders on every Scanner state change and the math touches every
+  // row; correctness does not depend on the memo.
+  const summary = useMemo(() => summarizeScan(result.vulnerabilities), [result.vulnerabilities]);
 
   return (
     <div className="mt-8">
@@ -453,6 +459,9 @@ function ResultsPanel({
           </div>
         )}
       </div>
+
+      {/* v2.1b judgement panel — sits above the vuln list, below the input. */}
+      <ScanSummaryPanel summary={summary} />
 
       {clean ? (
         <div className="bg-emerald-500 text-black border-4 border-black p-6 md:p-8 flex items-start gap-4 shadow-[8px_8px_0px_#000]">
@@ -577,6 +586,180 @@ function VulnRow({ v }: { v: Vulnerability }) {
           metadata above: advisory = "is this version of the dep vulnerable?",
           repo health = "are the maintainers actively fixing things?". */}
       <RepoHealthBlock v={v} />
+    </div>
+  );
+}
+
+// Scanner v2.1b — Dependency Risk Summary panel.
+//
+// The panel renders four logical zones, top to bottom:
+//   1. Big decision-label pill + one-sentence reason
+//   2. Totals row (vulnerable packages, severity chips, fix availability)
+//   3. Health distribution chips for the source repos of vulnerable packages
+//   4. Needs-attention list (only when count > 0)
+//
+// Honesty constraints are enforced in the copy itself, not just the logic:
+// - never says "safe" / "secure" / "all clear"
+// - always bounds CLEAN by "we scanned"
+// - VERIFY_LATER copy names what's missing
+// - health distribution is framed as the source repos of vulnerable packages,
+//   not "your dependency tree health"
+
+type ScanSummary = ReturnType<typeof summarizeScan>;
+type SummaryLabel = ScanSummary['label'];
+type SummarySeverityKey = keyof ScanSummary['totals']['bySeverity'];
+type HealthBandKey = keyof ScanSummary['healthDistribution'];
+
+const LABEL_STYLES: Record<SummaryLabel, { pill: string; copy: string }> = {
+  CLEAN: { pill: 'bg-emerald-500 text-black', copy: 'CLEAN' },
+  PATCH_AVAILABLE: { pill: 'bg-soy-bottle text-white', copy: 'PATCH AVAILABLE' },
+  REVIEW_REQUIRED: { pill: 'bg-amber-500 text-black', copy: 'REVIEW REQUIRED' },
+  VERIFY_LATER: { pill: 'bg-gray-400 text-black', copy: 'VERIFY LATER' },
+};
+
+// Distribution band display order. UNAVAILABLE last so the eye lands on
+// healthy bands first when they exist. Reuses the VERDICT_CHIP colors.
+const HEALTH_BAND_ORDER: HealthBandKey[] = [
+  'USE READY',
+  'FORKABLE',
+  'STABLE',
+  'HIGH MOMENTUM',
+  'WATCHLIST',
+  'RISKY',
+  'STALE',
+  'UNAVAILABLE',
+];
+
+const HEALTH_BAND_CHIP: Record<HealthBandKey, string> = {
+  'USE READY': 'bg-emerald-500 text-black',
+  'FORKABLE': 'bg-emerald-500 text-black',
+  'STABLE': 'bg-emerald-500 text-black',
+  'HIGH MOMENTUM': 'bg-amber-500 text-black',
+  'WATCHLIST': 'bg-amber-500 text-black',
+  'RISKY': 'bg-soy-red text-white',
+  'STALE': 'bg-soy-red text-white',
+  UNAVAILABLE: 'bg-gray-400 text-black',
+};
+
+const SUMMARY_SEVERITY_ORDER: SummarySeverityKey[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+const SUMMARY_SEVERITY_STYLE: Record<SummarySeverityKey, string> = {
+  CRITICAL: 'bg-soy-red text-white',
+  HIGH: 'bg-amber-500 text-black',
+  MEDIUM: 'bg-yellow-500 text-black',
+  LOW: 'bg-emerald-500 text-black',
+  UNKNOWN: 'bg-gray-400 text-black',
+};
+
+const REASON_COPY: Record<ScanSummary['needsAttention'][number]['reason'], string> = {
+  HIGH_OR_CRITICAL_WEAK_HEALTH: 'high severity + weak repo health',
+  NO_FIX: 'no fix available',
+  HEALTH_UNAVAILABLE: 'repo health unavailable',
+  IDENTITY_UNRESOLVED: 'source repo unresolved',
+};
+
+function ScanSummaryPanel({ summary }: { summary: ScanSummary }) {
+  const labelStyle = LABEL_STYLES[summary.label];
+  const { totals, healthDistribution, needsAttention } = summary;
+  const hasAdvisories = totals.advisories > 0;
+  const hasHealthChips = HEALTH_BAND_ORDER.some((b) => healthDistribution[b] > 0);
+
+  return (
+    <div className="bg-white border-4 border-soy-bottle p-6 md:p-8 mb-6 shadow-[8px_8px_0px_#000]">
+      {/* Zone 1: label pill + sentence */}
+      <div className="flex flex-col md:flex-row md:items-start md:gap-5 gap-3">
+        <span
+          className={`self-start px-4 py-2 text-[13px] md:text-sm font-black uppercase tracking-[0.3em] border-2 border-black ${labelStyle.pill}`}
+        >
+          {labelStyle.copy}
+        </span>
+        <p className="text-sm md:text-base font-bold text-soy-bottle leading-snug max-w-[80ch]">
+          {summary.labelReason}
+        </p>
+      </div>
+
+      {/* Zone 2: totals row */}
+      {hasAdvisories && (
+        <div className="mt-5 pt-4 border-t-2 border-soy-bottle/10 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-black uppercase tracking-widest">
+          <div className="text-soy-bottle">
+            <span className="opacity-50">PACKAGES</span>{' '}
+            <span>{totals.vulnerablePackages}</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {SUMMARY_SEVERITY_ORDER.filter((s) => totals.bySeverity[s] > 0).map((s) => (
+              <span
+                key={s}
+                className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest border-2 border-black ${SUMMARY_SEVERITY_STYLE[s]}`}
+              >
+                {s}: {totals.bySeverity[s]}
+              </span>
+            ))}
+          </div>
+          <div className="text-soy-bottle">
+            <span className="bg-emerald-500 text-black px-2 py-0.5 border border-black font-mono">
+              {totals.fixAvailable} FIX
+            </span>
+            <span className="mx-1 opacity-40">/</span>
+            <span className="bg-soy-label/40 px-2 py-0.5 border border-soy-bottle/30 font-mono">
+              {totals.fixUnavailable} NONE
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Zone 3: health distribution row */}
+      {hasHealthChips && (
+        <div className="mt-5 pt-4 border-t-2 border-soy-bottle/10">
+          <div className="text-[10px] font-black uppercase tracking-[0.4em] opacity-50 mb-2">
+            HEALTH OF SOURCE REPOS FOR VULNERABLE PACKAGES
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {HEALTH_BAND_ORDER.filter((b) => healthDistribution[b] > 0).map((b) => (
+              <span
+                key={b}
+                className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest border-2 border-black ${HEALTH_BAND_CHIP[b]}`}
+              >
+                {b}: {healthDistribution[b]}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Zone 4: needs attention */}
+      {needsAttention.length > 0 && (
+        <div className="mt-5 pt-4 border-t-2 border-soy-bottle/10">
+          <div className="text-[10px] font-black uppercase tracking-[0.4em] opacity-60 mb-3">
+            NEEDS ATTENTION ({needsAttention.length})
+          </div>
+          <ul className="space-y-1.5">
+            {needsAttention.map((e, i) => {
+              const sevKey = (
+                SUMMARY_SEVERITY_ORDER.includes(e.severity as SummarySeverityKey)
+                  ? e.severity
+                  : 'UNKNOWN'
+              ) as SummarySeverityKey;
+              return (
+                <li
+                  key={`${e.package}-${e.reason}-${i}`}
+                  className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-widest"
+                >
+                  <span className="font-mono normal-case tracking-tight text-sm font-bold text-soy-bottle break-all">
+                    {e.package}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 text-[10px] border-2 border-black ${SUMMARY_SEVERITY_STYLE[sevKey]}`}
+                  >
+                    {sevKey}
+                  </span>
+                  <span className="px-2 py-0.5 text-[10px] bg-soy-label/40 border-2 border-soy-bottle/30 text-soy-bottle">
+                    {REASON_COPY[e.reason]}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
