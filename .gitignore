@@ -11,3 +11,13 @@ coverage/
 .scan-fixtures/
 *.png
 !public/**/*.png
+
+# Test artifacts left in cwd by ad-hoc CLI runs (curl > path, opensoyce-scan-report,
+# etc). These belong in /tmp or a user-chosen --out path, not in the repo.
+opensoyce-report.md
+opensoyce-report.json
+scan-test.json
+scan-resp.json
+# Catches Windows-path-mangled curl output (`curl > C:\Users\pfinn\Downloads\foo.json`
+# ends up as `UserspfinnDownloadsfoo.json` in cwd under msys2 shells).
+Userspfinn*.json

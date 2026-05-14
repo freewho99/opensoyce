@@ -255,11 +255,11 @@ export default function Lookup() {
                     
                     {/* Meta Row */}
                     <div className="flex flex-wrap items-center gap-4 py-6 border-y-2 border-soy-bottle/5 mb-8 text-[11px] font-black uppercase tracking-wider italic">
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">â­</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð´</span> {result.forks}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {result.openIssues || 0} OPEN</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {result.lastCommit ? new Date(result.lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
-                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">ð</span> {result.license}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">⭐</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🍴</span> {result.forks}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🐛</span> {result.openIssues || 0} OPEN</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">📅</span> {result.lastCommit ? new Date(result.lastCommit).toLocaleDateString() : 'RECENTLY'}</div>
+                      <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">🔑</span> {result.license}</div>
                     </div>
 
                     {/* 5 Pillars Breakdown */}
@@ -269,28 +269,28 @@ export default function Lookup() {
                         <PillarRow label="Maintenance" value={result.score.maintenance} raw={result.score.raw?.maintenance} max={3.0} />
                         {result.maintenanceBreakdown === undefined ? null : result.maintenanceBreakdown === null ? (
                           <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-30 -mt-2 pl-1">
-                            â MAINTENANCE BREAKDOWN UNAVAILABLE
+                            └ MAINTENANCE BREAKDOWN UNAVAILABLE
                           </div>
                         ) : (
                           <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-60 -mt-2 pl-1 break-words">
-                            â COMMIT {result.maintenanceBreakdown.commit.toFixed(1)}
-                            {' Â· '}RELEASE {result.maintenanceBreakdown.release.toFixed(1)}
-                            {' Â· '}TRIAGE {result.maintenanceBreakdown.triageDataAvailable ? result.maintenanceBreakdown.triage.toFixed(1) : 'N/A'}
+                            └ COMMIT {result.maintenanceBreakdown.commit.toFixed(1)}
+                            {' · '}RELEASE {result.maintenanceBreakdown.release.toFixed(1)}
+                            {' · '}TRIAGE {result.maintenanceBreakdown.triageDataAvailable ? result.maintenanceBreakdown.triage.toFixed(1) : 'N/A'}
                           </div>
                         )}
                         <PillarRow label="Community" value={result.score.community} raw={result.score.raw?.community} max={2.5} />
                         <PillarRow label="Security" value={result.score.security} raw={result.score.raw?.security} max={2.0} />
                         {result.advisories === undefined ? null : result.advisories === null ? (
                           <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-30 -mt-2 pl-1">
-                            â ADVISORY DATA UNAVAILABLE
+                            └ ADVISORY DATA UNAVAILABLE
                           </div>
                         ) : result.advisories.total === 0 ? (
                           <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-50 -mt-2 pl-1">
-                            â NO KNOWN ADVISORIES
+                            └ NO KNOWN ADVISORIES
                           </div>
                         ) : (
                           <div className="text-[9px] font-black uppercase tracking-[0.2em] italic -mt-2 pl-1">
-                            â <span className={result.advisories.recentOpen > 0 ? 'text-soy-red' : 'opacity-60'}>
+                            └ <span className={result.advisories.recentOpen > 0 ? 'text-soy-red' : 'opacity-60'}>
                                 {result.advisories.openCount} OPEN / {result.advisories.total} TOTAL
                               </span>
                             {(result.advisories.critical ?? 0) > 0 && <span className="ml-2 bg-soy-red text-white px-1.5 py-0.5">CRIT {result.advisories.critical}</span>}
@@ -362,7 +362,7 @@ export default function Lookup() {
                       {isWatching(result.owner, result.name) ? (
                         <>
                           <EyeOff size={20} />
-                          <span>â WATCHING | UNWATCH</span>
+                          <span>✓ WATCHING | UNWATCH</span>
                         </>
                       ) : (
                         <>

@@ -108,6 +108,12 @@ const FIXES = [
   { hex: 'c3a2c29ac294', to: 'e29a94', meaning: 'â\\u009a\\u0094 -> ⚔' },
   // ⚖ scales of justice (U+2696)
   { hex: 'c3a2c29ac296', to: 'e29a96', meaning: 'â\\u009a\\u0096 -> ⚖' },
+  // └ box-drawings light up and right (U+2514) — used as a tree-branch
+  // prefix on sub-bullets in Lookup.tsx. Re-mangled by eb3467d.
+  { hex: 'c3a2c294c294', to: 'e29494', meaning: 'â\\u0094\\u0094 -> └ (tree branch)' },
+  // · middle dot (U+00B7) — separator used in Lookup.tsx breakdown rows.
+  // 2-byte UTF-8 source, so the double-mangle keeps a single Â lead.
+  { hex: 'c382c2b7', to: 'c2b7', meaning: '\\u00c2\\u00b7 -> · (middle dot)' },
 ];
 
 // Strip placeholder/invalid hex entries (spaces, comments-only).
