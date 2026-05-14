@@ -1,0 +1,84 @@
+# OpenSoyce dependency-risk PR comment.
+#
+# Drop this file into your repo as `.github/workflows/opensoyce-scan.yml`
+# (drop the `.example` suffix). It runs on every PR that touches a
+# package-lock.json (root or monorepo workspace) and posts/updates a single
+# PR comment with the v3d Dependency Risk Profile.
+#
+# This file ships with `.yml.example` so it does NOT auto-run in the OpenSoyce
+# repo itself. Consumers rename it on adoption.
+
+name: OpenSoyce scan
+
+on:
+  pull_request:
+    paths:
+      - package-lock.json
+      - "**/package-lock.json"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install OpenSoyce deps
+        # OpenSoyce's CLI imports the shared scoring modules, so it needs its
+        # own dependency tree installed. `npm ci` keeps the install
+        # reproducible against the committed lockfile.
+        run: npm ci
+
+      - name: Run scanner
+        # GITHUB_TOKEN is automatically available on PR runs and works for
+        # the GitHub repo-health endpoints (8 read-only calls per repo).
+        # Use a separate PAT secret only if your scoring needs to hit private
+        # repos the default token cannot read.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/opensoyce-scan-report.mjs package-lock.json \
+            --out opensoyce-report.md \
+            --json opensoyce-report.json
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opensoyce-report
+          path: |
+            opensoyce-report.md
+            opensoyce-report.json
+
+      - name: Post or update PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          MARKER='<!-- opensoyce-report -->'
+          # The REST PATCH endpoint needs the numeric comment id, but
+          # `gh pr view --json comments` returns the GraphQL node id under
+          # `.id`. Hit /issues/{n}/comments directly to get the REST id and
+          # body in one shot, then jq for the comment that carries our marker.
+          BODY=$(printf '%s\n\n%s' "$MARKER" "$(cat opensoyce-report.md)")
+          EXISTING_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
+            | head -n1)
+          if [ -n "$EXISTING_ID" ]; then
+            # Update the existing comment in place (idempotent re-runs).
+            gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING_ID" \
+              -f body="$BODY"
+          else
+            # First run on this PR: create a new comment.
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"
+          fi

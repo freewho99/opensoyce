@@ -6,220 +6,8 @@ import { fileURLToPath } from "url";
 import { GitHubService } from "./src/server/github.js";
 import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
 import { isValidGithubName } from "./src/shared/validateRepo.js";
-import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat, buildInventory } from "./src/shared/scanLockfile.js";
 import { resolveDepIdentity } from "./src/shared/resolveDepIdentity.js";
-import { verdictFor } from "./src/shared/verdict.js";
-import { selectHealthCandidates } from "./src/shared/selectHealthCandidates.js";
-
-/**
- * Resolve GitHub identity for each vulnerable package only. We deliberately
- * skip non-vulnerable packages — every entry hits the npm registry, so doing
- * the full dep tree would add 30+ sequential roundtrips for no current product
- * value. Failures default to NONE without breaking the response.
- */
-async function attachIdentitiesToVulnerabilities(vulns: any[]): Promise<any[]> {
-  if (!Array.isArray(vulns) || vulns.length === 0) return vulns || [];
-  const results = await Promise.allSettled(
-    vulns.map(v => resolveDepIdentity(v.package, { version: v.version }))
-  );
-  return vulns.map((v, i) => {
-    const r = results[i];
-    if (r.status === 'fulfilled' && r.value) {
-      const ident = r.value;
-      const merged: any = {
-        ...v,
-        resolvedRepo: ident.resolvedRepo,
-        confidence: ident.confidence,
-        source: ident.source,
-      };
-      if (ident.directory) merged.directory = ident.directory;
-      return merged;
-    }
-    return { ...v, resolvedRepo: null, confidence: 'NONE', source: null };
-  });
-}
-
-/**
- * Bounded-concurrency map. Used by Scanner v2.1a so a 20-vuln scan doesn't
- * fan out 20 GitHub analyses in parallel (each is 8 GH endpoints). Errors are
- * captured per-item so one failing repo never poisons the batch.
- *
- * @template T, R
- * @param {T[]} items
- * @param {number} limit
- * @param {(item: T, idx: number) => Promise<R>} fn
- * @returns {Promise<({ ok: true, value: R } | { ok: false, error: unknown })[]>}
- */
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T, idx: number) => Promise<R>,
-): Promise<({ ok: true; value: R } | { ok: false; error: unknown })[]> {
-  const results: ({ ok: true; value: R } | { ok: false; error: unknown })[] = new Array(items.length);
-  let i = 0;
-  const workerCount = Math.min(limit, items.length);
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (i < items.length) {
-      const idx = i++;
-      try {
-        const value = await fn(items[idx], idx);
-        results[idx] = { ok: true, value };
-      } catch (error) {
-        results[idx] = { ok: false, error };
-      }
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
-/** Parse "owner/repo" into a tuple. Returns null on malformed input. */
-function splitOwnerRepo(slug: string | null | undefined): { owner: string; repo: string } | null {
-  if (typeof slug !== 'string') return null;
-  const parts = slug.split('/');
-  if (parts.length !== 2) return null;
-  const [owner, repo] = parts;
-  if (!owner || !repo) return null;
-  return { owner, repo };
-}
-
-/**
- * Scanner v3b -- selective dependency health scoring.
- *
- * Picks up to `budget` non-vulnerable inventory packages, resolves each one's
- * GitHub identity, and (when confidence is HIGH/MEDIUM) calls the cached
- * analyzer to attach a Soyce score + verdict + signals. Per-row try/catch
- * means a single bad analysis can never poison the whole result. The 24h
- * caches inside resolveDepIdentity and getCachedAnalysis carry across scans
- * for free.
- *
- * The "unknown is not a verdict" rule is enforced here: when identity is
- * unresolved we emit status:'IDENTITY_UNRESOLVED' with soyceScore null. We do
- * NOT compute a "missing identity" penalty score.
- */
-type SelectedHealthRow = {
-  package: string;
-  version: string;
-  direct: boolean;
-  scope: 'prod' | 'dev' | 'optional' | 'unknown';
-  primaryReason: string;
-  secondaryReasons: string[];
-  resolvedRepo: string | null;
-  confidence: 'HIGH' | 'MEDIUM' | 'NONE';
-  soyceScore: number | null;
-  verdict: string | null;
-  signals: { maintenance: number; security: number; activity: number } | null;
-  status: 'SCORED' | 'IDENTITY_UNRESOLVED' | 'SCORE_UNAVAILABLE';
-};
-
-async function selectAndScoreHealth(
-  inventory: any,
-  vulnerablePackageNames: Set<string>,
-  getAnalysis: (owner: string, repo: string) => Promise<any>,
-): Promise<{ scored: SelectedHealthRow[]; skippedBudget: number; qualifyingTotal: number; budget: number }> {
-  const BUDGET = 25;
-  const { selected, skippedBudget, qualifyingTotal } = selectHealthCandidates({
-    inventory,
-    vulnerablePackageNames,
-    budget: BUDGET,
-  });
-
-  // Concurrency 5 mirrors v2.1a. Each worker resolves identity then (if good)
-  // pulls a cached analysis. Per-row outcome is captured in the row's status
-  // field, never thrown.
-  const outcomes = await mapWithConcurrency(selected, 5, async (cand) => {
-    const ident = await resolveDepIdentity(cand.package, { version: cand.version });
-    const resolvedRepo = ident && ident.resolvedRepo ? ident.resolvedRepo : null;
-    const confidence: 'HIGH' | 'MEDIUM' | 'NONE' = ident && (ident.confidence === 'HIGH' || ident.confidence === 'MEDIUM')
-      ? ident.confidence
-      : 'NONE';
-
-    if (!resolvedRepo || confidence === 'NONE') {
-      return {
-        resolvedRepo: null,
-        confidence: 'NONE' as const,
-        analysis: null,
-        analysisFailed: false,
-      };
-    }
-    const parts = splitOwnerRepo(resolvedRepo);
-    if (!parts) {
-      return { resolvedRepo: null, confidence: 'NONE' as const, analysis: null, analysisFailed: false };
-    }
-    try {
-      const data = await getAnalysis(parts.owner, parts.repo);
-      return { resolvedRepo, confidence, analysis: data, analysisFailed: !data };
-    } catch {
-      return { resolvedRepo, confidence, analysis: null, analysisFailed: true };
-    }
-  });
-
-  const scored: SelectedHealthRow[] = selected.map((cand, i) => {
-    const base: SelectedHealthRow = {
-      package: cand.package,
-      version: cand.version,
-      direct: cand.direct,
-      scope: cand.scope,
-      primaryReason: cand.primaryReason,
-      secondaryReasons: cand.secondaryReasons,
-      resolvedRepo: null,
-      confidence: 'NONE',
-      soyceScore: null,
-      verdict: null,
-      signals: null,
-      status: 'IDENTITY_UNRESOLVED',
-    };
-    const outcome = outcomes[i];
-    if (!outcome || !outcome.ok) {
-      // Top-level worker failure -- treat as score unavailable rather than
-      // a fake unresolved-identity. We tried, the resolve/analysis path
-      // crashed, the user deserves to know.
-      base.status = 'SCORE_UNAVAILABLE';
-      return base;
-    }
-    const v = outcome.value;
-    base.resolvedRepo = v.resolvedRepo;
-    base.confidence = v.confidence;
-    if (!v.resolvedRepo || v.confidence === 'NONE') {
-      base.status = 'IDENTITY_UNRESOLVED';
-      return base;
-    }
-    if (v.analysisFailed || !v.analysis || typeof v.analysis.total !== 'number' || !v.analysis.breakdown) {
-      base.status = 'SCORE_UNAVAILABLE';
-      return base;
-    }
-    base.soyceScore = v.analysis.total;
-    base.verdict = verdictFor(v.analysis.total, { earlyBreakout: false });
-    base.signals = {
-      maintenance: v.analysis.breakdown.maintenance ?? 0,
-      security: v.analysis.breakdown.security ?? 0,
-      activity: v.analysis.breakdown.activity ?? 0,
-    };
-    base.status = 'SCORED';
-    return base;
-  });
-
-  return { scored, skippedBudget, qualifyingTotal, budget: BUDGET };
-}
-
-// Severity tiering for /api/scan response sort. Lower index = higher severity.
-const SCAN_SEVERITY_ORDER = ['critical', 'high', 'medium', 'moderate', 'low', 'unknown'];
-function scanSeverityRank(sev: string | undefined): number {
-  const key = (sev || 'unknown').toLowerCase();
-  const normalized = key === 'moderate' ? 'medium' : key;
-  const idx = SCAN_SEVERITY_ORDER.indexOf(normalized);
-  return idx === -1 ? SCAN_SEVERITY_ORDER.length : idx;
-}
-function sortScanVulnerabilities(vulns: any[]): any[] {
-  return [...vulns].sort((a, b) => {
-    const sa = scanSeverityRank(a.severity);
-    const sb = scanSeverityRank(b.severity);
-    if (sa !== sb) return sa - sb;
-    const na = (a.package || a.name || '').toLowerCase();
-    const nb = (b.package || b.name || '').toLowerCase();
-    return na.localeCompare(nb);
-  });
-}
+import { runScan, mapWithConcurrency } from "./src/shared/runScan.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -358,160 +146,41 @@ async function startServer() {
     if (typeof lockfile !== 'string') {
       return res.status(400).json({ error: 'UNPARSEABLE_LOCKFILE' });
     }
+    // 5MB business cap. Stays at the route layer (NOT inside runScan): the
+    // CLI enforces it itself with the same 5MB constant, but the limit is a
+    // route concern (paired with the Express body-parser ceiling above).
     if (lockfile.length > 5_000_000) {
       return res.status(413).json({ error: 'TOO_LARGE' });
     }
 
-    const format = detectLockfileFormat(lockfile);
-    if (format === 'package-json') {
-      return res.status(400).json({ error: 'PACKAGE_JSON_NOT_SUPPORTED' });
-    }
-    if (format === 'yarn-v1' || format === 'yarn-v2') {
-      return res.status(400).json({ error: 'YARN_COMING_SOON' });
-    }
-    if (format === 'unknown' || format === undefined || format === null) {
-      return res.status(400).json({ error: 'UNPARSEABLE_LOCKFILE' });
-    }
-
-    let parsed;
     try {
-      parsed = parseNpmLockfile(lockfile);
-    } catch (e) {
-      return res.status(400).json({ error: 'UNPARSEABLE_LOCKFILE' });
-    }
-
-    let vulnerabilities;
-    try {
-      vulnerabilities = await queryOsvBatch(parsed.all);
-    } catch (e) {
-      console.error('OSV failure', e);
-      return res.status(503).json({ error: 'OSV_UNAVAILABLE' });
-    }
-
-    // Resolve identity for the vulnerable packages only. Wrapped so that a
-    // resolver crash never poisons the scan response.
-    try {
-      vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || []);
-    } catch (e) {
-      console.error('Identity resolver failure (non-fatal)', e);
-      vulnerabilities = (vulnerabilities || []).map(v => ({
-        ...v, resolvedRepo: null, confidence: 'NONE', source: null
-      }));
-    }
-
-    // Scanner v2.1a — attach repo health (Soyce score + verdict + signals) to
-    // each HIGH/MEDIUM resolved vuln. Bounded concurrency keeps the GitHub
-    // fan-out predictable (5 parallel analyses). Per-vuln errors land in
-    // `repoHealthError` rather than failing the response. Non-resolved vulns
-    // are marked IDENTITY_NONE so the UI can render a distinct fallback that
-    // never reads as "safe".
-    try {
-      const eligible: { idx: number; owner: string; repo: string }[] = [];
-      const enriched: any[] = (vulnerabilities || []).map(v => ({
-        ...v,
-        repoHealth: null,
-        repoHealthError: null,
-      }));
-
-      enriched.forEach((v, idx) => {
-        const isResolved = (v.confidence === 'HIGH' || v.confidence === 'MEDIUM') && !!v.resolvedRepo;
-        if (!isResolved) {
-          v.repoHealthError = 'IDENTITY_NONE';
-          return;
-        }
-        const parts = splitOwnerRepo(v.resolvedRepo);
-        if (!parts) {
-          v.repoHealthError = 'IDENTITY_NONE';
-          return;
-        }
-        eligible.push({ idx, owner: parts.owner, repo: parts.repo });
+      const result = await runScan({
+        lockfileText: lockfile,
+        filename: 'package-lock.json',
+        deps: {
+          getAnalysis: getCachedAnalysis,
+          resolveIdentity: (name: string, opts?: { version?: string }) => resolveDepIdentity(name, opts || {}),
+          mapWithConcurrency,
+        },
       });
-
-      const outcomes = await mapWithConcurrency(eligible, 5, async ({ owner, repo }) => {
-        return await getCachedAnalysis(owner, repo);
-      });
-
-      eligible.forEach((target, i) => {
-        const outcome = outcomes[i];
-        const v = enriched[target.idx];
-        if (!outcome.ok) {
-          v.repoHealthError = 'ANALYSIS_FAILED';
-          return;
-        }
-        const data = outcome.value;
-        if (!data || typeof data.total !== 'number' || !data.breakdown) {
-          v.repoHealthError = 'ANALYSIS_FAILED';
-          return;
-        }
-        v.repoHealth = {
-          soyceScore: data.total,
-          verdict: verdictFor(data.total, { earlyBreakout: false }),
-          signals: {
-            maintenance: data.breakdown.maintenance ?? 0,
-            security: data.breakdown.security ?? 0,
-            activity: data.breakdown.activity ?? 0,
-          },
-        };
-        v.repoHealthError = null;
-      });
-
-      vulnerabilities = enriched;
-    } catch (e) {
-      console.error('Repo health attachment failure (non-fatal)', e);
-      vulnerabilities = (vulnerabilities || []).map(v => ({
-        ...v,
-        repoHealth: null,
-        repoHealthError: 'ANALYSIS_FAILED',
-      }));
-    }
-
-    // Scanner v3a — whole-tree inventory. Purely additive; never fails the
-    // scan. We pass the raw text so buildInventory can re-detect the format
-    // independently of the existing path.
-    let inventory = null;
-    let inventoryError = null;
-    try {
-      inventory = buildInventory(lockfile);
-    } catch (e) {
-      console.error('Inventory build failure (non-fatal)', e);
-      inventory = null;
-      inventoryError = 'INVENTORY_FAILED';
-    }
-
-    // Scanner v3b -- selective dependency health scoring. Top-25 picker over
-    // the non-vulnerable inventory subset. Errors here NEVER fail the scan;
-    // the whole block is wrapped and a failure sets selectedHealthError.
-    let selectedHealth: any = null;
-    let selectedHealthError: string | null = null;
-    try {
-      if (inventory && Array.isArray((inventory as any).packages)) {
-        const vulnerableNames = new Set<string>(
-          (vulnerabilities || []).map((v: any) => v.package).filter(Boolean),
-        );
-        selectedHealth = await selectAndScoreHealth(
-          inventory,
-          vulnerableNames,
-          getCachedAnalysis,
-        );
+      // Preserve old behavior: if OSV was entirely unavailable, surface 503
+      // so the React UI's error path still fires. New surfaces (CLI, future
+      // tools) can ignore `osvError` and render whatever they get.
+      if (result.osvError) {
+        return res.status(503).json({ error: 'OSV_UNAVAILABLE' });
       }
-    } catch (e) {
-      console.error('Selected health scoring failure (non-fatal)', e);
-      selectedHealth = null;
-      selectedHealthError = 'SELECTED_HEALTH_FAILED';
+      res.status(200).json(result);
+    } catch (err: any) {
+      // runScan throws tagged route-level errors for the cases the old
+      // handler 400'd on. Anything else is a real upstream failure.
+      const code = err && err.scanError ? err.code : null;
+      if (code === 'PACKAGE_JSON_NOT_SUPPORTED') return res.status(400).json({ error: 'PACKAGE_JSON_NOT_SUPPORTED' });
+      if (code === 'YARN_COMING_SOON') return res.status(400).json({ error: 'YARN_COMING_SOON' });
+      if (code === 'UNPARSEABLE_LOCKFILE') return res.status(400).json({ error: 'UNPARSEABLE_LOCKFILE' });
+      console.error('Scan failure', err);
+      if (err && err.message === 'RATE_LIMIT_HIT') return res.status(429).json({ error: 'RATE_LIMIT_HIT' });
+      return res.status(500).json({ error: 'UPSTREAM_ERROR' });
     }
-
-    const payload: any = {
-      totalDeps: parsed.all.length,
-      directDeps: parsed.direct.length,
-      vulnerabilities: sortScanVulnerabilities(vulnerabilities || []),
-      scannedAt: new Date().toISOString(),
-      cacheHit: false,
-      inventory,
-      selectedHealth,
-    };
-    if (inventoryError) payload.inventoryError = inventoryError;
-    if (selectedHealthError) payload.selectedHealthError = selectedHealthError;
-    res.status(200).json(payload);
   });
 
   app.get("/api/search", async (req, res) => {
