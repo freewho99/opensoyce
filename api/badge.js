@@ -1,5 +1,6 @@
 import { calculateSoyceScore } from '../src/shared/scoreCalculator.js';
 import { isValidGithubName } from '../src/shared/validateRepo.js';
+import { findSecurityPolicy } from '../src/shared/securityPolicyResolver.js';
 
 export default async function handler(req, res) {
   const match = req.url.match(/\/api\/badge\/([^/]+)\/([^/.?]+)/);
@@ -40,6 +41,12 @@ export default async function handler(req, res) {
     const latestRelease = releaseRes.ok ? await releaseRes.json() : null;
     const repoAdvisories = advisoriesRes.ok ? await advisoriesRes.json() : null;
     const recentIssues = issuesRes.ok ? await issuesRes.json() : null;
+
+    // SECURITY.md resolver fallback when /community/profile under-reports.
+    if (communityProfile && communityProfile.files && !communityProfile.files.security_policy) {
+      const found = await findSecurityPolicy(owner, repo, headers);
+      if (found) communityProfile.files.security_policy = { source: 'opensoyce_resolver' };
+    }
 
     const { total } = calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
     const score = Number.isFinite(total) ? total : 0;

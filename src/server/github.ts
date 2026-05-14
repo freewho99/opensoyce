@@ -50,6 +50,34 @@ export class GitHubService {
     return this.fetchGH(`/repos/${owner}/${repo}/community/profile`);
   }
 
+  /**
+   * Detect whether a SECURITY.md (or equivalent) exists at one of the
+   * standard locations. The community-profile endpoint is the canonical
+   * source but is known to under-report: facebook/react has SECURITY.md at
+   * the repo root and the endpoint returns null for security_policy anyway.
+   *
+   * This fallback only runs when community profile says null, so the extra
+   * calls are paid only by repos GitHub didn't surface a policy for.
+   * Returns true on first 200; false if all four paths 404.
+   */
+  async findSecurityPolicy(owner: string, repo: string): Promise<boolean> {
+    const paths = [
+      `/repos/${owner}/${repo}/contents/SECURITY.md`,
+      `/repos/${owner}/${repo}/contents/.github/SECURITY.md`,
+      `/repos/${owner}/${repo}/contents/docs/SECURITY.md`,
+    ];
+    for (const p of paths) {
+      try {
+        const result = await this.fetchGH(p);
+        if (result) return true;
+      } catch {
+        // fetchGH throws on rate-limit / non-200-non-404; treat as inconclusive
+        // and fall through to the next path.
+      }
+    }
+    return false;
+  }
+
   async getLatestRelease(owner: string, repo: string) {
     return this.fetchGH(`/repos/${owner}/${repo}/releases/latest`);
   }

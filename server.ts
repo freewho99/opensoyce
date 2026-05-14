@@ -75,6 +75,17 @@ async function startServer() {
     ]);
     if (!repoData) return null;
 
+    // SECURITY.md resolver: community/profile is known to under-report
+    // (facebook/react has SECURITY.md at root but the endpoint returns null).
+    // Only fall back when the community profile says no policy; mutate the
+    // profile in place so the scorer doesn't need a new parameter.
+    if (communityProfile && communityProfile.files && !communityProfile.files.security_policy) {
+      const found = await gh.findSecurityPolicy(owner, repo);
+      if (found) {
+        communityProfile.files.security_policy = { source: 'opensoyce_resolver' };
+      }
+    }
+
     const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || [], readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
     const data = {
       ...scoreResult,

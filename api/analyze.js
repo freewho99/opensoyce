@@ -1,5 +1,6 @@
 import { calculateSoyceScore } from '../src/shared/scoreCalculator.js';
 import { isValidGithubName } from '../src/shared/validateRepo.js';
+import { findSecurityPolicy } from '../src/shared/securityPolicyResolver.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -48,6 +49,12 @@ export default async function handler(req, res) {
     const latestRelease = releaseRes.ok ? await releaseRes.json() : null;
     const repoAdvisories = advisoriesRes.ok ? await advisoriesRes.json() : null;
     const recentIssues = issuesRes.ok ? await issuesRes.json() : null;
+
+    // SECURITY.md resolver fallback when /community/profile under-reports.
+    if (communityProfile && communityProfile.files && !communityProfile.files.security_policy) {
+      const found = await findSecurityPolicy(owner, repo, headers);
+      if (found) communityProfile.files.security_policy = { source: 'opensoyce_resolver' };
+    }
 
     const scoreResult = calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
 
