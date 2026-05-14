@@ -12,6 +12,7 @@ import {
   Package,
 } from 'lucide-react';
 import { summarizeScan } from '../shared/scanSummary.js';
+import { computeRiskProfile } from '../shared/riskProfile.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
@@ -535,6 +536,12 @@ function ResultsPanel({
       {/* v2.1b judgement panel — sits above the vuln list, below the input. */}
       <ScanSummaryPanel summary={summary} />
 
+      {/* v3c risk profile panel — interpretation layer over evidence the
+          earlier passes already produced. No new fetches. Sits between the
+          v2.1b judgement and the vuln rows so the page reads top-to-bottom
+          as decision → shape → detail. */}
+      <RiskProfilePanel result={result} />
+
       {clean ? (
         <div className="bg-emerald-500 text-black border-4 border-black p-6 md:p-8 flex items-start gap-4 shadow-[8px_8px_0px_#000]">
           <ShieldCheck size={36} className="shrink-0 mt-1" />
@@ -856,10 +863,12 @@ function SelectedHealthPanel({ data }: { data: SelectedHealth }) {
         </p>
       </div>
 
-      {/* Stat strip */}
+      {/* Stat strip. "SCORED" counts only rows whose status is actually
+          SCORED; rows that resolved identity but failed analysis show up
+          as SCORE UNAVAILABLE and must not inflate the success count. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 pb-4 border-b-2 border-soy-bottle/10 text-[11px] font-black uppercase tracking-widest">
         <div className="text-soy-bottle">
-          <span>{scored.length}</span>{' '}
+          <span>{scored.filter(r => r.status === 'SCORED').length}</span>{' '}
           <span className="opacity-50">SCORED</span>
           <span className="mx-1 opacity-30">/</span>
           <span>{qualifyingTotal}</span>{' '}
@@ -1433,6 +1442,137 @@ function RepoHealthBlock({ v }: { v: Vulnerability }) {
         </div>
         <div className="font-mono italic text-[11px] tracking-tight opacity-70">
           Maint {signals.maintenance.toFixed(1)} / Sec {signals.security.toFixed(1)} / Activity {signals.activity.toFixed(1)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Scanner v3c — Whole-Tree Risk Profile panel.
+//
+// Pure interpretation layer over evidence already gathered by v2.1a, v2.1b,
+// v3a, v3b. No new fetches; no new analysis. The panel sits between the
+// v2.1b ScanSummaryPanel (decision label) and the vuln-row list (detail)
+// so the page reads top-to-bottom as decision → shape → detail.
+//
+// Honesty constraints baked into the copy at the source:
+//   - "Synthesizes evidence from the layers below. Whole-tree scoring is
+//     intentionally limited."  — never claims full-tree scoring.
+//   - Coverage strip names selected/installed counts explicitly.
+//   - UNKNOWN is its own band with its own gray pill; never collapses to LOW.
+
+type RiskBand = 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'UNKNOWN';
+type RiskProfileResult = ReturnType<typeof computeRiskProfile>;
+type RiskDimensionKey = keyof RiskProfileResult['dimensions'];
+
+const RISK_BAND_CHIP: Record<RiskBand, string> = {
+  LOW: 'bg-emerald-500 text-black',
+  MODERATE: 'bg-blue-500 text-white',
+  ELEVATED: 'bg-amber-500 text-black',
+  HIGH: 'bg-soy-red text-white',
+  UNKNOWN: 'bg-gray-400 text-black',
+};
+
+const DIMENSION_LABEL: Record<RiskDimensionKey, string> = {
+  vulnerabilityExposure: 'VULN EXPOSURE',
+  remediationReadiness: 'REMEDIATION',
+  maintainerTrust: 'MAINTAINER TRUST',
+  treeComplexity: 'TREE COMPLEXITY',
+  transparency: 'TRANSPARENCY',
+};
+
+const DIMENSION_ORDER: RiskDimensionKey[] = [
+  'vulnerabilityExposure',
+  'remediationReadiness',
+  'maintainerTrust',
+  'treeComplexity',
+  'transparency',
+];
+
+function RiskProfilePanel({ result }: { result: ScanResponse }) {
+  // computeRiskProfile is pure; memo only for rerender efficiency. We feed
+  // the raw scan response through — vulnerabilities, inventory, and
+  // selectedHealth are the only inputs the function consults.
+  const profile = useMemo<RiskProfileResult>(
+    () => computeRiskProfile({
+      vulnerabilities: result.vulnerabilities,
+      inventory: result.inventory ?? null,
+      selectedHealth: result.selectedHealth ?? null,
+    }),
+    [result.vulnerabilities, result.inventory, result.selectedHealth],
+  );
+
+  const { dimensions, coverage } = profile;
+
+  return (
+    <div className="bg-white border-4 border-soy-bottle p-6 md:p-8 mb-6 shadow-[8px_8px_0px_#000]">
+      <div className="mb-4">
+        <h3 className="text-xl md:text-2xl font-bold uppercase italic tracking-tight">
+          Dependency Risk Profile
+        </h3>
+        <p className="mt-1 text-[11px] md:text-xs font-bold uppercase tracking-widest text-soy-bottle/60">
+          Synthesizes evidence from the layers below. Whole-tree scoring is intentionally limited.
+        </p>
+      </div>
+
+      {/* Dimension rows */}
+      <div className="space-y-2">
+        {DIMENSION_ORDER.map((key) => {
+          const dim = dimensions[key];
+          const band = dim.band as RiskBand;
+          return (
+            <div
+              key={key}
+              className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-1.5"
+            >
+              <div className="sm:w-44 shrink-0 text-[11px] font-black uppercase tracking-widest text-soy-bottle/80">
+                {DIMENSION_LABEL[key]}
+              </div>
+              <span
+                className={`self-start sm:self-auto px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${RISK_BAND_CHIP[band]}`}
+              >
+                {band}
+              </span>
+              <p className="text-xs md:text-sm font-medium text-soy-bottle/90 leading-snug max-w-[80ch]">
+                {dim.because}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Coverage strip — locked honesty sentence + the counts that make it
+          falsifiable. We intentionally do NOT hide this when counts are
+          zero; an empty scan still needs the literal coverage admission. */}
+      <div className="mt-5 pt-4 border-t-2 border-soy-bottle/10">
+        <p className="text-[11px] md:text-xs font-bold uppercase tracking-widest text-soy-bottle/70 leading-snug">
+          {coverage.selectedScored} selected dependencies scored out of {coverage.totalInstalled} installed.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-black uppercase tracking-widest">
+          <div className="text-soy-bottle">
+            <span className="opacity-50">VULNERABLE</span>{' '}
+            <span>{coverage.vulnerableCount}</span>
+            {(coverage.vulnerableDirect > 0 || coverage.vulnerableTransitive > 0) && (
+              <>
+                <span className="mx-1 opacity-30">·</span>
+                <span className="opacity-50">DIRECT</span>{' '}
+                <span>{coverage.vulnerableDirect}</span>
+                <span className="mx-1 opacity-30">/</span>
+                <span className="opacity-50">TRANS</span>{' '}
+                <span>{coverage.vulnerableTransitive}</span>
+              </>
+            )}
+          </div>
+          <div className="text-soy-bottle">
+            <span className="opacity-50">UNRESOLVED IDENTITIES</span>{' '}
+            <span>{coverage.unresolvedIdentities}</span>
+          </div>
+          {coverage.selectedSkippedBudget > 0 && (
+            <div className="text-soy-bottle">
+              <span className="opacity-50">SKIPPED BY BUDGET</span>{' '}
+              <span>{coverage.selectedSkippedBudget}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
