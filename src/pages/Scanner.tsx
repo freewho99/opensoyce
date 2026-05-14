@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { summarizeScan } from '../shared/scanSummary.js';
 import { computeRiskProfile } from '../shared/riskProfile.js';
+import { buildMarkdownReport, buildJsonReport } from '../shared/buildScanReport.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
@@ -1502,18 +1503,116 @@ function RiskProfilePanel({ result }: { result: ScanResponse }) {
     [result.vulnerabilities, result.inventory, result.selectedHealth],
   );
 
+  // v2.1b summary feeds the report builders. computeRiskProfile and
+  // summarizeScan are both pure — recomputing here keeps the panel
+  // self-contained without needing to thread props down from the page.
+  const summary = useMemo(
+    () => summarizeScan(result.vulnerabilities),
+    [result.vulnerabilities],
+  );
+
+  const reportArgs = useMemo(() => ({
+    summary,
+    profile,
+    vulnerabilities: result.vulnerabilities,
+    inventory: result.inventory ?? null,
+    selectedHealth: result.selectedHealth ?? null,
+    scannedAt: result.scannedAt,
+  }), [summary, profile, result.vulnerabilities, result.inventory, result.selectedHealth, result.scannedAt]);
+
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [fallbackText, setFallbackText] = useState<string | null>(null);
+
+  const onCopyReport = useCallback(async () => {
+    const md = buildMarkdownReport(reportArgs);
+    try {
+      if (typeof navigator !== 'undefined'
+          && navigator.clipboard
+          && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(md);
+        setCopyState('copied');
+        setFallbackText(null);
+        window.setTimeout(() => setCopyState((s) => (s === 'copied' ? 'idle' : s)), 2000);
+        return;
+      }
+      throw new Error('CLIPBOARD_UNAVAILABLE');
+    } catch {
+      setCopyState('failed');
+      setFallbackText(md);
+    }
+  }, [reportArgs]);
+
+  const onDownloadJson = useCallback(() => {
+    try {
+      const j = buildJsonReport(reportArgs);
+      const blob = new Blob([JSON.stringify(j, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const isoDate = (result.scannedAt || new Date().toISOString()).slice(0, 10);
+      a.download = `opensoyce-scan-${isoDate}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Defer revoke so the browser actually triggers the download.
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      // Best-effort: nothing else we can do if Blob/URL is blocked.
+    }
+  }, [reportArgs, result.scannedAt]);
+
+  const buttonsDisabled = !result;
+
   const { dimensions, coverage } = profile;
 
   return (
     <div className="bg-white border-4 border-soy-bottle p-6 md:p-8 mb-6 shadow-[8px_8px_0px_#000]">
-      <div className="mb-4">
-        <h3 className="text-xl md:text-2xl font-bold uppercase italic tracking-tight">
-          Dependency Risk Profile
-        </h3>
-        <p className="mt-1 text-[11px] md:text-xs font-bold uppercase tracking-widest text-soy-bottle/60">
-          Synthesizes evidence from the layers below. Whole-tree scoring is intentionally limited.
-        </p>
+      <div className="mb-4 flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+        <div>
+          <h3 className="text-xl md:text-2xl font-bold uppercase italic tracking-tight">
+            Dependency Risk Profile
+          </h3>
+          <p className="mt-1 text-[11px] md:text-xs font-bold uppercase tracking-widest text-soy-bottle/60">
+            Synthesizes evidence from the layers below. Whole-tree scoring is intentionally limited.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={onCopyReport}
+            disabled={buttonsDisabled}
+            className="bg-soy-label/40 hover:bg-soy-label border-2 border-soy-bottle px-3 py-2 text-[11px] font-black uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Copy Report
+          </button>
+          <button
+            type="button"
+            onClick={onDownloadJson}
+            disabled={buttonsDisabled}
+            className="bg-soy-label/40 hover:bg-soy-label border-2 border-soy-bottle px-3 py-2 text-[11px] font-black uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Download JSON
+          </button>
+          {copyState === 'copied' && (
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+              Copied
+            </span>
+          )}
+          {copyState === 'failed' && (
+            <span className="text-[10px] font-black uppercase tracking-widest text-soy-red">
+              Copy failed — paste manually
+            </span>
+          )}
+        </div>
       </div>
+      {copyState === 'failed' && fallbackText && (
+        <textarea
+          readOnly
+          value={fallbackText}
+          rows={8}
+          className="w-full bg-soy-label/20 border-2 border-soy-bottle p-3 font-mono text-[11px] mb-4"
+        />
+      )}
 
       {/* Dimension rows */}
       <div className="space-y-2">
