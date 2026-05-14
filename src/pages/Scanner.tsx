@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShieldAlert,
@@ -62,12 +62,48 @@ interface Vulnerability {
   repoHealthError?: RepoHealthError | null;
 }
 
+// Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
+// older servers may omit it, so the UI must render defensively when null.
+type InventoryScope = 'prod' | 'dev' | 'optional' | 'unknown';
+type InventoryFormat = 'npm-v3' | 'npm-v2' | 'npm-v1' | 'yarn-v1' | 'unknown';
+
+interface InventoryPackage {
+  name: string;
+  versions: string[];
+  direct: boolean;
+  scope: InventoryScope;
+  hasLicense: boolean;
+  hasRepository: boolean;
+}
+
+interface InventoryTotals {
+  totalPackages: number;
+  totalEntries: number;
+  directCount: number;
+  transitiveCount: number;
+  prodCount: number;
+  devCount: number;
+  optionalCount: number;
+  unknownScopeCount: number;
+  duplicateCount: number;
+  missingLicenseCount: number;
+  missingRepositoryCount: number;
+}
+
+interface Inventory {
+  format: InventoryFormat;
+  packages: InventoryPackage[];
+  totals: InventoryTotals;
+}
+
 interface ScanResponse {
   totalDeps: number;
   directDeps: number;
   vulnerabilities: Vulnerability[];
   scannedAt: string;
   cacheHit: boolean;
+  inventory?: Inventory | null;
+  inventoryError?: 'INVENTORY_FAILED';
 }
 
 type ApiErrorCode =
@@ -490,6 +526,365 @@ function ResultsPanel({
         </div>
       )}
 
+      {/* Scanner v3a -- Dependency Inventory. Renders below the vuln list.
+          Only repo-health data already gathered on vulnerable rows feeds the
+          identity chip here; we do NOT fetch identity for non-vulnerable
+          packages. */}
+      {result.inventory && (
+        <InventoryPanel
+          inventory={result.inventory}
+          vulnerabilities={result.vulnerabilities}
+        />
+      )}
+      {!result.inventory && result.inventoryError && (
+        <div className="mt-6 bg-soy-label/20 border-4 border-soy-bottle/30 p-4 text-[11px] font-black uppercase tracking-widest text-soy-bottle/70">
+          Inventory unavailable for this scan -- analysis still completed.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Scanner v3a -- Dependency Inventory section.
+//
+// Honesty constraints baked into the copy:
+//   - Subhead must say "Whole-tree inventory is available. Whole-tree Soyce
+//     scoring is coming later." Both halves are mandatory.
+//   - Identity / repo-health chips only appear if v2.1a already gathered the
+//     data on a vulnerable row. Non-vulnerable rows never trigger a fetch.
+//   - `unknown` scope is a real, visible label -- never coerced to prod.
+//
+// Renderer is a hand-rolled virtualized list: fixed row height, sentinel
+// spacers preserve scrollbar position, overscan smooths fast scrolling.
+// No new npm deps.
+
+const ROW_HEIGHT = 44;
+const VIEWPORT_HEIGHT = 480;
+const OVERSCAN = 5;
+
+type IdentityChip = { kind: 'resolved' | 'unresolved' };
+
+function InventoryPanel({
+  inventory,
+  vulnerabilities,
+}: {
+  inventory: Inventory;
+  vulnerabilities: Vulnerability[];
+}) {
+  const [filter, setFilter] = useState('');
+  const [duplicatesFirst, setDuplicatesFirst] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [scrollTop, setScrollTop] = useState(0);
+
+  // Index vulnerabilities by package name so inventory rows can light up the
+  // vuln + identity chips. We use the WORST severity if the same package
+  // has multiple advisories. Identity is "resolved" iff the vuln row carried
+  // a HIGH/MEDIUM resolvedRepo (v2.1a behavior, already on the wire).
+  const vulnIndex = useMemo(() => {
+    const map = new Map<
+      string,
+      { severity: Severity; identity: IdentityChip | null }
+    >();
+    for (const v of vulnerabilities || []) {
+      const sev: Severity = SEVERITY_ORDER.includes(v.severity) ? v.severity : 'unknown';
+      const prev = map.get(v.package);
+      const worse =
+        !prev || severityRank(sev) < severityRank(prev.severity) ? sev : prev.severity;
+      let identity: IdentityChip | null = prev?.identity ?? null;
+      const hasResolved =
+        !!v.resolvedRepo && (v.confidence === 'HIGH' || v.confidence === 'MEDIUM');
+      if (hasResolved) identity = { kind: 'resolved' };
+      else if (!identity && v.confidence === 'NONE') identity = { kind: 'unresolved' };
+      map.set(v.package, { severity: worse, identity });
+    }
+    return map;
+  }, [vulnerabilities]);
+
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    let list = inventory.packages;
+    if (q) list = list.filter((p) => p.name.toLowerCase().includes(q));
+    // Sort by name ascending by default. Duplicates-first re-orders so that
+    // packages with >1 version sit at the top while preserving alphabetical
+    // order within each bucket.
+    if (duplicatesFirst) {
+      list = [...list].sort((a, b) => {
+        const da = a.versions.length > 1 ? 0 : 1;
+        const db = b.versions.length > 1 ? 0 : 1;
+        if (da !== db) return da - db;
+        return a.name.localeCompare(b.name);
+      });
+    } else {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list;
+  }, [inventory.packages, filter, duplicatesFirst]);
+
+  const totalCount = filtered.length;
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const endIndex = Math.min(
+    totalCount,
+    Math.ceil((scrollTop + VIEWPORT_HEIGHT) / ROW_HEIGHT) + OVERSCAN,
+  );
+  const visible = filtered.slice(startIndex, endIndex);
+  const topSpacer = startIndex * ROW_HEIGHT;
+  const bottomSpacer = (totalCount - endIndex) * ROW_HEIGHT;
+
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop);
+  }, []);
+
+  const toggleExpand = useCallback((name: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+
+  const isYarn = inventory.format === 'yarn-v1';
+  const { totals } = inventory;
+
+  return (
+    <div className="mt-8 bg-white border-4 border-soy-bottle p-6 md:p-8 shadow-[8px_8px_0px_#000]">
+      {/* Header */}
+      <div className="mb-4">
+        <h3 className="text-xl md:text-2xl font-bold uppercase italic tracking-tight">
+          Dependency Inventory
+        </h3>
+        <p className="mt-1 text-[11px] md:text-xs font-bold uppercase tracking-widest text-soy-bottle/60">
+          Whole-tree inventory is available. Whole-tree Soyce scoring is coming later.
+        </p>
+      </div>
+
+      {/* Stat strip */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 pb-4 border-b-2 border-soy-bottle/10 text-[11px] font-black uppercase tracking-widest">
+        <div className="text-soy-bottle">
+          <span className="opacity-50">TOTAL</span>{' '}
+          <span>{totals.totalPackages.toLocaleString()}</span>
+        </div>
+        {!isYarn && (totals.directCount > 0 || totals.transitiveCount > 0) && (
+          <div className="text-soy-bottle">
+            <span className="opacity-50">DIRECT</span>{' '}
+            <span>{totals.directCount}</span>
+            <span className="mx-1 opacity-30">/</span>
+            <span className="opacity-50">TRANS</span>{' '}
+            <span>{totals.transitiveCount}</span>
+          </div>
+        )}
+        {!isYarn && (
+          <div className="flex flex-wrap gap-1.5">
+            {totals.prodCount > 0 && (
+              <span className="bg-emerald-500 text-black px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black">
+                PROD: {totals.prodCount}
+              </span>
+            )}
+            {totals.devCount > 0 && (
+              <span className="bg-soy-label text-soy-bottle px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-soy-bottle">
+                DEV: {totals.devCount}
+              </span>
+            )}
+            {totals.optionalCount > 0 && (
+              <span className="bg-amber-500 text-black px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black">
+                OPT: {totals.optionalCount}
+              </span>
+            )}
+            {totals.unknownScopeCount > 0 && (
+              <span className="bg-gray-400 text-black px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black">
+                UNKNOWN: {totals.unknownScopeCount}
+              </span>
+            )}
+          </div>
+        )}
+        {totals.duplicateCount > 0 && (
+          <div className="text-soy-bottle">
+            <span className="opacity-50">DUPES</span>{' '}
+            <span>{totals.duplicateCount}</span>
+          </div>
+        )}
+        <div className="text-soy-bottle">
+          <span className="opacity-50">MISSING LICENSE</span>{' '}
+          <span>{totals.missingLicenseCount}</span>
+          <span className="mx-1 opacity-30">/</span>
+          <span className="opacity-50">REPO</span>{' '}
+          <span>{totals.missingRepositoryCount}</span>
+        </div>
+      </div>
+
+      {isYarn && (
+        <div className="mb-4 bg-soy-label/30 border-2 border-soy-bottle/30 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-soy-bottle/70">
+          Yarn lockfiles provide limited metadata; install scope and direct/transitive may be unavailable.
+        </div>
+      )}
+
+      {/* Filter + duplicates toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter by package name..."
+          className="flex-1 bg-soy-label/20 border-2 border-soy-bottle px-3 py-2 font-mono text-xs md:text-sm outline-none focus:bg-white"
+        />
+        <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-soy-bottle cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={duplicatesFirst}
+            onChange={(e) => setDuplicatesFirst(e.target.checked)}
+            className="accent-soy-red"
+          />
+          Show duplicates first
+        </label>
+      </div>
+
+      <div className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">
+        Showing {totalCount.toLocaleString()} of {totals.totalPackages.toLocaleString()} packages
+      </div>
+
+      {/* Virtualized list -- hand-rolled, no new deps. */}
+      <div
+        onScroll={onScroll}
+        className="border-2 border-soy-bottle/30 overflow-y-auto bg-soy-label/10"
+        style={{ height: VIEWPORT_HEIGHT }}
+      >
+        <div style={{ height: topSpacer }} />
+        {visible.map((p: InventoryPackage) => {
+          const vulnInfo: InventoryRowProps['vulnInfo'] = vulnIndex.get(p.name) ?? null;
+          const isExpanded: boolean = expanded.has(p.name);
+          const onToggleFn: () => void = () => toggleExpand(p.name);
+          // Wrap in keyed div -- this file's existing convention is to put
+          // `key` on a plain DOM element rather than the custom component,
+          // since the TS JSX inference for custom function components in
+          // this project does not surface React's special `key` slot.
+          return (
+            <div key={p.name}>
+              <InventoryRow
+                pkg={p}
+                vulnInfo={vulnInfo}
+                expanded={isExpanded}
+                onToggle={onToggleFn}
+              />
+            </div>
+          );
+        })}
+        <div style={{ height: bottomSpacer }} />
+      </div>
+    </div>
+  );
+}
+
+const SCOPE_CHIP: Record<InventoryScope, string> = {
+  prod: 'bg-emerald-500 text-black',
+  dev: 'bg-soy-label text-soy-bottle border-soy-bottle',
+  optional: 'bg-amber-500 text-black',
+  unknown: 'bg-gray-400 text-black',
+};
+
+const SCOPE_LABEL: Record<InventoryScope, string> = {
+  prod: 'PROD',
+  dev: 'DEV',
+  optional: 'OPT',
+  unknown: 'UNKNOWN',
+};
+
+function severityRank(s: Severity): number {
+  return SEVERITY_ORDER.indexOf(s);
+}
+
+interface InventoryRowProps {
+  pkg: InventoryPackage;
+  vulnInfo: { severity: Severity; identity: IdentityChip | null } | null;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) {
+  const multi = pkg.versions.length > 1;
+  const sevStyle = vulnInfo ? SEVERITY_STYLES[vulnInfo.severity] : null;
+
+  // Expanded rows render outside the fixed row band; we use a wrapper so
+  // the virtualization math (which assumes ROW_HEIGHT per row) still works
+  // -- the wrapper height stays ROW_HEIGHT, expansion floats below with
+  // absolute positioning collapsed back to inline-flow by removing the
+  // overflow constraint at the container. Simpler: when expanded, we
+  // render the extra detail INLINE and accept a slight scroll-position
+  // drift; spec allows this since the click is user-initiated.
+  return (
+    <div
+      className="bg-white border-b border-soy-bottle/10 px-3 hover:bg-soy-label/20"
+      style={{ minHeight: ROW_HEIGHT }}
+    >
+      <div className="flex items-center gap-2 flex-wrap" style={{ height: ROW_HEIGHT }}>
+        <span className="font-mono text-xs md:text-sm font-bold text-soy-bottle break-all flex-1 min-w-0 truncate">
+          {pkg.name}
+        </span>
+        {multi ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="bg-soy-red text-white px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black hover:bg-soy-bottle"
+          >
+            {pkg.versions.length} VERSIONS {expanded ? '−' : '+'}
+          </button>
+        ) : (
+          <span className="font-mono text-[11px] opacity-60">{pkg.versions[0] || '—'}</span>
+        )}
+        <span
+          className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${
+            pkg.direct ? 'bg-soy-bottle text-white' : 'bg-soy-label/40 text-soy-bottle border-soy-bottle/40'
+          }`}
+        >
+          {pkg.direct ? 'DIRECT' : 'TRANS'}
+        </span>
+        <span
+          className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${SCOPE_CHIP[pkg.scope]}`}
+        >
+          {SCOPE_LABEL[pkg.scope]}
+        </span>
+        {sevStyle && (
+          <span
+            className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${sevStyle.pill}`}
+          >
+            VULN: {sevStyle.label}
+          </span>
+        )}
+        {/* Identity chip only when v2.1a already resolved it for free on a
+            vulnerable row. We do NOT fetch identity for non-vulnerable
+            packages in v3a. */}
+        {vulnInfo?.identity?.kind === 'resolved' && (
+          <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-emerald-500 text-black">
+            REPO RESOLVED
+          </span>
+        )}
+        {vulnInfo?.identity?.kind === 'unresolved' && (
+          <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-gray-400 text-black">
+            REPO UNRESOLVED
+          </span>
+        )}
+      </div>
+      {expanded && multi && (
+        <div className="pb-3 pt-1 pl-2 border-t border-soy-bottle/10">
+          <div className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-1">
+            ALL VERSIONS
+          </div>
+          <ul className="space-y-1">
+            {pkg.versions.map((v) => (
+              <li
+                key={v}
+                className="font-mono text-[11px] flex items-center gap-2 text-soy-bottle"
+              >
+                <span className="bg-soy-label/40 px-2 py-0.5 border border-soy-bottle/30">
+                  {v}
+                </span>
+                <span className="opacity-50">
+                  {pkg.direct ? 'direct occurrence' : 'transitive occurrence'} · scope {SCOPE_LABEL[pkg.scope]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

@@ -245,3 +245,359 @@ function compareSemverLoose(a, b) {
 }
 
 export const __internal = { defaultCache, vulnDetailCache, severityFromCvssVector, extractFixedVersion };
+
+/**
+ * Scanner v3a — whole-tree dependency inventory.
+ *
+ * Pure. Takes either the lockfile *text* or an already-parsed object and
+ * returns an inventory grouped by package name. We deliberately trust the
+ * lockfile's own flags (`dev`, `optional`, `devOptional`) and do NOT
+ * cross-reference any package.json — if a flag isn't present, scope is
+ * `unknown`. Scope precedence when a package appears with multiple flag
+ * combos (e.g. one dev install + one prod install): prod > optional > dev
+ * > unknown. The most-permissive wins so the user never thinks a prod dep
+ * is dev-only.
+ *
+ * @param {string|object} lockfile  raw text or pre-parsed lockfile object
+ * @returns {{
+ *   format: 'npm-v3'|'npm-v2'|'npm-v1'|'yarn-v1'|'unknown',
+ *   packages: Array<{
+ *     name: string,
+ *     versions: string[],
+ *     direct: boolean,
+ *     scope: 'prod'|'dev'|'optional'|'unknown',
+ *     hasLicense: boolean,
+ *     hasRepository: boolean,
+ *   }>,
+ *   totals: {
+ *     totalPackages: number,
+ *     totalEntries: number,
+ *     directCount: number,
+ *     transitiveCount: number,
+ *     prodCount: number,
+ *     devCount: number,
+ *     optionalCount: number,
+ *     unknownScopeCount: number,
+ *     duplicateCount: number,
+ *     missingLicenseCount: number,
+ *     missingRepositoryCount: number,
+ *   },
+ * }}
+ */
+export function buildInventory(lockfile) {
+  const empty = emptyInventory();
+  if (lockfile == null) return empty;
+
+  let format = 'unknown';
+  let obj = null;
+  if (typeof lockfile === 'string') {
+    format = detectLockfileFormat(lockfile);
+    if (format === 'yarn-v1') {
+      return buildYarnV1Inventory(lockfile);
+    }
+    if (format !== 'npm-v1' && format !== 'npm-v2' && format !== 'npm-v3') {
+      return empty;
+    }
+    try { obj = JSON.parse(lockfile); } catch { return empty; }
+  } else if (typeof lockfile === 'object') {
+    obj = lockfile;
+    if (obj.lockfileVersion === 3) format = 'npm-v3';
+    else if (obj.lockfileVersion === 2) format = 'npm-v2';
+    else if (obj.lockfileVersion === 1) format = 'npm-v1';
+    else return empty;
+  } else {
+    return empty;
+  }
+
+  // Aggregator: per-package-name accumulator.
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  const byName = new Map();
+  let totalEntries = 0;
+
+  function record(name, version, { direct, scope, hasLicense, hasRepository }) {
+    if (!name) return;
+    totalEntries += 1;
+    let acc = byName.get(name);
+    if (!acc) {
+      acc = {
+        versions: new Set(),
+        direct: false,
+        scopes: new Set(),
+        hasLicense: false,
+        hasRepository: false,
+      };
+      byName.set(name, acc);
+    }
+    if (version) acc.versions.add(version);
+    if (direct) acc.direct = true;
+    acc.scopes.add(scope);
+    if (hasLicense) acc.hasLicense = true;
+    if (hasRepository) acc.hasRepository = true;
+  }
+
+  if (format === 'npm-v3' || format === 'npm-v2') {
+    for (const [key, meta] of Object.entries(obj.packages || {})) {
+      if (key === '' || !meta || typeof meta !== 'object') continue;
+      if (meta.link === true) continue;
+      if (typeof meta.version !== 'string') continue;
+      // Aliased install: `node_modules/<alias>` carries a `name` field with
+      // the real package name (npm install <alias>@npm:<real>). Honor the
+      // declared name so the inventory groups by the real package.
+      const aliasedName = typeof meta.name === 'string' && meta.name.length > 0
+        ? meta.name
+        : null;
+      const name = aliasedName || nameFromKey(key);
+      if (!name) continue;
+      const direct = isTopLevelKey(key);
+      const scope = scopeFromMeta(meta);
+      record(name, meta.version, {
+        direct,
+        scope,
+        hasLicense: hasField(meta, 'license'),
+        hasRepository: hasField(meta, 'repository'),
+      });
+    }
+  } else if (format === 'npm-v1') {
+    walkV1ForInventory(obj.dependencies || {}, record, true);
+  }
+
+  return finalizeInventory(format, byName, totalEntries);
+}
+
+function emptyInventory() {
+  return {
+    format: 'unknown',
+    packages: [],
+    totals: {
+      totalPackages: 0,
+      totalEntries: 0,
+      directCount: 0,
+      transitiveCount: 0,
+      prodCount: 0,
+      devCount: 0,
+      optionalCount: 0,
+      unknownScopeCount: 0,
+      duplicateCount: 0,
+      missingLicenseCount: 0,
+      missingRepositoryCount: 0,
+    },
+  };
+}
+
+function scopeFromMeta(meta) {
+  // Lockfile flag semantics (npm v2/v3):
+  //   dev: true          → devDependency only
+  //   optional: true     → optionalDependency (still prod-shipping unless devOptional)
+  //   devOptional: true  → dev's optional, never prod
+  //   none of the above  → prod
+  // We collapse `optional` to scope:'optional' and let `record()` resolve
+  // precedence when the same package appears under multiple keys.
+  if (meta.devOptional === true) return 'dev';
+  if (meta.optional === true) return 'optional';
+  if (meta.dev === true) return 'dev';
+  // No flags present: in npm v2/v3 this means the dep is a production
+  // (or peer) install. v1 lockfiles sometimes omit flags entirely; that
+  // case is handled separately by walkV1ForInventory.
+  return 'prod';
+}
+
+function hasField(meta, key) {
+  if (!Object.prototype.hasOwnProperty.call(meta, key)) return false;
+  const v = meta[key];
+  if (v == null) return false;
+  if (typeof v === 'string') return v.length > 0;
+  if (typeof v === 'object') return Object.keys(v).length > 0;
+  return Boolean(v);
+}
+
+// Scope precedence: most permissive wins so users never see a prod dep
+// labeled "dev-only". prod > optional > dev > unknown.
+const SCOPE_RANK = { prod: 3, optional: 2, dev: 1, unknown: 0 };
+function mergeScopes(scopes) {
+  let best = 'unknown';
+  for (const s of scopes) {
+    if ((SCOPE_RANK[s] || 0) > (SCOPE_RANK[best] || 0)) best = s;
+  }
+  return best;
+}
+
+function walkV1ForInventory(deps, record, topLevel) {
+  for (const [name, meta] of Object.entries(deps)) {
+    if (!meta || typeof meta !== 'object') continue;
+    const version = typeof meta.version === 'string' ? meta.version : '';
+    // v1 lockfiles often lack flags entirely. Honor what we have (dev,
+    // optional) and otherwise default scope to 'unknown' — we will NOT
+    // guess prod just because the flag is missing.
+    let scope = 'unknown';
+    if (meta.optional === true) scope = 'optional';
+    else if (meta.dev === true) scope = 'dev';
+    else if (meta.dev === false || meta.optional === false) scope = 'prod';
+    record(name, version, {
+      direct: topLevel,
+      scope,
+      hasLicense: hasField(meta, 'license'),
+      hasRepository: hasField(meta, 'repository'),
+    });
+    if (meta.dependencies) walkV1ForInventory(meta.dependencies, record, false);
+  }
+}
+
+function finalizeInventory(format, byName, totalEntries) {
+  /** @type {Array<{name:string,versions:string[],direct:boolean,scope:string,hasLicense:boolean,hasRepository:boolean}>} */
+  const packages = [];
+  let directCount = 0;
+  let transitiveCount = 0;
+  let prodCount = 0;
+  let devCount = 0;
+  let optionalCount = 0;
+  let unknownScopeCount = 0;
+  let duplicateCount = 0;
+  let missingLicenseCount = 0;
+  let missingRepositoryCount = 0;
+
+  const names = [...byName.keys()].sort((a, b) => a.localeCompare(b));
+  for (const name of names) {
+    const acc = byName.get(name);
+    const versions = [...acc.versions].sort(compareVersionsLoose);
+    const scope = mergeScopes(acc.scopes);
+    const direct = acc.direct;
+
+    packages.push({
+      name,
+      versions,
+      direct,
+      scope,
+      hasLicense: acc.hasLicense,
+      hasRepository: acc.hasRepository,
+    });
+
+    if (direct) directCount += 1; else transitiveCount += 1;
+    if (scope === 'prod') prodCount += 1;
+    else if (scope === 'dev') devCount += 1;
+    else if (scope === 'optional') optionalCount += 1;
+    else unknownScopeCount += 1;
+    if (versions.length > 1) duplicateCount += 1;
+    if (!acc.hasLicense) missingLicenseCount += 1;
+    if (!acc.hasRepository) missingRepositoryCount += 1;
+  }
+
+  return {
+    format,
+    packages,
+    totals: {
+      totalPackages: packages.length,
+      totalEntries,
+      directCount,
+      transitiveCount,
+      prodCount,
+      devCount,
+      optionalCount,
+      unknownScopeCount,
+      duplicateCount,
+      missingLicenseCount,
+      missingRepositoryCount,
+    },
+  };
+}
+
+function compareVersionsLoose(a, b) {
+  const cmp = compareSemverLoose(a, b);
+  if (cmp !== 0) return cmp;
+  return a.localeCompare(b);
+}
+
+/**
+ * Yarn v1 best-effort inventory. The yarn.lock format lists name@range →
+ * { version, resolved, integrity, dependencies }. We can count unique
+ * packages and their versions, but we cannot reliably infer prod/dev or
+ * direct/transitive without the consuming package.json. All scope and
+ * direct fields fall back to 'unknown' / false; the UI shows a note.
+ */
+function buildYarnV1Inventory(text) {
+  const inv = emptyInventory();
+  inv.format = 'yarn-v1';
+  /** @type {Map<string, { versions: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  const byName = new Map();
+  let totalEntries = 0;
+
+  // Parse yarn v1 blocks naively: each block starts with a non-indented
+  // line containing one or more "name@range" specs (comma-separated) and
+  // ends at the next blank line. Inside the block, `version "x.y.z"` is
+  // the resolved version.
+  const lines = text.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line || line.startsWith('#') || /^\s/.test(line)) { i += 1; continue; }
+    // Block header. Strip trailing colon and quotes.
+    const header = line.replace(/:\s*$/, '');
+    const specs = header.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+    // Collect block body.
+    let version = '';
+    let hasLicense = false;
+    let hasRepository = false;
+    let j = i + 1;
+    while (j < lines.length && /^\s/.test(lines[j])) {
+      const body = lines[j].trim();
+      if (body.startsWith('version ')) {
+        version = body.slice(8).trim().replace(/^"|"$/g, '');
+      } else if (body.startsWith('license ') || body === 'license:') {
+        hasLicense = true;
+      } else if (body.startsWith('repository ') || body === 'repository:') {
+        hasRepository = true;
+      }
+      j += 1;
+    }
+    // For each spec in the header, resolve the package name (left side of
+    // the right-most @ that is not at index 0 — handles @scope/pkg@range).
+    for (const spec of specs) {
+      const at = spec.lastIndexOf('@');
+      if (at <= 0) continue;
+      const name = spec.slice(0, at);
+      if (!name) continue;
+      totalEntries += 1;
+      let acc = byName.get(name);
+      if (!acc) {
+        acc = { versions: new Set(), hasLicense: false, hasRepository: false };
+        byName.set(name, acc);
+      }
+      if (version) acc.versions.add(version);
+      if (hasLicense) acc.hasLicense = true;
+      if (hasRepository) acc.hasRepository = true;
+    }
+    i = j + 1;
+  }
+
+  const names = [...byName.keys()].sort((a, b) => a.localeCompare(b));
+  let duplicateCount = 0;
+  let missingLicenseCount = 0;
+  let missingRepositoryCount = 0;
+  for (const name of names) {
+    const acc = byName.get(name);
+    const versions = [...acc.versions].sort(compareVersionsLoose);
+    inv.packages.push({
+      name,
+      versions,
+      direct: false,           // unknown for yarn v1; UI surfaces this.
+      scope: 'unknown',        // unknown for yarn v1; UI surfaces this.
+      hasLicense: acc.hasLicense,
+      hasRepository: acc.hasRepository,
+    });
+    if (versions.length > 1) duplicateCount += 1;
+    if (!acc.hasLicense) missingLicenseCount += 1;
+    if (!acc.hasRepository) missingRepositoryCount += 1;
+  }
+
+  inv.totals.totalPackages = inv.packages.length;
+  inv.totals.totalEntries = totalEntries;
+  inv.totals.directCount = 0;
+  inv.totals.transitiveCount = 0;
+  inv.totals.prodCount = 0;
+  inv.totals.devCount = 0;
+  inv.totals.optionalCount = 0;
+  inv.totals.unknownScopeCount = inv.packages.length;
+  inv.totals.duplicateCount = duplicateCount;
+  inv.totals.missingLicenseCount = missingLicenseCount;
+  inv.totals.missingRepositoryCount = missingRepositoryCount;
+  return inv;
+}

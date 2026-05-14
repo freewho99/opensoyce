@@ -1,4 +1,4 @@
-import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat } from '../src/shared/scanLockfile.js';
+import { parseNpmLockfile, queryOsvBatch, detectLockfileFormat, buildInventory } from '../src/shared/scanLockfile.js';
 import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
 import { verdictFor } from '../src/shared/verdict.js';
@@ -210,11 +210,26 @@ export default async function handler(req, res) {
     }));
   }
 
-  res.status(200).json({
+  // Scanner v3a — whole-tree inventory. Purely additive; never fails the
+  // scan. A bad inventory yields `inventory: null` + `inventoryError` set.
+  let inventory = null;
+  let inventoryError = null;
+  try {
+    inventory = buildInventory(lockfile);
+  } catch (e) {
+    console.error('Inventory build failure (non-fatal)', e);
+    inventory = null;
+    inventoryError = 'INVENTORY_FAILED';
+  }
+
+  const payload = {
     totalDeps: parsed.all.length,
     directDeps: parsed.direct.length,
     vulnerabilities: sortVulnerabilities(vulnerabilities || []),
     scannedAt: new Date().toISOString(),
     cacheHit: false,
-  });
+    inventory,
+  };
+  if (inventoryError) payload.inventoryError = inventoryError;
+  res.status(200).json(payload);
 }
