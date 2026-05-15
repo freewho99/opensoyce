@@ -17,6 +17,85 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+    slug: 'the-silent-rot-problem',
+    primaryProductAction: 'scanner',
+    title: "The Silent Rot Problem",
+    subtitle: "YOUR SCANNER FIRES WHEN YOU ADD CODE. IT GOES QUIET THE MOMENT YOU SHIP IT. THAT'S THE PROBLEM.",
+    category: 'SECURITY',
+    emoji: "🐛",
+    readTime: '6 min',
+    date: 'MAY 15, 2026',
+    featured: true,
+    heroImage: '/blog/silent-rot-scanners-fire.png',
+    metaDescription: "Every dependency scanner is event-driven. That means your production dependency graph goes unmonitored between PRs. Here's the gap nobody is filling.",
+    tags: ["security","dependencies","supply-chain","monitoring","open-source-health"],
+    content: `## EVERY SECURITY TOOL YOU USE IS WATCHING THE DOOR. NOBODY IS WATCHING THE HOUSE.
+
+Dependabot, Snyk, Socket — they're all event-driven. A PR opens, a commit lands, a new package gets added. The scan fires. Nothing triggers? You're clear. Move on.
+
+That model has a blind spot the size of your entire production dependency graph.
+
+## THE DEPENDENCY YOU ADDED EIGHT MONTHS AGO ISN'T THE ONE YOU SCANNED EIGHT MONTHS AGO.
+
+The maintainer burned out. The repo went quiet. A new owner took over without announcement. The commit velocity dropped to zero. No CVE was filed. No Dependabot PR opened. Your lockfile didn't change. And every tool in your stack looked the other way — because nothing happened to trigger a scan.
+
+This is silent rot. It's the most underserved problem in open source security today.
+
+[img:/blog/silent-rot-static-checks-miss-drift.png:Static checks miss the drift between scans.]
+
+## THE FALSE ASSUMPTION BAKED INTO EVERY SCANNER
+
+The event-driven model assumes a package's risk profile is static between CVEs. That once it passes, it stays passed until something explicitly breaks it.
+
+It doesn't. Health degrades continuously. And the only way to catch drift is to watch continuously — not wait for a trigger.
+
+## WHAT OPENSOYCE IS BUILT TO DO DIFFERENTLY
+
+The SoyceScore isn't a CVE lookup. It's a composite health signal — maintainer activity, community engagement, security disclosure responsiveness, release cadence, ownership patterns. Signals that don't flip overnight. They drift.
+
+Treating the SoyceScore as a time series changes the question from *"is this package vulnerable right now?"* to *"is this package less healthy than it was last month, and should you care?"*
+
+That's continuous health monitoring. Nothing else in this space does it.
+
+[img:/blog/silent-rot-realtime-health-scores.png:Real-time health scores, not point-in-time snapshots.]
+
+## WHAT IT LOOKS LIKE IN PRACTICE
+
+You ship a product. 340 dependencies. Dependabot passed. Snyk passed. Three months later:
+
+**OpenSoyce Weekly — your-repo**
+
+4 dependencies have degraded health scores since last scan.
+
+\`request\` → STALE. Last commit 26 months ago. No security disclosure response in 18 months.
+
+\`node-uuid\` → Maintainer Trust dropped. Primary contributor inactive. 2.3M weekly downloads, 1 active maintainer.
+
+\`lodash.merge\` → Ownership transfer detected on parent org.
+
+\`minimist\` → HIGH advisory filed. Fix at 1.2.6. You're on 1.2.5.
+
+No code changed. No PR opened. These packages just drifted. Now you know before it becomes an incident.
+
+## WHY NOBODY ELSE IS BUILDING THIS
+
+The event-driven model is deeply entrenched. Dependabot and Snyk are built around querying CVE databases on a trigger. That's valuable — it's just table stakes.
+
+The harder problem is the health signals that aren't in any database. Maintainer burnout. Ownership changes. Community collapse. OpenSoyce is sitting on exactly those signals.
+
+Log4Shell shocked the industry. But the signals that log4j was under-resourced for its adoption level had been visible for *years* before the exploit. A small team, chronic under-resourcing, a project of critical scale maintained by people who didn't have enough support. No tool caught those signals because no tool was watching for drift.
+
+[img:/blog/silent-rot-stop-production-rot.png:Stop the silent production rot — watch what you ship, not just what you write.]
+
+## THE NUTRITION LABEL YOU CAN CHECK ANY TIME
+
+You don't read a nutrition label once and assume the product never changes. You check it again when you're deciding whether to keep buying it.
+
+Your dependency graph is the same. The packages in your 2022 lockfile need re-evaluation in 2025 — not because you added anything new, but because the health of what you're already running has changed.
+
+OpenSoyce running continuously is the nutrition label you can check any time. Not just at checkout.`,
+  },
+  {
     slug: 'shadow-dependencies-the-breach-you-never-saw-coming',
     primaryProductAction: 'scanner',
     title: "The Open Source Dependency You Forgot About Is Already Compromised",
