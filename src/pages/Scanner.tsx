@@ -1479,7 +1479,7 @@ const DIMENSION_LABEL: Record<RiskDimensionKey, string> = {
   remediationReadiness: 'REMEDIATION',
   maintainerTrust: 'MAINTAINER TRUST',
   treeComplexity: 'TREE COMPLEXITY',
-  transparency: 'TRANSPARENCY',
+  identityResolution: 'IDENTITY RESOLUTION',
 };
 
 const DIMENSION_ORDER: RiskDimensionKey[] = [
@@ -1487,7 +1487,7 @@ const DIMENSION_ORDER: RiskDimensionKey[] = [
   'remediationReadiness',
   'maintainerTrust',
   'treeComplexity',
-  'transparency',
+  'identityResolution',
 ];
 
 function RiskProfilePanel({ result }: { result: ScanResponse }) {

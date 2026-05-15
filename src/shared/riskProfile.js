@@ -8,8 +8,8 @@
  * Honesty constraints (locked):
  *   - Never use the words "safe", "secure", "all clear".
  *   - UNKNOWN is its own band; UNKNOWN !== LOW.
- *   - Transparency is computed from data we have. Missing identity is a
- *     transparency signal, NOT a quality penalty on the package.
+ *   - Identity resolution is computed from data we have. Missing identity is
+ *     an identity-resolution signal, NOT a quality penalty on the package.
  *   - Coverage is surfaced explicitly: "N selected scored out of M installed."
  *
  * Pure function. No I/O. No React imports.
@@ -26,7 +26,7 @@
  *   remediationReadiness:  Dimension,
  *   maintainerTrust:       Dimension,
  *   treeComplexity:        Dimension,
- *   transparency:          Dimension,
+ *   identityResolution:    Dimension,
  * }} dimensions
  * @property {{
  *   totalInstalled: number,
@@ -39,6 +39,8 @@
  *   unresolvedIdentities: number,
  * }} coverage
  */
+
+import { plural } from './pluralize.js';
 
 const WEAK_HEALTH = new Set(['WATCHLIST', 'RISKY', 'STALE']);
 const STRONG_HEALTH = new Set(['USE READY', 'FORKABLE', 'STABLE', 'HIGH MOMENTUM']);
@@ -120,7 +122,7 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
 
   // Unresolved identities = (vulns with IDENTITY_NONE) + (selected rows
   // whose status is IDENTITY_UNRESOLVED). Combined because both are the
-  // same transparency signal (we don't know who's actually maintaining it).
+  // same identity-resolution signal (we don't know who's actually maintaining it).
   let unresolvedIdentities = 0;
   for (const v of vulnRows) {
     if (v?.repoHealthError === 'IDENTITY_NONE') unresolvedIdentities += 1;
@@ -155,14 +157,16 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
     const parts = [];
     if (critCount > 0) parts.push(`${critCount} critical`);
     if (highCount > 0) parts.push(`${highCount} high`);
+    const totalHighCrit = critCount + highCount;
+    const advisoryWord = totalHighCrit === 1 ? 'advisory' : 'advisories';
     vulnerabilityExposure = {
       band: 'HIGH',
-      because: `${parts.join(' and ')} advisory(ies) present.`,
+      because: `${parts.join(' and ')} ${advisoryWord} present.`,
     };
   } else if (medCount > 0) {
     vulnerabilityExposure = {
       band: 'ELEVATED',
-      because: `${medCount} medium-severity advisory(ies) present, no high or critical.`,
+      because: `${plural(medCount, 'medium-severity advisory', 'medium-severity advisories')} present, no high or critical.`,
     };
   } else if (lowCount > 0) {
     vulnerabilityExposure = {
@@ -172,7 +176,7 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
   } else {
     vulnerabilityExposure = {
       band: 'LOW',
-      because: `No known advisories across ${vulnPkgNames.size === 0 ? 'the scanned dependencies' : `${vulnPkgNames.size} package(s)`}.`,
+      because: `No known advisories across ${vulnPkgNames.size === 0 ? 'the scanned dependencies' : plural(vulnPkgNames.size, 'package')}.`,
     };
   }
 
@@ -203,17 +207,19 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
     if (highCritNoFix > 0) {
       remediationReadiness = {
         band: 'HIGH',
-        because: `${highCritNoFix} high/critical advisory(ies) have no available fix.`,
+        because: `${plural(highCritNoFix, 'high/critical advisory', 'high/critical advisories')} have no available fix.`,
       };
     } else if (!allFixed) {
       remediationReadiness = {
         band: 'ELEVATED',
-        because: `${anyNoFix} advisory(ies) lack a recorded fix, but none are high or critical.`,
+        because: `${plural(anyNoFix, 'advisory', 'advisories')} lack a recorded fix, but none are high or critical.`,
       };
     } else {
       remediationReadiness = {
         band: 'LOW',
-        because: `All ${advisoryCount} advisory(ies) have fixed versions.`,
+        because: advisoryCount === 1
+          ? 'The 1 advisory has a fixed version.'
+          : `All ${advisoryCount} advisories have fixed versions.`,
       };
     }
   }
@@ -275,7 +281,9 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
     } else if (anyHealthSeen && allStrong) {
       maintainerTrust = {
         band: 'LOW',
-        because: `All ${vulnPkgNames.size} vulnerable dependency(ies) resolve to healthy source repos.`,
+        because: vulnPkgNames.size === 1
+          ? 'The 1 vulnerable dependency resolves to a healthy source repo.'
+          : `All ${vulnPkgNames.size} vulnerable dependencies resolve to healthy source repos.`,
       };
     } else {
       // Have advisories but no usable repo-health verdicts. Don't claim LOW.
@@ -298,37 +306,44 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
     const duplicateCount = typeof totals.duplicateCount === 'number' ? totals.duplicateCount : 0;
     const duplicateRatio = totalInstalled > 0 ? duplicateCount / totalInstalled : 0;
     const ratioPct = (duplicateRatio * 100).toFixed(1);
-    const baseCopy = `${directCount} direct dependencies, ${ratioPct}% duplicate-version ratio.`;
-    if (directCount <= 30 && duplicateRatio <= 0.02) {
+    // Thresholds re-baselined after P0-1: directCount is now the true
+    // count from package.json's declared dep maps, not the flat-hoisted
+    // count from npm v3's `node_modules/*` keys. Old bands assumed the
+    // inflated number; new bands calibrate against the real number so
+    // OpenSoyce (21 direct) lands LOW, mid-size Next.js apps (30-50)
+    // land ELEVATED, and large monorepos (80+) land HIGH.
+    const directWord = directCount === 1 ? 'direct dependency' : 'direct dependencies';
+    const baseCopy = `${directCount} ${directWord}, ${ratioPct}% duplicate-version ratio.`;
+    if (directCount <= 20 && duplicateRatio <= 0.05) {
       treeComplexity = { band: 'LOW', because: baseCopy };
-    } else if (directCount <= 80 || duplicateRatio <= 0.05) {
+    } else if (directCount <= 60 || duplicateRatio <= 0.10) {
       treeComplexity = { band: 'ELEVATED', because: baseCopy };
     } else {
       treeComplexity = { band: 'HIGH', because: baseCopy };
     }
   }
 
-  // ---- transparency -----------------------------------------------------
-  let transparency;
+  // ---- identityResolution ----------------------------------------------
+  let identityResolution;
   if (!inv && !hasVulnData) {
-    transparency = {
+    identityResolution = {
       band: 'UNKNOWN',
-      because: 'Neither inventory nor vulnerability data available — cannot assess transparency.',
+      because: 'Inventory and vulnerability data both unavailable — could not assess identity resolution.',
     };
   } else if (unresolvedIdentities === 0) {
-    transparency = {
+    identityResolution = {
       band: 'LOW',
-      because: 'All assessed packages resolve to a known source repo.',
+      because: 'All scanned packages resolved to source repos.',
     };
   } else if (unresolvedIdentities <= 3) {
-    transparency = {
+    identityResolution = {
       band: 'ELEVATED',
-      because: `${unresolvedIdentities} package(s) could not be linked to a source repo.`,
+      because: `${plural(unresolvedIdentities, 'package')} could not be resolved to source repos.`,
     };
   } else {
-    transparency = {
+    identityResolution = {
       band: 'HIGH',
-      because: `${unresolvedIdentities} package(s) could not be linked to a source repo.`,
+      because: `${plural(unresolvedIdentities, 'package')} could not be resolved to source repos.`,
     };
   }
 
@@ -338,7 +353,7 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
       remediationReadiness,
       maintainerTrust,
       treeComplexity,
-      transparency,
+      identityResolution,
     },
     coverage: {
       totalInstalled,

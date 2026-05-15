@@ -255,6 +255,7 @@ async function main(argv) {
     inventory,
     selectedHealth,
     scannedAt: scanResult.scannedAt,
+    osvError: !!scanResult.osvError,
   });
 
   if (args.out) {
@@ -277,6 +278,7 @@ async function main(argv) {
       inventory,
       selectedHealth,
       scannedAt: scanResult.scannedAt,
+      osvError: !!scanResult.osvError,
     });
     try {
       writeFileSync(pathResolve(process.cwd(), args.json), JSON.stringify(jsonReport, null, 2), 'utf8');

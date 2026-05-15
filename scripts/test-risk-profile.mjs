@@ -192,10 +192,11 @@ test('selected budget hit: coverage exposes skippedBudget=15', () => {
 // ---------------------------------------------------------------------------
 // 5. Many duplicate versions
 test('20% duplicate ratio + 120 direct: treeComplexity HIGH', () => {
-  // Per locked thresholds: HIGH requires directCount > 80 AND
-  // duplicateRatio > 0.05. 20% duplicate ratio alone is not enough --
-  // ELEVATED catches anything with directCount <= 80. Push direct above
-  // the gate so the duplicate ratio actually drives the verdict.
+  // Re-baselined P0-1 thresholds: HIGH requires directCount > 60 AND
+  // duplicateRatio > 0.10. 20% duplicate ratio alone (with low direct
+  // count) is not enough -- ELEVATED catches anything with
+  // directCount <= 60. Push direct above the gate so the duplicate
+  // ratio actually drives the verdict.
   const r = computeRiskProfile({
     vulnerabilities: [],
     inventory: inv({
@@ -207,9 +208,55 @@ test('20% duplicate ratio + 120 direct: treeComplexity HIGH', () => {
   ok(/20\.0%/.test(r.dimensions.treeComplexity.because), 'cites 20.0% in copy');
 });
 
+// P0-1 re-baselined thresholds: LOW band for OpenSoyce-sized trees.
+test('treeComplexity LOW: 21 direct + 0% dup (OpenSoyce-shape)', () => {
+  const r = computeRiskProfile({
+    vulnerabilities: [],
+    inventory: inv({
+      packages: [], directCount: 20, totalPackages: 300, duplicateCount: 0,
+    }),
+    selectedHealth: selHealth(),
+  });
+  eq(r.dimensions.treeComplexity.band, 'LOW', 'LOW at 20 direct + 0% dup');
+  ok(/20 direct dependencies/.test(r.dimensions.treeComplexity.because), 'cites 20 direct');
+});
+
+test('treeComplexity ELEVATED: mid-size Next.js shape (40 direct, 3% dup)', () => {
+  const r = computeRiskProfile({
+    vulnerabilities: [],
+    inventory: inv({
+      packages: [], directCount: 40, totalPackages: 800, duplicateCount: 24,
+    }),
+    selectedHealth: selHealth(),
+  });
+  eq(r.dimensions.treeComplexity.band, 'ELEVATED', 'ELEVATED at 40 direct + 3% dup');
+});
+
+test('treeComplexity HIGH: 100 direct + 12% dup', () => {
+  const r = computeRiskProfile({
+    vulnerabilities: [],
+    inventory: inv({
+      packages: [], directCount: 100, totalPackages: 1000, duplicateCount: 120,
+    }),
+    selectedHealth: selHealth(),
+  });
+  eq(r.dimensions.treeComplexity.band, 'HIGH', 'HIGH at 100 direct + 12% dup');
+});
+
+test('treeComplexity copy: pluralization (1 direct dependency, not dependencies)', () => {
+  const r = computeRiskProfile({
+    vulnerabilities: [],
+    inventory: inv({
+      packages: [], directCount: 1, totalPackages: 10, duplicateCount: 0,
+    }),
+    selectedHealth: selHealth(),
+  });
+  ok(/1 direct dependency,/.test(r.dimensions.treeComplexity.because), 'singular "dependency"');
+});
+
 // ---------------------------------------------------------------------------
 // 6. No unresolved identities
-test('no unresolved identities: transparency LOW', () => {
+test('no unresolved identities: identityResolution LOW', () => {
   const r = computeRiskProfile({
     vulnerabilities: [
       vuln({ pkg: 'a', severity: 'low', fixedIn: '1.0.1', repoHealth: health('STABLE') }),
@@ -217,13 +264,13 @@ test('no unresolved identities: transparency LOW', () => {
     inventory: inv({ packages: [], directCount: 5, totalPackages: 30, duplicateCount: 0 }),
     selectedHealth: selHealth(),
   });
-  eq(r.dimensions.transparency.band, 'LOW', 'transparency LOW');
+  eq(r.dimensions.identityResolution.band, 'LOW', 'identityResolution LOW');
   eq(r.coverage.unresolvedIdentities, 0, 'unresolvedIdentities count');
 });
 
 // ---------------------------------------------------------------------------
 // 7. 6 unresolved identities (combine vulns + selected)
-test('6 unresolved identities: transparency HIGH', () => {
+test('6 unresolved identities: identityResolution HIGH', () => {
   const r = computeRiskProfile({
     vulnerabilities: [
       vuln({ pkg: 'a', severity: 'low', fixedIn: '1.0.0', repoHealthError: 'IDENTITY_NONE' }),
@@ -242,7 +289,7 @@ test('6 unresolved identities: transparency HIGH', () => {
     }),
   });
   eq(r.coverage.unresolvedIdentities, 6, 'unresolvedIdentities');
-  eq(r.dimensions.transparency.band, 'HIGH', 'transparency HIGH at 6');
+  eq(r.dimensions.identityResolution.band, 'HIGH', 'identityResolution HIGH at 6');
 });
 
 // ---------------------------------------------------------------------------

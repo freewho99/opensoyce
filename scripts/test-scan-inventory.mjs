@@ -40,7 +40,12 @@ test('npm v3 small: 1 direct, 2 transitive, prod/dev split', () => {
     lockfileVersion: 3,
     requires: true,
     packages: {
-      '': { name: 'demo', version: '1.0.0' },
+      '': {
+        name: 'demo',
+        version: '1.0.0',
+        dependencies: { lodash: '^4' },
+        devDependencies: { jest: '^29' },
+      },
       'node_modules/lodash': { version: '4.17.21', license: 'MIT' },
       'node_modules/lodash/node_modules/sub-helper': { version: '1.0.0', license: 'MIT' },
       'node_modules/jest': { version: '29.0.0', dev: true, license: 'MIT' },
@@ -63,7 +68,11 @@ test('npm v3 duplicate versions: one row, versions.length===2', () => {
   const lock = JSON.stringify({
     lockfileVersion: 3,
     packages: {
-      '': { name: 'root', version: '1.0.0' },
+      '': {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { 'dep-a': '^1', parent: '^1' },
+      },
       'node_modules/dep-a': { version: '1.0.0', license: 'MIT' },
       'node_modules/parent/node_modules/dep-a': { version: '2.0.0', license: 'MIT' },
       'node_modules/parent': { version: '1.0.0', license: 'MIT' },
@@ -73,7 +82,7 @@ test('npm v3 duplicate versions: one row, versions.length===2', () => {
   const a = findPkg(inv, 'dep-a');
   eq(a.versions.length, 2, 'dep-a versions count');
   eq(inv.totals.duplicateCount, 1, 'duplicateCount');
-  eq(a.direct, true, 'dep-a direct (since one occurrence is at top level)');
+  eq(a.direct, true, 'dep-a direct (declared in root deps and at top level)');
 });
 
 // 3. npm v3 with aliased install: node_modules/aliased-name with name:"actual-name"
@@ -165,7 +174,11 @@ test('totalPackages and totalEntries reconcile with duplicates', () => {
   const lock = JSON.stringify({
     lockfileVersion: 3,
     packages: {
-      '': { name: 'root', version: '1.0.0' },
+      '': {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { a: '^1', b: '^1', parent: '^1' },
+      },
       'node_modules/a': { version: '1.0.0', license: 'MIT' },
       'node_modules/b': { version: '1.0.0', license: 'MIT' },
       'node_modules/parent': { version: '1.0.0', license: 'MIT' },
@@ -188,7 +201,12 @@ test('scope precedence: prod wins over dev when both appear', () => {
   const lock = JSON.stringify({
     lockfileVersion: 3,
     packages: {
-      '': { name: 'root', version: '1.0.0' },
+      '': {
+        name: 'root',
+        version: '1.0.0',
+        devDependencies: { shared: '^1' },
+        dependencies: { parent: '^1' },
+      },
       'node_modules/shared': { version: '1.0.0', dev: true, license: 'MIT' },
       'node_modules/parent/node_modules/shared': { version: '1.0.0', license: 'MIT' },
       'node_modules/parent': { version: '1.0.0', license: 'MIT' },
@@ -196,6 +214,80 @@ test('scope precedence: prod wins over dev when both appear', () => {
   });
   const inv = buildInventory(lock);
   eq(findPkg(inv, 'shared').scope, 'prod', 'shared scope (prod wins)');
+});
+
+// P0-1: flat-hoist must not turn transitive packages into "direct".
+test('npm v3 flat-hoist: transitive-of-jest is NOT direct', () => {
+  const lock = JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+      '': {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { lodash: '^4' },
+        devDependencies: { jest: '^29' },
+      },
+      // npm v3 flat-hoists every package to top level, regardless of
+      // whether root declared it. Our parser must only mark the two
+      // names the root actually declared as direct.
+      'node_modules/lodash': { version: '4.17.21', license: 'MIT' },
+      'node_modules/jest': { version: '29.0.0', dev: true, license: 'MIT' },
+      'node_modules/some-transitive-of-jest': { version: '1.0.0', dev: true, license: 'MIT' },
+    },
+  });
+  const inv = buildInventory(lock);
+  eq(inv.totals.directCount, 2, 'directCount (lodash + jest only)');
+  eq(findPkg(inv, 'lodash').direct, true, 'lodash direct');
+  eq(findPkg(inv, 'jest').direct, true, 'jest direct');
+  eq(findPkg(inv, 'some-transitive-of-jest').direct, false, 'transitive NOT direct despite hoist');
+});
+
+// P0-1: duplicates of a direct package still count once.
+test('npm v3 flat-hoist + nested duplicate: directCount unchanged', () => {
+  const lock = JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+      '': {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { lodash: '^4' },
+        devDependencies: { jest: '^29' },
+      },
+      'node_modules/lodash': { version: '4.17.21', license: 'MIT' },
+      'node_modules/jest': { version: '29.0.0', dev: true, license: 'MIT' },
+      'node_modules/some-transitive-of-jest': { version: '1.0.0', dev: true, license: 'MIT' },
+      // duplicate lodash nested under jest
+      'node_modules/jest/node_modules/lodash': { version: '3.10.0', dev: true, license: 'MIT' },
+    },
+  });
+  const inv = buildInventory(lock);
+  eq(inv.totals.directCount, 2, 'directCount still 2');
+  const ld = findPkg(inv, 'lodash');
+  eq(ld.direct, true, 'lodash still direct');
+  eq(ld.versions.length, 2, 'lodash has both versions');
+});
+
+// P0-1: optionalDependencies and peerDependencies also count as direct.
+test('npm v3 root optionalDependencies / peerDependencies count as direct', () => {
+  const lock = JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+      '': {
+        name: 'root',
+        version: '1.0.0',
+        optionalDependencies: { fsevents: '^2' },
+        peerDependencies: { react: '^18' },
+      },
+      'node_modules/fsevents': { version: '2.3.0', optional: true, license: 'MIT' },
+      'node_modules/react': { version: '18.2.0', license: 'MIT' },
+      'node_modules/scheduler': { version: '0.23.0', license: 'MIT' },
+    },
+  });
+  const inv = buildInventory(lock);
+  eq(inv.totals.directCount, 2, 'directCount = 2 (fsevents + react)');
+  eq(findPkg(inv, 'fsevents').direct, true, 'fsevents direct (optional)');
+  eq(findPkg(inv, 'react').direct, true, 'react direct (peer)');
+  eq(findPkg(inv, 'scheduler').direct, false, 'scheduler not direct');
 });
 
 console.log('');

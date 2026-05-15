@@ -30,6 +30,8 @@
  * @property {string} labelReason
  */
 
+import { plural } from './pluralize.js';
+
 const WEAK_HEALTH = new Set(['WATCHLIST', 'RISKY', 'STALE']);
 
 /**
@@ -206,8 +208,8 @@ export function summarizeScan(vulnerabilities) {
       if (!hasFix(v)) noFixHighCrit += 1;
       else if (v?.repoHealth?.verdict && WEAK_HEALTH.has(v.repoHealth.verdict)) weakHealthHighCrit += 1;
     }
-    if (noFixHighCrit > 0) reasons.push(`${noFixHighCrit} high/critical advisory(ies) with no fix available`);
-    if (weakHealthHighCrit > 0) reasons.push(`${weakHealthHighCrit} high/critical advisory(ies) on a weak-health repo`);
+    if (noFixHighCrit > 0) reasons.push(`${plural(noFixHighCrit, 'high/critical advisory', 'high/critical advisories')} with no fix available`);
+    if (weakHealthHighCrit > 0) reasons.push(`${plural(weakHealthHighCrit, 'high/critical advisory', 'high/critical advisories')} on a weak-health repo`);
     labelReason = reasons.length > 0
       ? `Manual review needed: ${reasons.join('; ')}.`
       : 'Manual review needed for high or critical advisories.';
@@ -216,16 +218,18 @@ export function summarizeScan(vulnerabilities) {
     const parts = [];
     if (anyIdentityUnresolved) {
       const n = rows.filter(v => v?.repoHealthError === 'IDENTITY_NONE').length;
-      parts.push(`couldn't resolve source repo for ${n} package(s)`);
+      parts.push(`couldn't resolve source repo for ${plural(n, 'package')}`);
     }
     if (anyAnalysisFailed) {
       const n = rows.filter(v => v?.repoHealthError === 'ANALYSIS_FAILED').length;
-      parts.push(`repo health unavailable for ${n} package(s)`);
+      parts.push(`repo health unavailable for ${plural(n, 'package')}`);
     }
     labelReason = `Incomplete picture — ${parts.join('; ')}.`;
   } else if (hasAdvisories) {
     label = 'PATCH_AVAILABLE';
-    labelReason = `Fixes available for all ${advisoryCount} advisory(ies); upgrade the listed versions.`;
+    labelReason = advisoryCount === 1
+      ? 'A fix is available for the 1 advisory; upgrade the listed version.'
+      : `Fixes available for all ${advisoryCount} advisories; upgrade the listed versions.`;
   } else {
     // Defensive fallback. Should not reach here given the branches above.
     label = 'CLEAN';

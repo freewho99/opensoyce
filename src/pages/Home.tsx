@@ -68,24 +68,27 @@ const REMIX_PROJECTS = [
   },
 ];
 
+// EDITORIAL PICKS: bands below were baked once via verdictFor() from src/shared/verdict.js
+// against curated scores. Numeric scores are intentionally NOT shown on the card to
+// avoid drift vs. live /api/analyze; click-through goes to /lookup for the live scan.
 const TRENDING_DATA = [
-  { owner: 'paul-gauthier', repo: 'aider', score: 9.3, tagline: 'Terminal-based AI pair programmer', signals: ['FRESH', 'MOMENTUM'], category: 'skills-agents', hotLine: '↑ Best-in-class terminal coding experience' },
-  { owner: 'opendevin', repo: 'OpenHands', score: 9.1, tagline: 'Autonomous software engineering agent', signals: ['MOMENTUM', 'FORKABLE'], category: 'skills-agents', hotLine: '↑ Autonomous dev workflows surging' },
-  { owner: 'langchain-ai', repo: 'langgraph', score: 8.9, tagline: 'Controllable agent workflows', signals: ['FRESH', 'DOCS STRONG'], category: 'skills-agents', hotLine: '↑ Advanced stateful orchestration' },
-  { owner: 'vercel', repo: 'next.js', score: 9.2, tagline: 'The React Framework for the Web', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Commit velocity sustained · New App Router patterns shipping' },
-  { owner: 'withastro', repo: 'astro', score: 9.1, tagline: 'The web framework for content-driven websites', signals: ['FRESH', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Content site benchmark · v5 content collections reshaping DX' },
-  { owner: 'biomejs', repo: 'biome', score: 8.7, tagline: 'One toolchain for your web project', signals: ['FRESH', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ Linting + formatting unified · Fast adoption replacing ESLint' },
-  { owner: 'shadcn-ui', repo: 'ui', score: 9.4, tagline: 'Beautifully designed components', signals: ['HIGH ADOPT', 'DOCS STRONG'], category: 'ui-libraries', hotLine: '↑ Copy-paste model copied everywhere · New registry launched' },
-  { owner: 'honojs', repo: 'hono', score: 9.0, tagline: 'Ultrafast web framework for the Edges', signals: ['MOMENTUM', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Cloudflare Workers standard · 100k weekly downloads milestone' },
-  { owner: 'trpc', repo: 'trpc', score: 8.8, tagline: 'End-to-end typesafe APIs made easy', signals: ['DOCS STRONG', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Type-safe APIs spreading · TanStack integration shipped' },
-  { owner: 'vitejs', repo: 'vite', score: 9.5, tagline: 'Next generation frontend tooling', signals: ['HIGH ADOPT', 'FRESH'], category: 'build-tools', hotLine: '↑ Fastest growing build tool · Vite 6 ecosystem expanding' },
-  { owner: 'facebook', repo: 'react', score: 8.9, tagline: 'A JavaScript library for building user interfaces', signals: ['HIGH ADOPT', 'LOW RISK'], category: 'ui-libraries', hotLine: '↑ React 19 adoption accelerating · Compiler going stable' },
-  { owner: 'denoland', repo: 'deno', score: 8.6, tagline: 'A secure runtime for JavaScript and TypeScript', signals: ['DOCS STRONG', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ npm compat complete · KV store going production' },
-  { owner: 'oven-sh', repo: 'bun', score: 8.5, tagline: 'Incredibly fast JavaScript runtime', signals: ['MOMENTUM', 'FRESH'], category: 'build-tools', hotLine: '↑ Node replacement gaining teams · Bun 2 runtime performance' },
-  { owner: 'prisma', repo: 'prisma', score: 9.0, tagline: 'Next-generation Node.js and TypeScript ORM', signals: ['LOW RISK', 'DOCS STRONG'], category: 'orm-database', hotLine: '↑ Prisma 6 GA · Accelerate edge queries launching' },
-  { owner: 'supabase', repo: 'supabase', score: 8.9, tagline: 'The open source Firebase alternative', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'orm-database', hotLine: '↑ Auth + storage + DB in one · Vector/AI features shipping' },
-  { owner: 'coleam00', repo: 'archon', score: 8.9, tagline: 'YAML-DEFINED AI CODING WORKFLOWS', signals: ['FRESH', 'MOMENTUM'], category: 'ai-agent-harnesses', hotLine: '↑ YAML-defined agent workflows surging' },
-  { owner: 'openharness', repo: 'ohmo', score: 7.2, tagline: 'LIGHTWEIGHT CLI-FIRST HARNESS', signals: ['MOMENTUM', 'FRESH'], category: 'ai-agent-harnesses', earlyBreakout: true, hotLine: '↑ CLI-native agent infra surfacing' },
+  { owner: 'paul-gauthier', repo: 'aider', band: 'USE READY', tagline: 'Terminal-based AI pair programmer', signals: ['FRESH', 'MOMENTUM'], category: 'skills-agents', hotLine: '↑ Best-in-class terminal coding experience' },
+  { owner: 'opendevin', repo: 'OpenHands', band: 'USE READY', tagline: 'Autonomous software engineering agent', signals: ['MOMENTUM', 'FORKABLE'], category: 'skills-agents', hotLine: '↑ Autonomous dev workflows surging' },
+  { owner: 'langchain-ai', repo: 'langgraph', band: 'USE READY', tagline: 'Controllable agent workflows', signals: ['FRESH', 'DOCS STRONG'], category: 'skills-agents', hotLine: '↑ Advanced stateful orchestration' },
+  { owner: 'vercel', repo: 'next.js', band: 'USE READY', tagline: 'The React Framework for the Web', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Commit velocity sustained · New App Router patterns shipping' },
+  { owner: 'withastro', repo: 'astro', band: 'USE READY', tagline: 'The web framework for content-driven websites', signals: ['FRESH', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Content site benchmark · v5 content collections reshaping DX' },
+  { owner: 'biomejs', repo: 'biome', band: 'USE READY', tagline: 'One toolchain for your web project', signals: ['FRESH', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ Linting + formatting unified · Fast adoption replacing ESLint' },
+  { owner: 'shadcn-ui', repo: 'ui', band: 'USE READY', tagline: 'Beautifully designed components', signals: ['HIGH ADOPT', 'DOCS STRONG'], category: 'ui-libraries', hotLine: '↑ Copy-paste model copied everywhere · New registry launched' },
+  { owner: 'honojs', repo: 'hono', band: 'USE READY', tagline: 'Ultrafast web framework for the Edges', signals: ['MOMENTUM', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Cloudflare Workers standard · 100k weekly downloads milestone' },
+  { owner: 'trpc', repo: 'trpc', band: 'USE READY', tagline: 'End-to-end typesafe APIs made easy', signals: ['DOCS STRONG', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Type-safe APIs spreading · TanStack integration shipped' },
+  { owner: 'vitejs', repo: 'vite', band: 'USE READY', tagline: 'Next generation frontend tooling', signals: ['HIGH ADOPT', 'FRESH'], category: 'build-tools', hotLine: '↑ Fastest growing build tool · Vite 6 ecosystem expanding' },
+  { owner: 'facebook', repo: 'react', band: 'USE READY', tagline: 'A JavaScript library for building user interfaces', signals: ['HIGH ADOPT', 'LOW RISK'], category: 'ui-libraries', hotLine: '↑ React 19 adoption accelerating · Compiler going stable' },
+  { owner: 'denoland', repo: 'deno', band: 'USE READY', tagline: 'A secure runtime for JavaScript and TypeScript', signals: ['DOCS STRONG', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ npm compat complete · KV store going production' },
+  { owner: 'oven-sh', repo: 'bun', band: 'USE READY', tagline: 'Incredibly fast JavaScript runtime', signals: ['MOMENTUM', 'FRESH'], category: 'build-tools', hotLine: '↑ Node replacement gaining teams · Bun 2 runtime performance' },
+  { owner: 'prisma', repo: 'prisma', band: 'USE READY', tagline: 'Next-generation Node.js and TypeScript ORM', signals: ['LOW RISK', 'DOCS STRONG'], category: 'orm-database', hotLine: '↑ Prisma 6 GA · Accelerate edge queries launching' },
+  { owner: 'supabase', repo: 'supabase', band: 'USE READY', tagline: 'The open source Firebase alternative', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'orm-database', hotLine: '↑ Auth + storage + DB in one · Vector/AI features shipping' },
+  { owner: 'coleam00', repo: 'archon', band: 'USE READY', tagline: 'YAML-DEFINED AI CODING WORKFLOWS', signals: ['FRESH', 'MOMENTUM'], category: 'ai-agent-harnesses', hotLine: '↑ YAML-defined agent workflows surging' },
+  { owner: 'openharness', repo: 'ohmo', band: 'HIGH MOMENTUM', tagline: 'LIGHTWEIGHT CLI-FIRST HARNESS', signals: ['MOMENTUM', 'FRESH'], category: 'ai-agent-harnesses', earlyBreakout: true, hotLine: '↑ CLI-native agent infra surfacing' },
 ];
 
 export default function Home() {
@@ -254,10 +257,19 @@ export default function Home() {
       <section className="py-20 px-4 bg-soy-label/20 border-b-4 border-black">
         <div className="max-w-7xl mx-auto">
           <div className="mb-12">
-            <h2 className="text-6xl font-black uppercase italic tracking-tighter mb-8 bg-black text-white inline-block px-6 py-2 transform -skew-x-12">
+            <h2 className="text-6xl font-black uppercase italic tracking-tighter mb-4 bg-black text-white inline-block px-6 py-2 transform -skew-x-12">
               OPEN-SOURCE HEAT CHECK 🔥
             </h2>
-            
+
+            <div className="mb-8 flex flex-wrap items-center gap-3">
+              <span className="bg-soy-red text-white px-4 py-2 text-xs font-black uppercase tracking-[0.4em] shadow-[4px_4px_0px_#000]">
+                EDITORIAL PICKS
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic">
+                Verdict bands are static — click any card for the live score.
+              </span>
+            </div>
+
             {/* Filter Chips */}
             <div className="flex flex-wrap gap-2 mb-12 overflow-x-auto pb-4 scrollbar-hide">
               {categories.map((cat) => (
@@ -485,14 +497,20 @@ export default function Home() {
 
 function OpportunityCard({ trend }: { trend: any, key?: any }) {
   const useCases = CATEGORY_USE_CASES[trend.repo.toLowerCase()] || { use: "Generic development", fork: "Custom ecosystem component" };
-  
+
+  // Band is baked at curation time via verdictFor() — see TRENDING_DATA.
+  // Numeric scores are deliberately not displayed here to avoid drift vs.
+  // the live /api/analyze. Click-through to /lookup shows the real score.
   const getBadge = () => {
-    if (trend.score < 5.0 || trend.stale) return { text: "STALE", bg: "bg-gray-600", textCol: "text-white" };
-    if (trend.earlyBreakout) return { text: "HIGH MOMENTUM", bg: "bg-orange-500", textCol: "text-white" };
-    if (trend.score >= 9.0) return { text: "USE READY", bg: "bg-green-600", textCol: "text-white" };
-    if (trend.score >= 8.0) return { text: "FORKABLE", bg: "bg-blue-600", textCol: "text-white" };
-    if (trend.score < 7.0) return { text: "WATCHLIST", bg: "bg-yellow-500", textCol: "text-black" };
-    return { text: "FORKABLE", bg: "bg-blue-600", textCol: "text-white" };
+    const band = trend.band || 'FORKABLE';
+    if (band === 'STALE') return { text: 'STALE', bg: 'bg-gray-600', textCol: 'text-white' };
+    if (band === 'HIGH MOMENTUM') return { text: 'HIGH MOMENTUM', bg: 'bg-orange-500', textCol: 'text-white' };
+    if (band === 'USE READY') return { text: 'USE READY', bg: 'bg-green-600', textCol: 'text-white' };
+    if (band === 'FORKABLE') return { text: 'FORKABLE', bg: 'bg-blue-600', textCol: 'text-white' };
+    if (band === 'STABLE') return { text: 'STABLE', bg: 'bg-slate-500', textCol: 'text-white' };
+    if (band === 'WATCHLIST') return { text: 'WATCHLIST', bg: 'bg-yellow-500', textCol: 'text-black' };
+    if (band === 'RISKY') return { text: 'RISKY', bg: 'bg-red-700', textCol: 'text-white' };
+    return { text: band, bg: 'bg-blue-600', textCol: 'text-white' };
   };
 
   const badge = getBadge();
@@ -505,18 +523,18 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
       </div>
 
       <div className="flex-1">
-        <div className="flex justify-between items-center mb-1">
+        <div className="flex justify-between items-start mb-1 gap-4">
           <div className="flex flex-col">
             <span className="text-[10px] font-black uppercase tracking-widest opacity-40 leading-none mb-1">{trend.owner} /</span>
             <h3 className="text-4xl font-black uppercase italic tracking-tighter leading-none group-hover:text-soy-red transition-all">
               {trend.repo}
             </h3>
           </div>
-          <div className="text-5xl font-black italic text-soy-red leading-none">
-            {trend.score.toFixed(1)}
+          <div className={`mt-1 px-3 py-1.5 ${badge.bg} ${badge.textCol} text-[10px] font-black uppercase tracking-[0.2em] border-2 border-black shadow-[3px_3px_0px_#000] shrink-0`}>
+            {badge.text}
           </div>
         </div>
-        
+
         <p className="text-xs font-bold uppercase tracking-widest opacity-60 italic mb-2 truncate">
           "{trend.tagline}"
         </p>
@@ -528,19 +546,15 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
         )}
 
         {/* Signal Pills */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-6">
           {trend.signals.slice(0, 2).map((sig: string) => (
             <span key={sig} className="text-[8px] font-black uppercase tracking-tighter border border-black/20 px-2 py-0.5 opacity-60">
               {sig}
             </span>
           ))}
-        </div>
-
-        {/* Score Strips */}
-        <div className="space-y-3 mb-6 bg-soy-label/10 p-4 border border-black/5">
-          <ScoreStrip label="HEALTH" value={trend.score * 10} />
-          <ScoreStrip label="FORKABILITY" value={(trend.score - 0.5) * 10} />
-          <ScoreStrip label="MOMENTUM" value={(trend.score + 0.2) * 10} />
+          <span className="text-[8px] font-black uppercase tracking-tighter border border-black/20 px-2 py-0.5 opacity-40 italic">
+            EDITORIAL · LIVE SCORE ON CLICK
+          </span>
         </div>
 
         {/* Use / Fork Lines */}
@@ -562,12 +576,12 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
           <ActionBtn label="FORK" repo={`${trend.owner}/${trend.repo}`} />
           <ActionBtn label="GROW" repo={`${trend.owner}/${trend.repo}`} />
         </div>
-        <Link 
-          to={`/projects/${trend.owner}/${trend.repo}`}
+        <Link
+          to={`/lookup?q=${trend.owner}/${trend.repo}`}
           onClick={() => trackEvent('analyze_project_click', { repo: `${trend.owner}/${trend.repo}`, source: 'opportunity_card' })}
           className="w-full bg-black text-white py-3 text-[10px] font-black uppercase tracking-widest italic hover:bg-soy-red transition-all text-center flex items-center justify-center gap-2"
         >
-          ANALYZE PROJECT →
+          SCAN LIVE →
         </Link>
       </div>
     </div>

@@ -494,6 +494,7 @@ export default async function handler(req, res) {
     inventory,
     selectedHealth,
     scannedAt: scanResult.scannedAt,
+    osvError: !!scanResult.osvError,
   });
 
   try {

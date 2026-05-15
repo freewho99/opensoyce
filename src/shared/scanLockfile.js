@@ -336,6 +336,10 @@ export function buildInventory(lockfile) {
   }
 
   if (format === 'npm-v3' || format === 'npm-v2') {
+    // npm v2/v3 lockfiles flat-hoist every package to `node_modules/<name>`,
+    // even deeply-transitive ones. The only reliable signal for "direct"
+    // is the root entry's declared dependency maps. Build that set once.
+    const trueDirectSet = collectRootDirectDeps(obj.packages || {});
     for (const [key, meta] of Object.entries(obj.packages || {})) {
       if (key === '' || !meta || typeof meta !== 'object') continue;
       if (meta.link === true) continue;
@@ -348,7 +352,9 @@ export function buildInventory(lockfile) {
         : null;
       const name = aliasedName || nameFromKey(key);
       if (!name) continue;
-      const direct = isTopLevelKey(key);
+      // Direct iff name appears in root entry's declared dep maps AND the
+      // lockfile placed it at the top level (not nested under another pkg).
+      const direct = isTopLevelKey(key) && trueDirectSet.has(name);
       const scope = scopeFromMeta(meta);
       record(name, meta.version, {
         direct,
@@ -382,6 +388,29 @@ function emptyInventory() {
       missingRepositoryCount: 0,
     },
   };
+}
+
+/**
+ * Read the root entry (`packages[""]`) and return the set of package names
+ * that are truly direct dependencies of the project. A name is direct iff
+ * it appears in dependencies / devDependencies / optionalDependencies /
+ * peerDependencies of the root entry.
+ * @param {Record<string, any>} packages
+ * @returns {Set<string>}
+ */
+function collectRootDirectDeps(packages) {
+  const out = new Set();
+  const root = packages && packages[''];
+  if (!root || typeof root !== 'object') return out;
+  const buckets = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
+  for (const bucket of buckets) {
+    const map = root[bucket];
+    if (!map || typeof map !== 'object') continue;
+    for (const name of Object.keys(map)) {
+      if (typeof name === 'string' && name.length > 0) out.add(name);
+    }
+  }
+  return out;
 }
 
 function scopeFromMeta(meta) {
