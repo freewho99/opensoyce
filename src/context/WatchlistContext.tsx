@@ -12,6 +12,7 @@ const WatchlistContext = createContext<WatchlistContextType | undefined>(undefin
 
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => {
+    if (typeof window === 'undefined') return [];
     try {
       const saved = localStorage.getItem('soyce_watchlist');
       return saved ? JSON.parse(saved) : [];

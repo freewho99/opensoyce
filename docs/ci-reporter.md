@@ -286,3 +286,18 @@ GitHub asks for these on the install screen; accept them all.
 The workflow-file CI Reporter
 (`.github/workflows/opensoyce-scan.yml.example`) is still fully
 supported for teams that prefer workflow-based CI.
+
+## Build-time prerender of `/methodology`
+
+`npm run build` runs `vite build` then [`scripts/prerender.mjs`](../scripts/prerender.mjs),
+which produces a Node-targeted SSR bundle of `src/prerender-entry.tsx`,
+renders the React tree for `/methodology` to an HTML string, and writes
+the result into `dist/methodology/index.html`. The SPA shell at
+`dist/index.html` is untouched. Vercel's `rewrites` in `vercel.json` send
+`/methodology` to the prerendered file before the SPA catchall, so
+`curl https://www.opensoyce.com/methodology` returns ~40KB of real
+methodology copy (versus ~1.5KB of empty SPA shell) — usable for SEO,
+security audits, and citation links. The page still hydrates client-side
+into the normal React SPA after load. Run
+[`scripts/test-methodology-ssr.mjs`](../scripts/test-methodology-ssr.mjs)
+after deploy to assert the prerender survived the round trip.

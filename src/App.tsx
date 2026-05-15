@@ -32,6 +32,52 @@ import OpenDesignCaseStudy from './pages/OpenDesignCaseStudy';
 import Dashboard from './pages/Dashboard';
 import NotFound from './pages/NotFound';
 
+// Route tree extracted so the prerender entry can wrap it in <StaticRouter>
+// while the browser entry uses <BrowserRouter>. Keep this in sync with the
+// routes inside <App/> below.
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route path="/leaderboards" element={<Leaderboard />} />
+        <Route path="/lookup" element={<Lookup />} />
+        <Route path="/watchlist" element={<Watchlist />} />
+        <Route path="/cli" element={<CLI />} />
+        <Route path="/scan" element={<Scan />} />
+        <Route path="/scanner" element={<Scanner />} />
+        <Route path="/compare" element={<Compare />} />
+        <Route path="/recommend" element={<Recommend />} />
+        <Route path="/recipes" element={<Recommend />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/claim" element={<Claim />} />
+        <Route path="/blog" element={<Blog />} />
+        <Route path="/blog/:slug" element={<BlogPost />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/methodology" element={<Methodology />} />
+        <Route path="/remix" element={<Remix />} />
+        <Route path="/heat-check" element={<HeatCheck />} />
+        <Route path="/submit-project" element={<SubmitProject />} />
+        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/admin/signals" element={<SignalInbox />} />
+        <Route path="/compare/skills-agents" element={<SkillsAgentsCompare />} />
+        <Route path="/challenge" element={<Challenge />} />
+        <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />
+        <Route path="/compare/:slug" element={<Compare />} />
+        <Route path="/graveyard" element={<Graveyard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
+        <Route path="/project/:owner/:repo" element={<ProjectDetail />} />
+        <Route path="/projects/:owner/:repo/fork" element={<ForkProject />} />
+        <Route path="/project/:owner/:repo/fork" element={<ForkProject />} />
+        {/* Fallback or other pages */}
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
+}
+
 export default function App() {
   const [darkSauceMode, setDarkSauceMode] = React.useState(false);
   const [showToast, setShowToast] = React.useState(false);
@@ -67,45 +113,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="/leaderboards" element={<Leaderboard />} />
-          <Route path="/lookup" element={<Lookup />} />
-          <Route path="/watchlist" element={<Watchlist />} />
-          <Route path="/cli" element={<CLI />} />
-          <Route path="/scan" element={<Scan />} />
-          <Route path="/scanner" element={<Scanner />} />
-          <Route path="/compare" element={<Compare />} />
-          <Route path="/recommend" element={<Recommend />} />
-          <Route path="/recipes" element={<Recommend />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/claim" element={<Claim />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
-          <Route path="/faq" element={<FAQ />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/methodology" element={<Methodology />} />
-          <Route path="/remix" element={<Remix />} />
-          <Route path="/heat-check" element={<HeatCheck />} />
-          <Route path="/submit-project" element={<SubmitProject />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/admin/signals" element={<SignalInbox />} />
-          <Route path="/compare/skills-agents" element={<SkillsAgentsCompare />} />
-          <Route path="/challenge" element={<Challenge />} />
-          <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />
-          <Route path="/compare/:slug" element={<Compare />} />
-          <Route path="/graveyard" element={<Graveyard />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
-          <Route path="/project/:owner/:repo" element={<ProjectDetail />} />
-          <Route path="/projects/:owner/:repo/fork" element={<ForkProject />} />
-          <Route path="/project/:owner/:repo/fork" element={<ForkProject />} />
-          {/* Fallback or other pages */}
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
-      
+      <AppRoutes />
+
       {/* Konami Toast */}
       <AnimatePresence>
         {showToast && (
