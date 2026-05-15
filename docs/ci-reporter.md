@@ -220,3 +220,69 @@ throwaway branch and fired the active workflow twice.
   PR also got a `vercel[bot]` deploy-preview comment; the marker-based
   `jq` selector ignored it cleanly and only updated OpenSoyce's own
   comment on re-run.
+
+## GitHub App v0
+
+The OpenSoyce GitHub App is the zero-config productization of the CI
+Reporter. Install the App on a repo and OpenSoyce starts posting a Check
+Run on every pull request — no workflow file, no `npm ci` in your CI,
+no `GITHUB_TOKEN` setup.
+
+**Install URL:** [github.com/apps/opensoyce](https://github.com/apps/opensoyce)
+*(slug to be confirmed against the App settings page on first install — if
+it differs, file an issue and we'll update this doc).*
+
+**Webhook URL** (informational; users don't configure this):
+`https://www.opensoyce.com/api/github-webhook`
+
+### One-click install
+
+1. Visit the install URL above.
+2. Click **Install**, pick the repos you want covered.
+3. Done. The next PR you open will get a Check Run named
+   **OpenSoyce Dependency Risk**.
+
+### How it differs from the workflow
+
+| Aspect         | Workflow (`opensoyce-scan.yml`)    | App v0                                  |
+| -------------- | ---------------------------------- | --------------------------------------- |
+| Setup          | Copy `.yml`, `npm ci` in CI        | One click, no repo changes              |
+| Surface        | PR comment (sticky, marker-based)  | Check Run on the commit                 |
+| Token          | Repo's `GITHUB_TOKEN`              | Installation token (minted per webhook) |
+| Code execution | Runs `npm ci` in CI runner         | None. Lockfile is fetched read-only     |
+| Fork PRs       | Comment silently fails on forks    | Works (App is installed on base)        |
+
+### Required permissions on install
+
+- **Contents** (read) — fetch `package-lock.json` at the PR head SHA
+- **Pull requests** (read) — read PR metadata from the webhook payload
+- **Checks** (write) — create the Check Run
+- **Metadata** (read) — required for any App
+
+GitHub asks for these on the install screen; accept them all.
+
+### v0 limitations
+
+- **Events:** only `pull_request` with action `opened`, `synchronize`,
+  or `reopened`. Other actions (labeled, edited, closed, etc.) are
+  acked with `{ ignored: '<action>' }` and no Check Run is posted.
+- **Lockfile coverage:** `package-lock.json` (npm v1/v2/v3) only.
+  Yarn and pnpm support tracks the rest of the scanner roadmap.
+- **Never blocks merges.** The Check Run always reports
+  `conclusion: success` in v0 — the title carries the decision label
+  (CLEAN / PATCH AVAILABLE / REVIEW REQUIRED / VERIFY LATER) but the
+  green check stays green. Threshold-based blocking lands in v0.1.
+- **No PR code execution.** The App never runs a `git clone` or
+  `npm install` against contributor code. Same security stance as the
+  fork-comment workflow doc — only the lockfile bytes are read.
+- **Public + private repos** both work, as long as the App is installed
+  on the repo.
+- **No persistent state, no dashboard, no settings.** Whatever you want
+  changed, file an issue.
+- **One Check Run per head SHA.** Each `synchronize` event ships a new
+  head SHA which gets its own fresh Check Run — that's GitHub-native
+  behavior. No PATCH-by-id, no dedup gymnastics.
+
+The workflow-file CI Reporter
+(`.github/workflows/opensoyce-scan.yml.example`) is still fully
+supported for teams that prefer workflow-based CI.
