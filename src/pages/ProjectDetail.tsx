@@ -165,7 +165,7 @@ export default function ProjectDetail() {
           </div>
           <div className="flex items-center gap-4">
             <div className="shadow-[-4px_4px_0px_white]">
-              <SoyceScore value={project.score.overall ?? 0} size="sm" earlyBreakout={!!curated?.earlyBreakout} link />
+              <SoyceScore value={project.score.overall ?? 0} size="sm" earlyBreakout={!!curated?.earlyBreakout} advisorySummary={project.advisories ?? null} link />
             </div>
           </div>
         </div>
@@ -367,7 +367,7 @@ export default function ProjectDetail() {
                     to={`/challenge?repo=${project.owner}/${project.name}`}
                     onClick={() => trackEvent('challenge_label_click', { 
                       repo: `${project.owner}/${project.name}`, 
-                      currentLabel: verdictFor(project.score.overall, { earlyBreakout: !!curated?.earlyBreakout }),
+                      currentLabel: verdictFor(project.score.overall, { earlyBreakout: !!curated?.earlyBreakout, advisorySummary: project.advisories ?? null }),
                       score: project.score.overall
                     })}
                     className="inline-block bg-black text-white px-6 py-3 text-xs font-black uppercase italic tracking-widest hover:bg-soy-red transition-all"

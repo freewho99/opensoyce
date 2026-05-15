@@ -56,6 +56,13 @@ interface Vulnerability {
   confidence?: ResolverConfidence;
   source?: ResolverSource | null;
   directory?: string;
+  // Borrowed-trust cross-check (P0-AI-2). `true` = GitHub package.json `name`
+  // matched the npm package name. `false` = mismatch — a typo-squat is
+  // inheriting an unrelated repo's Soyce score. `'unverified'` (string) =
+  // cross-check not performed (e.g. GitHub fetch failed). Absent on
+  // responses from servers older than May 2026.
+  verified?: boolean | 'unverified';
+  mismatchReason?: 'github_pkg_name_different' | 'github_root_pkg_missing';
   // Scanner v2.1a — repo health (paired with advisory severity per-row).
   // Mutually exclusive: when `repoHealth` is set, `repoHealthError` is null,
   // and vice versa. Both absent on responses from older servers — render
@@ -1431,6 +1438,21 @@ function RepoHealthBlock({ v }: { v: Vulnerability }) {
             >
               {v.resolvedRepo}
             </a>
+          ) : null}
+          {/* Borrowed-trust signal (P0-AI-2). When the GitHub package.json
+              names a different package than the npm registry claims, the
+              Soyce score is being inherited from an unrelated repo. */}
+          {v.verified === false ? (
+            <span
+              className="self-start px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-300 text-black"
+              title={
+                v.mismatchReason === 'github_pkg_name_different'
+                  ? 'GitHub repo package.json names a different npm package — score may be borrowed.'
+                  : 'GitHub repo has no root package.json with a name field — identity unverifiable.'
+              }
+            >
+              ⚠ UNVERIFIED IDENTITY
+            </span>
           ) : null}
           <span
             className={`self-start px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${chip}`}

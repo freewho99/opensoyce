@@ -245,7 +245,7 @@ export default function Lookup() {
                         </div>
                       </div>
                       <div className="shadow-[4px_4px_0px_#000]">
-                        <SoyceScore value={result.score.overall ?? 0} size="md" link />
+                        <SoyceScore value={result.score.overall ?? 0} size="md" link advisorySummary={result.advisories ?? null} />
                       </div>
                     </div>
 

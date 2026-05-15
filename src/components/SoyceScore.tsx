@@ -4,6 +4,16 @@ import { verdictFor as sharedVerdictFor } from '../shared/verdict.js';
 
 export type SoyceVerdict = 'USE READY' | 'FORKABLE' | 'HIGH MOMENTUM' | 'STABLE' | 'WATCHLIST' | 'RISKY' | 'STALE';
 
+export type AdvisorySummaryLike = {
+  total?: number;
+  openCount?: number;
+  recentOpen?: number;
+  critical?: number;
+  high?: number;
+  medium?: number;
+  low?: number;
+};
+
 // Verdict bands were recalibrated in commit-after-13ec156 to match where
 // real projects land. The earlier bands (USE READY ≥ 9.0, FORKABLE ≥ 8.0,
 // WATCHLIST ≥ 7.0, RISKY ≥ 5.0) punished healthy stable libraries — winston
@@ -12,7 +22,10 @@ export type SoyceVerdict = 'USE READY' | 'FORKABLE' | 'HIGH MOMENTUM' | 'STABLE'
 //
 // Implementation lives in src/shared/verdict.js so server.ts and api/scan.js
 // can reuse the same band logic without dragging React through the graph.
-export function verdictFor(score: number, opts?: { earlyBreakout?: boolean }): SoyceVerdict {
+export function verdictFor(
+  score: number,
+  opts?: { earlyBreakout?: boolean; advisorySummary?: AdvisorySummaryLike | null },
+): SoyceVerdict {
   return sharedVerdictFor(score, opts) as SoyceVerdict;
 }
 
@@ -25,13 +38,19 @@ interface SoyceScoreProps {
   link?: boolean;
   /** When true, a sub-9.0 score with rising signals is labeled HIGH MOMENTUM. */
   earlyBreakout?: boolean;
+  /**
+   * When passed, an open critical+high count >= 1 caps the band (no USE READY)
+   * and >= 3 caps it at WATCHLIST. P0-AI-1: prevents "FORKABLE 8.0" rendering
+   * next to 4 open HIGH/CRITICAL advisories.
+   */
+  advisorySummary?: AdvisorySummaryLike | null;
   className?: string;
 }
 
-const SIZE_CLASSES: Record<NonNullable<SoyceScoreProps['size']>, { number: string; verdict: string; padding: string }> = {
-  sm: { number: 'text-3xl', verdict: 'text-[8px]', padding: 'px-3 py-1.5' },
-  md: { number: 'text-5xl', verdict: 'text-[9px]', padding: 'px-4 py-2' },
-  lg: { number: 'text-6xl', verdict: 'text-[10px]', padding: 'px-5 py-3' },
+const SIZE_CLASSES: Record<NonNullable<SoyceScoreProps['size']>, { number: string; verdict: string; padding: string; chip: string }> = {
+  sm: { number: 'text-3xl', verdict: 'text-[8px]', padding: 'px-3 py-1.5', chip: 'text-[8px]' },
+  md: { number: 'text-5xl', verdict: 'text-[9px]', padding: 'px-4 py-2', chip: 'text-[9px]' },
+  lg: { number: 'text-6xl', verdict: 'text-[10px]', padding: 'px-5 py-3', chip: 'text-[10px]' },
 };
 
 export default function SoyceScore({
@@ -40,28 +59,49 @@ export default function SoyceScore({
   showVerdict = true,
   link = false,
   earlyBreakout = false,
+  advisorySummary = null,
   className = '',
 }: SoyceScoreProps) {
   const score = typeof value === 'number' && !Number.isNaN(value) ? value : 0;
-  const verdict = verdictFor(score, { earlyBreakout });
+  const verdict = verdictFor(score, { earlyBreakout, advisorySummary });
+  // The band the score *would have* earned without the hidden-vulns cap.
+  // Used purely to decide whether to show the explanation chip.
+  const uncappedVerdict = verdictFor(score, { earlyBreakout });
+  const seriousOpen = advisorySummary
+    ? (advisorySummary.critical || 0) + (advisorySummary.high || 0)
+    : 0;
+  const showAdvisoryChip = !!advisorySummary && seriousOpen >= 1 && verdict !== uncappedVerdict;
   const s = SIZE_CLASSES[size];
 
   const inner = (
-    <div className={`inline-flex flex-col items-center leading-none ${s.padding} bg-soy-red text-white ${className}`}>
-      <span className={`${s.number} font-black italic tracking-tighter`} aria-label={`Soyce Score ${score.toFixed(1)} of 10`}>
-        {score.toFixed(1)}
-      </span>
-      {showVerdict && (
-        <span className={`${s.verdict} font-black uppercase tracking-[0.2em] mt-1 opacity-90`}>
-          {verdict}
+    <div className={`inline-flex flex-col items-center leading-none ${className}`}>
+      <div className={`inline-flex flex-col items-center leading-none ${s.padding} bg-soy-red text-white`}>
+        <span className={`${s.number} font-black italic tracking-tighter`} aria-label={`Soyce Score ${score.toFixed(1)} of 10`}>
+          {score.toFixed(1)}
+        </span>
+        {showVerdict && (
+          <span className={`${s.verdict} font-black uppercase tracking-[0.2em] mt-1 opacity-90`}>
+            {verdict}
+          </span>
+        )}
+      </div>
+      {showAdvisoryChip && (
+        <span
+          className={`${s.chip} mt-1.5 font-black uppercase tracking-[0.15em] bg-black text-white px-2 py-0.5 border border-black`}
+          title={`Band capped from ${uncappedVerdict} because ${seriousOpen} HIGH/CRITICAL ${seriousOpen === 1 ? 'advisory is' : 'advisories are'} open on this repo`}
+        >
+          ⚠ {seriousOpen} OPEN HIGH/CRIT
         </span>
       )}
     </div>
   );
 
   if (link) {
+    const title = showAdvisoryChip
+      ? `Soyce Score ${score.toFixed(1)} / 10 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL ${seriousOpen === 1 ? 'advisory' : 'advisories'}). Click for methodology.`
+      : `Soyce Score ${score.toFixed(1)} / 10 — ${verdict}. Click for methodology.`;
     return (
-      <Link to="/methodology" title={`Soyce Score ${score.toFixed(1)} / 10 — ${verdict}. Click for methodology.`} className="hover:opacity-90 transition-opacity">
+      <Link to="/methodology" title={title} className="hover:opacity-90 transition-opacity">
         {inner}
       </Link>
     );

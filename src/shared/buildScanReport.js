@@ -206,15 +206,26 @@ function uncertaintyBullets(vulns, inventory, selectedHealth, profile, osvError)
   // GitHub / repo-health analysis gaps on vulnerable rows.
   let analysisFailed = 0;
   let identityNone = 0;
+  let identityUnverified = 0;
   for (const v of vulnRows) {
     if (v?.repoHealthError === 'ANALYSIS_FAILED') analysisFailed += 1;
     if (v?.repoHealthError === 'IDENTITY_NONE') identityNone += 1;
+    // Borrowed-trust signal (P0-AI-2). Only `verified === false` is a real
+    // mismatch; 'unverified' (string) means we didn't check, which is not a
+    // false-positive risk worth surfacing.
+    if (v?.verified === false) identityUnverified += 1;
   }
   if (analysisFailed > 0) {
     out.push(`Repo health analysis failed for ${plural(analysisFailed, 'vulnerable package')}.`);
   }
   if (identityNone > 0) {
     out.push(`${plural(identityNone, 'vulnerable package')} could not be linked to a source repo.`);
+  }
+  if (identityUnverified > 0) {
+    // CONCRETE false-positive-risk signal: the npm metadata points at a
+    // GitHub repo whose package.json names a different package. The Soyce
+    // score is being inherited from an unrelated repo.
+    out.push(`Source repo identity could not be verified for ${plural(identityUnverified, 'package')} — npm metadata points at a repo whose package.json names a different package.`);
   }
 
   // Selected-health gaps.

@@ -92,11 +92,16 @@ async function attachIdentitiesToVulnerabilities(vulns, resolveIdentity) {
         resolvedRepo: ident.resolvedRepo,
         confidence: ident.confidence,
         source: ident.source,
+        // Borrowed-trust signal from the resolver (P0-AI-2). When the npm
+        // registry pointed at a GitHub repo whose package.json names a
+        // different package, `verified` is false and `mismatchReason` is set.
+        verified: ident.verified ?? 'unverified',
       };
       if (ident.directory) merged.directory = ident.directory;
+      if (ident.mismatchReason) merged.mismatchReason = ident.mismatchReason;
       return merged;
     }
-    return { ...v, resolvedRepo: null, confidence: 'NONE', source: null };
+    return { ...v, resolvedRepo: null, confidence: 'NONE', source: null, verified: 'unverified' };
   });
 }
 
@@ -137,14 +142,16 @@ async function attachRepoHealthToVulnerabilities(vulns, getAnalysis, mapWithConc
       v.repoHealthError = 'ANALYSIS_FAILED';
       return;
     }
+    const advisorySummary = (data.meta && data.meta.advisories) || null;
     v.repoHealth = {
       soyceScore: data.total,
-      verdict: verdictFor(data.total, { earlyBreakout: false }),
+      verdict: verdictFor(data.total, { earlyBreakout: false, advisorySummary }),
       signals: {
         maintenance: data.breakdown.maintenance ?? 0,
         security: data.breakdown.security ?? 0,
         activity: data.breakdown.activity ?? 0,
       },
+      advisorySummary,
     };
     v.repoHealthError = null;
   });
@@ -222,13 +229,15 @@ async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalys
       row.status = 'SCORE_UNAVAILABLE';
       return row;
     }
+    const advisorySummary = (v.analysis.meta && v.analysis.meta.advisories) || null;
     row.soyceScore = v.analysis.total;
-    row.verdict = verdictFor(v.analysis.total, { earlyBreakout: false });
+    row.verdict = verdictFor(v.analysis.total, { earlyBreakout: false, advisorySummary });
     row.signals = {
       maintenance: v.analysis.breakdown.maintenance ?? 0,
       security: v.analysis.breakdown.security ?? 0,
       activity: v.analysis.breakdown.activity ?? 0,
     };
+    row.advisorySummary = advisorySummary;
     row.status = 'SCORED';
     return row;
   });
@@ -319,7 +328,7 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || [], resolveIdentity);
   } catch {
     vulnerabilities = (vulnerabilities || []).map(v => ({
-      ...v, resolvedRepo: null, confidence: 'NONE', source: null,
+      ...v, resolvedRepo: null, confidence: 'NONE', source: null, verified: 'unverified',
     }));
   }
 
