@@ -96,3 +96,39 @@ it.
   used to open the issue on `freewho99/opensoyce`.
 
 The GitHub App's webhook secret is unrelated to this flow.
+
+## Setup gotchas
+
+Two issues surfaced during the first end-to-end smoke test. Both happen
+silently — the OAuth flow looks like it should work, then fails opaquely.
+
+### 1. OAuth Client ID: capital `O` vs zero `0`
+
+GitHub's OAuth Client IDs start with a capital `Ov23...` (uppercase letter O),
+not `0v23...` (digit zero). The two are visually identical in most fonts.
+If you copy-paste the ID from anywhere that isn't the GitHub settings page
+itself (a chat client, a screenshot OCR, a doc), double-check the leading
+character. A mistyped `0` instead of `O` will produce a generic OAuth error
+at the callback step with no useful message.
+
+**To verify:** the value at `https://github.com/settings/applications/<your-app-id>`
+under "Client ID" is the source of truth. Copy it directly from there into
+the Vercel env var.
+
+### 2. GitHub App needs `Issues: write` permission
+
+The `/claim-submit` endpoint files the rebuttal as a GitHub Issue on
+`freewho99/opensoyce` via the GitHub App (not the user's OAuth token). The
+App's initial permission set for the v0 webhook was:
+
+  Contents: read · Pull requests: read · Checks: write · Metadata: read
+
+That set does NOT include Issues write. Without it, `claim-submit` returns
+`502 { error: 'ISSUE_CREATE_FAILED' }` and the frontend renders an error
+that mentions "the App likely lost Issues:write permission."
+
+**To fix:** in the GitHub App settings page, under Permissions & events,
+set **Issues: read and write**. Save changes. GitHub will email the App
+owner to re-grant the new permission on every installation — accept the
+re-grant, and `/claim-submit` will work on the next try (the claim-token
+is stateless and still valid as long as you're inside the 10-minute window).
