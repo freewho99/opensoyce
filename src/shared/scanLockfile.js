@@ -616,11 +616,11 @@ export function buildInventory(lockfile) {
   }
 
   // Aggregator: per-package-name accumulator.
-  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean, hasInstallScript: boolean }>} */
   const byName = new Map();
   let totalEntries = 0;
 
-  function record(name, version, { direct, scope, hasLicense, hasRepository }) {
+  function record(name, version, { direct, scope, hasLicense, hasRepository, hasInstallScript }) {
     if (!name) return;
     totalEntries += 1;
     let acc = byName.get(name);
@@ -631,6 +631,7 @@ export function buildInventory(lockfile) {
         scopes: new Set(),
         hasLicense: false,
         hasRepository: false,
+        hasInstallScript: false,
       };
       byName.set(name, acc);
     }
@@ -639,6 +640,10 @@ export function buildInventory(lockfile) {
     acc.scopes.add(scope);
     if (hasLicense) acc.hasLicense = true;
     if (hasRepository) acc.hasRepository = true;
+    // Sticky across versions: if ANY occurrence of a package had an install
+    // script, the merged record is flagged. Postinstall risk doesn't go away
+    // when a non-scripting version of the same package coexists in the tree.
+    if (hasInstallScript) acc.hasInstallScript = true;
   }
 
   if (format === 'npm-v3' || format === 'npm-v2') {
@@ -667,6 +672,7 @@ export function buildInventory(lockfile) {
         scope,
         hasLicense: hasField(meta, 'license'),
         hasRepository: hasField(meta, 'repository'),
+        hasInstallScript: meta.hasInstallScript === true,
       });
     }
   } else if (format === 'npm-v1') {
@@ -693,6 +699,7 @@ function emptyInventory() {
       duplicateCount: 0,
       missingLicenseCount: 0,
       missingRepositoryCount: 0,
+      installScriptCount: 0,
     },
   };
 }
@@ -773,13 +780,14 @@ function walkV1ForInventory(deps, record, topLevel) {
       scope,
       hasLicense: hasField(meta, 'license'),
       hasRepository: hasField(meta, 'repository'),
+      hasInstallScript: meta.hasInstallScript === true,
     });
     if (meta.dependencies) walkV1ForInventory(meta.dependencies, record, false);
   }
 }
 
 function finalizeInventory(format, byName, totalEntries, opts = {}) {
-  /** @type {Array<{name:string,versions:string[],direct:boolean,scope:string,hasLicense:boolean,hasRepository:boolean}>} */
+  /** @type {Array<{name:string,versions:string[],direct:boolean,scope:string,hasLicense:boolean,hasRepository:boolean,hasInstallScript:boolean}>} */
   const packages = [];
   let directCount = 0;
   let transitiveCount = 0;
@@ -790,6 +798,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
   let duplicateCount = 0;
   let missingLicenseCount = 0;
   let missingRepositoryCount = 0;
+  let installScriptCount = 0;
 
   const names = [...byName.keys()].sort((a, b) => a.localeCompare(b));
   for (const name of names) {
@@ -797,6 +806,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     const versions = [...acc.versions].sort(compareVersionsLoose);
     const scope = mergeScopes(acc.scopes);
     const direct = acc.direct;
+    const hasInstallScript = acc.hasInstallScript === true;
 
     packages.push({
       name,
@@ -805,6 +815,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
       scope,
       hasLicense: acc.hasLicense,
       hasRepository: acc.hasRepository,
+      hasInstallScript,
     });
 
     if (direct) directCount += 1; else transitiveCount += 1;
@@ -815,6 +826,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     if (versions.length > 1) duplicateCount += 1;
     if (!acc.hasLicense) missingLicenseCount += 1;
     if (!acc.hasRepository) missingRepositoryCount += 1;
+    if (hasInstallScript) installScriptCount += 1;
   }
 
   const ecosystem = ecosystemForFormat(format);
@@ -831,6 +843,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     duplicateCount,
     missingLicenseCount,
     missingRepositoryCount,
+    installScriptCount,
   };
   if (opts.directUnknown) totals.directUnknown = true;
   return {
@@ -862,7 +875,7 @@ function buildPythonInventory(text, format) {
   const directSet = format === 'uv-lock' ? extractUvDirectSet(text) : null;
   const directUnknown = format === 'poetry-lock';
 
-  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean, hasInstallScript: boolean }>} */
   const byName = new Map();
   let totalEntries = 0;
 
@@ -877,6 +890,10 @@ function buildPythonInventory(text, format) {
         scopes: new Set(),
         hasLicense: false,
         hasRepository: false,
+        // Python lockfiles don't expose install-script flags (uv.lock /
+        // poetry.lock have no equivalent of npm's hasInstallScript). Stay
+        // honest: always false here. v0 scope is npm + pnpm only.
+        hasInstallScript: false,
       };
       byName.set(b.name, acc);
     }
@@ -1096,7 +1113,7 @@ function parsePackagesSection(lines, start, packages) {
     }
     // Indent 4 spaces → flag/field on the current package.
     if (indent === 4 && currentKey) {
-      const mFlag = /^\s+(dev|optional):\s*(true|false)\s*$/.exec(line);
+      const mFlag = /^\s+(dev|optional|requiresBuild):\s*(true|false)\s*$/.exec(line);
       if (mFlag) {
         packages[currentKey][mFlag[1]] = (mFlag[2] === 'true');
       }
@@ -1259,11 +1276,11 @@ export function buildPnpmInventory(text) {
     s.add(scope);
   }
 
-  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean, hasInstallScript: boolean }>} */
   const byName = new Map();
   let totalEntries = 0;
 
-  function record(name, version, isDirect, scopes) {
+  function record(name, version, isDirect, scopes, hasInstallScript) {
     if (!name) return;
     totalEntries += 1;
     let acc = byName.get(name);
@@ -1274,12 +1291,15 @@ export function buildPnpmInventory(text) {
         scopes: new Set(),
         hasLicense: false,
         hasRepository: false,
+        hasInstallScript: false,
       };
       byName.set(name, acc);
     }
     if (version) acc.versions.add(version);
     if (isDirect) acc.direct = true;
     for (const s of scopes) acc.scopes.add(s);
+    // Sticky across versions — same rule as the npm path.
+    if (hasInstallScript) acc.hasInstallScript = true;
   }
 
   for (const [key, meta] of Object.entries(packages || {})) {
@@ -1289,14 +1309,18 @@ export function buildPnpmInventory(text) {
     const scopes = isDirect
       ? [...directScopes.get(parsed.name)]
       : [scopeFromPnpmFlags(meta)];
-    record(parsed.name, parsed.version, isDirect, scopes);
+    // pnpm uses `requiresBuild: true` on package entries to mark installs
+    // that run lifecycle scripts; semantically equivalent to npm's
+    // hasInstallScript flag.
+    const hasInstallScript = !!(meta && meta.requiresBuild === true);
+    record(parsed.name, parsed.version, isDirect, scopes, hasInstallScript);
   }
 
   // Also record direct deps that for some reason don't appear in `packages:`
   // (defensive — keeps directCount honest if the user truncated the file).
   for (const [name, scopes] of directScopes.entries()) {
     if (!byName.has(name)) {
-      record(name, '', true, [...scopes]);
+      record(name, '', true, [...scopes], false);
     }
   }
 
@@ -1421,6 +1445,9 @@ function buildYarnV1Inventory(text) {
       scope: 'unknown',        // unknown for yarn v1; UI surfaces this.
       hasLicense: acc.hasLicense,
       hasRepository: acc.hasRepository,
+      // yarn-v1 lockfiles don't expose install-script flags; documented in
+      // docs/ci-reporter.md as a known v0 caveat alongside Python lockfiles.
+      hasInstallScript: false,
     });
     if (versions.length > 1) duplicateCount += 1;
     if (!acc.hasLicense) missingLicenseCount += 1;

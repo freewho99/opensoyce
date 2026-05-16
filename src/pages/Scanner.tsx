@@ -14,6 +14,7 @@ import {
 import { summarizeScan } from '../shared/scanSummary.js';
 import { computeRiskProfile } from '../shared/riskProfile.js';
 import { buildMarkdownReport, buildJsonReport } from '../shared/buildScanReport.js';
+import { isTrustedInstallScript } from '../data/trustedInstallScripts.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
@@ -69,6 +70,11 @@ interface Vulnerability {
   // defensively (sub-block hidden).
   repoHealth?: RepoHealth | null;
   repoHealthError?: RepoHealthError | null;
+  // Postinstall analysis v0 — populated by runScan from the matching
+  // inventory record. Informational only; does not affect scoring or
+  // verdict bands. Absent on responses from older servers — render
+  // defensively (chip hidden).
+  hasInstallScript?: boolean;
 }
 
 // Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
@@ -83,6 +89,11 @@ interface InventoryPackage {
   scope: InventoryScope;
   hasLicense: boolean;
   hasRepository: boolean;
+  // Postinstall analysis v0 — true when the lockfile flagged this package
+  // with `hasInstallScript: true` (npm) or `requiresBuild: true` (pnpm).
+  // Sticky across versions: ANY version having the flag flips the merged
+  // record to true. Defaults false on older responses.
+  hasInstallScript?: boolean;
 }
 
 interface InventoryTotals {
@@ -97,6 +108,9 @@ interface InventoryTotals {
   duplicateCount: number;
   missingLicenseCount: number;
   missingRepositoryCount: number;
+  // Postinstall analysis v0 — count of packages with hasInstallScript===true.
+  // Absent on older server responses; render defensively.
+  installScriptCount?: number;
 }
 
 interface Inventory {
@@ -130,6 +144,8 @@ interface SelectedHealthRow {
   verdict: RepoVerdict | null;
   signals: { maintenance: number; security: number; activity: number } | null;
   status: SelectedHealthStatus;
+  // Postinstall analysis v0 — copied from the matching inventory record.
+  hasInstallScript?: boolean;
 }
 
 interface SelectedHealth {
@@ -948,6 +964,8 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
             + {row.secondaryReasons.map(r => REASON_LABEL[r] || r).join(' / ')}
           </span>
         )}
+        {/* Postinstall analysis v0 — same suppression rules as elsewhere. */}
+        <InstallScriptChip name={row.package} hasInstallScript={row.hasInstallScript} />
       </div>
 
       {/* Status zone -- separate row so the copy / chips never collide with
@@ -1012,6 +1030,26 @@ const SCOPE_LABEL: Record<InventoryScope, string> = {
 
 function severityRank(s: Severity): number {
   return SEVERITY_ORDER.indexOf(s);
+}
+
+// Postinstall analysis v0 — informational chip surfaced on inventory rows,
+// vuln rows, and v3b selected-health rows. Suppressed for curated trusted
+// packages (TypeScript, esbuild, sharp, husky, etc.). The chip never
+// contributes to the Risk Profile or composite score; it's a heads-up only.
+const INSTALL_SCRIPT_TOOLTIP =
+  'This package runs install scripts on `npm install` — install scripts can execute arbitrary code. Verify the package is trustworthy.';
+
+function InstallScriptChip({ name, hasInstallScript }: { name: string; hasInstallScript: boolean | undefined }) {
+  if (!hasInstallScript) return null;
+  if (isTrustedInstallScript(name)) return null;
+  return (
+    <span
+      title={INSTALL_SCRIPT_TOOLTIP}
+      className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-300 text-black"
+    >
+      ⚠ INSTALL SCRIPT
+    </span>
+  );
 }
 
 interface InventoryRowProps {
@@ -1084,6 +1122,9 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
             REPO UNRESOLVED
           </span>
         )}
+        {/* Postinstall analysis v0 — informational only; suppressed for
+            curated trusted packages (TypeScript, esbuild, sharp, etc.). */}
+        <InstallScriptChip name={pkg.name} hasInstallScript={pkg.hasInstallScript} />
       </div>
       {expanded && multi && (
         <div className="pb-3 pt-1 pl-2 border-t border-soy-bottle/10">
@@ -1160,10 +1201,12 @@ function VulnRow({ v }: { v: Vulnerability }) {
         </span>
       </div>
 
-      {/* CVE / GHSA IDs */}
-      {v.ids?.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {v.ids.map((id) => (
+      {/* CVE / GHSA IDs + postinstall chip. The chip lives next to the IDs
+          so the "vulnerable AND runs install scripts" combo is unmistakable.
+          Suppressed for curated trusted packages (TypeScript, sharp, …). */}
+      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package))) && (
+        <div className="flex flex-wrap gap-1.5 mb-3 items-center">
+          {(v.ids || []).map((id) => (
             <span
               key={id}
               className="bg-soy-label/40 text-soy-bottle px-2 py-0.5 text-[10px] font-mono font-bold border border-soy-bottle/30 break-all"
@@ -1171,6 +1214,7 @@ function VulnRow({ v }: { v: Vulnerability }) {
               {id}
             </span>
           ))}
+          <InstallScriptChip name={v.package} hasInstallScript={v.hasInstallScript} />
         </div>
       )}
 

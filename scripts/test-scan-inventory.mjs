@@ -675,6 +675,68 @@ packages:
   eq(findPkg(inv, 'tslib').scope, 'dev', 'tslib dev (transitive flag)');
 });
 
+// ---------------------------------------------------------------------------
+// Postinstall analysis v0 — hasInstallScript / installScriptCount on totals.
+// ---------------------------------------------------------------------------
+
+// install-1: npm v3 hasInstallScript flag flows through and totals add up.
+test('npm v3 hasInstallScript: flag flows, installScriptCount counts', () => {
+  const lock = JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+      '': {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { sharp: '^0.33', lodash: '^4' },
+      },
+      'node_modules/sharp': { version: '0.33.0', hasInstallScript: true, license: 'Apache-2.0' },
+      'node_modules/lodash': { version: '4.17.21', license: 'MIT' },
+    },
+  });
+  const inv = buildInventory(lock);
+  eq(findPkg(inv, 'sharp').hasInstallScript, true, 'sharp hasInstallScript');
+  eq(findPkg(inv, 'lodash').hasInstallScript, false, 'lodash hasInstallScript');
+  eq(inv.totals.installScriptCount, 1, 'installScriptCount = 1');
+});
+
+// install-2: pnpm requiresBuild flag captured + counted.
+test('pnpm requiresBuild: flag captured, installScriptCount counts', () => {
+  const lock = `
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      sharp: 0.33.0
+      lodash: 4.17.21
+
+packages:
+  /sharp@0.33.0:
+    resolution: {integrity: sha512-fake}
+    requiresBuild: true
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(findPkg(inv, 'sharp').hasInstallScript, true, 'sharp hasInstallScript via requiresBuild');
+  eq(findPkg(inv, 'lodash').hasInstallScript, false, 'lodash hasInstallScript');
+  eq(inv.totals.installScriptCount, 1, 'installScriptCount = 1');
+});
+
+// install-3: yarn-v1 and python lockfiles default to false (no flag exposed).
+test('yarn-v1 hasInstallScript always false (lockfile does not expose flag)', () => {
+  const lock = `# yarn lockfile v1
+
+
+lodash@^4:
+  version "4.17.21"
+  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz"
+`;
+  const inv = buildInventory(lock);
+  eq(findPkg(inv, 'lodash').hasInstallScript, false, 'yarn-v1 hasInstallScript false');
+  eq(inv.totals.installScriptCount, 0, 'yarn-v1 installScriptCount 0');
+});
+
 console.log('');
 console.log(`${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

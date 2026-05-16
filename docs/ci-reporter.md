@@ -146,6 +146,55 @@ Known limitations:
 - Fork-velocity (the third AI-swarm signal called out by Arjun + Elena)
   is deferred to v0.2.
 
+## Install script detection (postinstall analysis v0)
+
+npm `preinstall` / `install` / `postinstall` hooks execute arbitrary code
+on `npm install`. The famous supply-chain incidents — event-stream,
+ua-parser-js, colors.js, faker.js — all relied on install-hook execution
+to deliver their payload. Ignoring this signal entirely was a known gap.
+
+What we surface:
+
+- Every inventory row, vuln row, and v3b selected-health row gets a small
+  `⚠ INSTALL SCRIPT` chip when the lockfile flags the package as having
+  install scripts (npm: `hasInstallScript: true`; pnpm: `requiresBuild: true`).
+- The chip carries the tooltip: *"This package runs install scripts on
+  `npm install` — install scripts can execute arbitrary code. Verify the
+  package is trustworthy."*
+- `inventory.totals.installScriptCount` reports the count across the tree.
+
+What we suppress:
+
+- A curated allowlist (`src/data/trustedInstallScripts.js`, ~30 entries) of
+  packages where install scripts are expected and legitimate — TypeScript,
+  esbuild, sharp, node-sass, sass-embedded, bcrypt, argon2, better-sqlite3,
+  canvas, sqlite3, puppeteer, playwright, electron, cypress, husky,
+  simple-git-hooks, lefthook, core-js, fsevents, jest, vitest, rollup, etc.
+- Matching is case-insensitive and scope-aware (`@swc/core`, `@playwright/test`
+  match by their full names including the leading `@`).
+
+What this is **not**:
+
+- The chip is **informational only**. It does NOT contribute to the
+  Composite score, does NOT cap the verdict band, and does NOT raise the
+  Risk Profile dimension. Surfacing the signal honestly is the goal —
+  false-alarming on every node binding would teach users to ignore it.
+
+v0 scope and known caveats:
+
+- **npm v1/v2/v3 and pnpm only.** Both lockfile formats expose the flag
+  natively per package entry; we pass it through to the inventory and
+  carry it onto every vuln + selected-health row.
+- **yarn-v1 lockfiles do not expose the install-script flag.** We default
+  to `hasInstallScript: false` for yarn-v1 inventories. The chip never
+  appears for yarn projects, regardless of whether the underlying package
+  actually runs install scripts.
+- **Python lockfiles (uv.lock, poetry.lock) have no equivalent flag.**
+  The PyPI / wheel install model differs significantly from npm; build
+  scripts run differently and the lockfile doesn't capture the signal in
+  the same form. We default to false and surface no chip; this gap is
+  deferred to a future release that can re-analyze the ecosystem honestly.
+
 ## Dogfooded on OpenSoyce
 
 **Dogfooded:** 2026-05-14

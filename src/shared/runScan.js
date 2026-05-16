@@ -377,6 +377,23 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     inventoryError = 'INVENTORY_FAILED';
   }
 
+  // Postinstall analysis v0 — informational `hasInstallScript` flag flows
+  // from the inventory through to each vuln row so the UI can render the
+  // INSTALL SCRIPT chip without re-parsing the lockfile. Lookup by package
+  // name (case-sensitive — both maps come from the same lockfile pass).
+  // Defaults to false on packages absent from the inventory (e.g. when
+  // inventory build failed but vuln scan succeeded).
+  if (inventory && Array.isArray(inventory.packages) && Array.isArray(vulnerabilities)) {
+    const installScriptIndex = new Map();
+    for (const p of inventory.packages) {
+      if (p && p.name) installScriptIndex.set(p.name, p.hasInstallScript === true);
+    }
+    vulnerabilities = vulnerabilities.map(v => ({
+      ...v,
+      hasInstallScript: installScriptIndex.get(v.package) === true,
+    }));
+  }
+
   // Scanner v3b — selective dependency health scoring. Failure-isolated.
   let selectedHealth = null;
   let selectedHealthError = null;
@@ -397,6 +414,23 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   } catch {
     selectedHealth = null;
     selectedHealthError = 'SELECTED_HEALTH_FAILED';
+  }
+
+  // Postinstall analysis v0 — same lookup for v3b selected-health rows.
+  // We do this AFTER selectAndScoreHealth runs so the merge can't crash the
+  // pipeline if selectAndScoreHealth throws.
+  if (inventory && Array.isArray(inventory.packages) && selectedHealth && Array.isArray(selectedHealth.scored)) {
+    const installScriptIndex = new Map();
+    for (const p of inventory.packages) {
+      if (p && p.name) installScriptIndex.set(p.name, p.hasInstallScript === true);
+    }
+    selectedHealth = {
+      ...selectedHealth,
+      scored: selectedHealth.scored.map(r => ({
+        ...r,
+        hasInstallScript: installScriptIndex.get(r.package) === true,
+      })),
+    };
   }
 
   const payload = {

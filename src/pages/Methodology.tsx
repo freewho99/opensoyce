@@ -236,6 +236,12 @@ export default function Methodology() {
               body="When >85% of recent commits come from one contributor AND there are ≤2 non-bot contributors AND the last commit was >30 days ago, the verdict band caps from USE READY to FORKABLE. Composite score is unchanged — only the band label moves. Vendor-official SDKs (curated allowlist in src/data/vendorSdks.ts) are suppressed from this cap; a small in-house team maintaining the official OpenAI SDK is a different bus-factor story than a hobby project with one author. Bot detection is heuristic — we filter [bot] suffix, common logins (dependabot, renovate, github-actions, snyk-bot), and the GitHub type:Bot flag; some bot accounts will pass through as humans. The 85% / 2-contributor / 30-day thresholds are conservative — we prefer false-negatives (missing the cap) over false-positives."
               status="BY DESIGN · v0.1"
             />
+            <LimitationCard
+              tag="INSTALL SCRIPTS"
+              title="Postinstall script detection (informational only)"
+              body="npm preinstall / install / postinstall hooks run arbitrary code on `npm install` — the attack vector behind event-stream, ua-parser-js, colors.js, and faker.js. Inventory + vuln rows surface a ⚠ INSTALL SCRIPT chip when the lockfile flags `hasInstallScript: true` (npm v1/v2/v3) or `requiresBuild: true` (pnpm). A curated allowlist (src/data/trustedInstallScripts.js) suppresses the chip for ~30 packages where install scripts are expected and legitimate (TypeScript, esbuild, sharp, husky, electron, puppeteer, …). The chip is informational only — it does NOT contribute to the Risk Profile, does NOT band-cap the verdict, and does NOT change the composite score. Coverage gaps: yarn-v1 lockfiles don't expose the flag, and Python lockfiles (uv.lock, poetry.lock) have no equivalent — both are documented in docs/ci-reporter.md and reported as hasInstallScript: false."
+              status="BY DESIGN · v0"
+            />
           </div>
 
           <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">
