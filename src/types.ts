@@ -31,6 +31,21 @@ export type MaintenanceBreakdown = {
   triageDataAvailable: boolean;
 };
 
+export type MaintainerConcentration = {
+  topShare: number;                // 0..1
+  nonBotContributorCount: number;
+  lastCommitDate: string | null;
+  daysSinceLastCommit: number | null;
+  isSingleMaintainer: boolean;
+};
+
+export type VendorSdkMatch = {
+  owner: string;
+  repo: string;
+  vendor: string;
+  reason: string;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -49,6 +64,8 @@ export type Project = {
   lastCommit?: string;
   advisories?: AdvisorySummary | null;
   maintenanceBreakdown?: MaintenanceBreakdown | null;
+  maintainerConcentration?: MaintainerConcentration | null;
+  vendorSdk?: VendorSdkMatch | null;
   parentId?: string; // ID of the original project if this is a fork
   parentName?: string;
   parentOwner?: string;

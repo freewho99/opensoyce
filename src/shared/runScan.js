@@ -144,15 +144,24 @@ async function attachRepoHealthToVulnerabilities(vulns, getAnalysis, mapWithConc
       return;
     }
     const advisorySummary = (data.meta && data.meta.advisories) || null;
+    const maintainerConcentration = data.maintainerConcentration || null;
+    const vendorSdk = data.vendorSdk || null;
     v.repoHealth = {
       soyceScore: data.total,
-      verdict: verdictFor(data.total, { earlyBreakout: false, advisorySummary }),
+      verdict: verdictFor(data.total, {
+        earlyBreakout: false,
+        advisorySummary,
+        maintainerConcentration,
+        vendorSdkMatch: !!vendorSdk,
+      }),
       signals: {
         maintenance: data.breakdown.maintenance ?? 0,
         security: data.breakdown.security ?? 0,
         activity: data.breakdown.activity ?? 0,
       },
       advisorySummary,
+      maintainerConcentration,
+      vendorSdk,
     };
     v.repoHealthError = null;
   });
@@ -231,14 +240,23 @@ async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalys
       return row;
     }
     const advisorySummary = (v.analysis.meta && v.analysis.meta.advisories) || null;
+    const maintainerConcentration = v.analysis.maintainerConcentration || null;
+    const vendorSdk = v.analysis.vendorSdk || null;
     row.soyceScore = v.analysis.total;
-    row.verdict = verdictFor(v.analysis.total, { earlyBreakout: false, advisorySummary });
+    row.verdict = verdictFor(v.analysis.total, {
+      earlyBreakout: false,
+      advisorySummary,
+      maintainerConcentration,
+      vendorSdkMatch: !!vendorSdk,
+    });
     row.signals = {
       maintenance: v.analysis.breakdown.maintenance ?? 0,
       security: v.analysis.breakdown.security ?? 0,
       activity: v.analysis.breakdown.activity ?? 0,
     };
     row.advisorySummary = advisorySummary;
+    row.maintainerConcentration = maintainerConcentration;
+    row.vendorSdk = vendorSdk;
     row.status = 'SCORED';
     return row;
   });

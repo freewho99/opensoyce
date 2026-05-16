@@ -22,6 +22,8 @@
 
 import { calculateSoyceScore } from './scoreCalculator.js';
 import { findSecurityPolicy } from './securityPolicyResolver.js';
+import { computeMaintainerConcentration } from './maintainerConcentration.js';
+import { getVendorSdk } from '../data/vendorSdks.js';
 
 const GH = 'https://api.github.com';
 
@@ -68,8 +70,18 @@ export async function analyzeRepo(owner, repo, headers) {
   }
 
   const scoreResult = calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
+
+  // AI signals v0.1 — maintainer-concentration signal + vendor-SDK match.
+  // Pure computation over data we already fetched; no extra GitHub calls.
+  // Surfaced on the response so runScan, the Vercel function, and the UI all
+  // see the same signal without recomputing.
+  const maintainerConcentration = computeMaintainerConcentration(contributors, commits);
+  const vendorSdk = getVendorSdk(repoData.owner.login, repoData.name);
+
   return {
     ...scoreResult,
+    maintainerConcentration,
+    vendorSdk,
     repo: {
       id: repoData.id,
       name: repoData.name,

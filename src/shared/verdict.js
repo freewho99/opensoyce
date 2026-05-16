@@ -41,8 +41,32 @@
  * @property {number} [openCount]
  * @property {number} [recentOpen]
  *
+ * @typedef {object} MaintainerConcentrationLike
+ * @property {boolean} [isSingleMaintainer]
+ * @property {number}  [topShare]
+ * @property {number}  [nonBotContributorCount]
+ * @property {number | null} [daysSinceLastCommit]
+ *
+ * AI signals v0.1 — maintainer-concentration band-cap.
+ *
+ * Caps USE READY → FORKABLE (never below FORKABLE, never a promotion) when
+ * three structural bus-factor signals all fire: top-1 commit share > 85%,
+ * <= 2 non-bot contributors, AND > 30 days since last commit. The
+ * `vendorSdkMatch` flag suppresses the cap because vendor-official SDKs
+ * legitimately have small teams and quiet weeks (openai/openai-node is not
+ * the same bus-factor story as a one-author hobby project).
+ *
+ * Like the advisorySummary cap, this is strictly a CAP — composite math
+ * is untouched, only the band label moves. A 7.5 FORKABLE stays FORKABLE;
+ * a 5.5 WATCHLIST stays WATCHLIST.
+ *
  * @param {number} score
- * @param {{ earlyBreakout?: boolean, advisorySummary?: AdvisorySummaryLike | null }} [opts]
+ * @param {{
+ *   earlyBreakout?: boolean,
+ *   advisorySummary?: AdvisorySummaryLike | null,
+ *   maintainerConcentration?: MaintainerConcentrationLike | null,
+ *   vendorSdkMatch?: boolean,
+ * }} [opts]
  * @returns {SoyceVerdict}
  */
 export function verdictFor(score, opts = {}) {
@@ -55,6 +79,19 @@ export function verdictFor(score, opts = {}) {
     if (seriousOpen >= 3 && score >= 7.0) return 'WATCHLIST';
     // >=1 open serious → no USE READY; cap at FORKABLE.
     if (seriousOpen >= 1 && score >= 8.5) return 'FORKABLE';
+  }
+  // Maintainer-concentration cap (AI signals v0.1). Only fires on uncapped
+  // USE READY (score >= 8.5); vendor-SDK allowlist suppresses entirely.
+  if (opts && opts.maintainerConcentration && !opts.vendorSdkMatch) {
+    const mc = opts.maintainerConcentration;
+    if (
+      mc.isSingleMaintainer === true
+      && typeof mc.daysSinceLastCommit === 'number'
+      && mc.daysSinceLastCommit > 30
+      && score >= 8.5
+    ) {
+      return 'FORKABLE';
+    }
   }
   if (score >= 8.5) return 'USE READY';
   if (score >= 7.0) return 'FORKABLE';

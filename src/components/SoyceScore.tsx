@@ -14,6 +14,14 @@ export type AdvisorySummaryLike = {
   low?: number;
 };
 
+export type MaintainerConcentrationLike = {
+  topShare?: number;
+  nonBotContributorCount?: number;
+  lastCommitDate?: string | null;
+  daysSinceLastCommit?: number | null;
+  isSingleMaintainer?: boolean;
+};
+
 // Verdict bands were recalibrated in commit-after-13ec156 to match where
 // real projects land. The earlier bands (USE READY ≥ 9.0, FORKABLE ≥ 8.0,
 // WATCHLIST ≥ 7.0, RISKY ≥ 5.0) punished healthy stable libraries — winston
@@ -24,7 +32,12 @@ export type AdvisorySummaryLike = {
 // can reuse the same band logic without dragging React through the graph.
 export function verdictFor(
   score: number,
-  opts?: { earlyBreakout?: boolean; advisorySummary?: AdvisorySummaryLike | null },
+  opts?: {
+    earlyBreakout?: boolean;
+    advisorySummary?: AdvisorySummaryLike | null;
+    maintainerConcentration?: MaintainerConcentrationLike | null;
+    vendorSdkMatch?: boolean;
+  },
 ): SoyceVerdict {
   return sharedVerdictFor(score, opts) as SoyceVerdict;
 }
@@ -44,6 +57,16 @@ interface SoyceScoreProps {
    * next to 4 open HIGH/CRITICAL advisories.
    */
   advisorySummary?: AdvisorySummaryLike | null;
+  /**
+   * AI signals v0.1 — bus-factor cap. When the structural signals indicate a
+   * single-maintainer repo that has drifted (>30 days since last commit), the
+   * verdict band is capped from USE READY to FORKABLE. Composite score is
+   * untouched. Suppressed by `vendorSdkMatch` so vendor-official SDKs don't
+   * get punished for being maintained by small in-house teams.
+   */
+  maintainerConcentration?: MaintainerConcentrationLike | null;
+  /** When true, suppresses the maintainer-concentration cap. */
+  vendorSdkMatch?: boolean;
   className?: string;
 }
 
@@ -60,17 +83,26 @@ export default function SoyceScore({
   link = false,
   earlyBreakout = false,
   advisorySummary = null,
+  maintainerConcentration = null,
+  vendorSdkMatch = false,
   className = '',
 }: SoyceScoreProps) {
   const score = typeof value === 'number' && !Number.isNaN(value) ? value : 0;
-  const verdict = verdictFor(score, { earlyBreakout, advisorySummary });
+  const verdict = verdictFor(score, { earlyBreakout, advisorySummary, maintainerConcentration, vendorSdkMatch });
   // The band the score *would have* earned without the hidden-vulns cap.
   // Used purely to decide whether to show the explanation chip.
   const uncappedVerdict = verdictFor(score, { earlyBreakout });
   const seriousOpen = advisorySummary
     ? (advisorySummary.critical || 0) + (advisorySummary.high || 0)
     : 0;
-  const showAdvisoryChip = !!advisorySummary && seriousOpen >= 1 && verdict !== uncappedVerdict;
+  // The band the score earns when we strip ONLY the maintainer-concentration
+  // cap (advisory cap still applied). This lets us tell which cap fired when
+  // both could plausibly trigger.
+  const verdictWithoutMaintainerCap = verdictFor(score, { earlyBreakout, advisorySummary });
+  const showAdvisoryChip = !!advisorySummary && seriousOpen >= 1 && verdictWithoutMaintainerCap !== uncappedVerdict;
+  const maintainerCapFired = !vendorSdkMatch
+    && !!maintainerConcentration
+    && verdict !== verdictWithoutMaintainerCap;
   const s = SIZE_CLASSES[size];
 
   const inner = (
@@ -93,13 +125,34 @@ export default function SoyceScore({
           ⚠ {seriousOpen} OPEN HIGH/CRIT
         </span>
       )}
+      {maintainerCapFired && (
+        <span
+          className={`${s.chip} mt-1.5 font-black uppercase tracking-[0.15em] bg-black text-white px-2 py-0.5 border border-black`}
+          title={(() => {
+            const mc = maintainerConcentration!;
+            const sharePct = typeof mc.topShare === 'number' ? Math.round(mc.topShare * 100) : null;
+            const count = mc.nonBotContributorCount ?? null;
+            const days = mc.daysSinceLastCommit ?? null;
+            return `Band capped from ${verdictWithoutMaintainerCap} because this repo has ${sharePct != null ? sharePct + '%' : 'a high'} top-contributor commit share, ${count != null ? count : 'few'} non-bot contributor${count === 1 ? '' : 's'}, and ${days != null ? days : '30+'} days since last commit. Suppressed for vendor-official SDKs.`;
+          })()}
+        >
+          ⚠ SINGLE-MAINTAINER
+        </span>
+      )}
     </div>
   );
 
   if (link) {
-    const title = showAdvisoryChip
-      ? `Soyce Score ${score.toFixed(1)} / 10 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL ${seriousOpen === 1 ? 'advisory' : 'advisories'}). Click for methodology.`
-      : `Soyce Score ${score.toFixed(1)} / 10 — ${verdict}. Click for methodology.`;
+    let title: string;
+    if (showAdvisoryChip && maintainerCapFired) {
+      title = `Soyce Score ${score.toFixed(1)} / 10 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL + single-maintainer drift). Click for methodology.`;
+    } else if (showAdvisoryChip) {
+      title = `Soyce Score ${score.toFixed(1)} / 10 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL ${seriousOpen === 1 ? 'advisory' : 'advisories'}). Click for methodology.`;
+    } else if (maintainerCapFired) {
+      title = `Soyce Score ${score.toFixed(1)} / 10 — ${verdict} (capped from ${verdictWithoutMaintainerCap}; single-maintainer drift). Click for methodology.`;
+    } else {
+      title = `Soyce Score ${score.toFixed(1)} / 10 — ${verdict}. Click for methodology.`;
+    }
     return (
       <Link to="/methodology" title={title} className="hover:opacity-90 transition-opacity">
         {inner}

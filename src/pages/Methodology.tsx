@@ -230,6 +230,12 @@ export default function Methodology() {
               body="If a repo's composite score is high (≥7.0) but the repo has 3+ open HIGH/CRITICAL advisories on its own code, the verdict band is capped at WATCHLIST. This is intentional honesty (P0-AI-1) but it means a repo with strong maintenance + many self-disclosed CVEs may score lower in the band display than its raw composite would suggest."
               status="BY DESIGN · 8c0d6ab"
             />
+            <LimitationCard
+              tag="MAINTAINER CONCENTRATION"
+              title="Single-maintainer band-cap (AI signals v0.1)"
+              body="When >85% of recent commits come from one contributor AND there are ≤2 non-bot contributors AND the last commit was >30 days ago, the verdict band caps from USE READY to FORKABLE. Composite score is unchanged — only the band label moves. Vendor-official SDKs (curated allowlist in src/data/vendorSdks.ts) are suppressed from this cap; a small in-house team maintaining the official OpenAI SDK is a different bus-factor story than a hobby project with one author. Bot detection is heuristic — we filter [bot] suffix, common logins (dependabot, renovate, github-actions, snyk-bot), and the GitHub type:Bot flag; some bot accounts will pass through as humans. The 85% / 2-contributor / 30-day thresholds are conservative — we prefer false-negatives (missing the cap) over false-positives."
+              status="BY DESIGN · v0.1"
+            />
           </div>
 
           <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">

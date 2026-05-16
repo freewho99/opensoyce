@@ -100,6 +100,8 @@ export default function Lookup() {
         lastCommit: data.meta.lastCommit,
         advisories: data.meta.advisories ?? null,
         maintenanceBreakdown: data.meta.maintenanceBreakdown ?? null,
+        maintainerConcentration: data.maintainerConcentration ?? null,
+        vendorSdk: data.vendorSdk ?? null,
       });
       
       showToast('Analysis complete!');
@@ -245,7 +247,14 @@ export default function Lookup() {
                         </div>
                       </div>
                       <div className="shadow-[4px_4px_0px_#000]">
-                        <SoyceScore value={result.score.overall ?? 0} size="md" link advisorySummary={result.advisories ?? null} />
+                        <SoyceScore
+                          value={result.score.overall ?? 0}
+                          size="md"
+                          link
+                          advisorySummary={result.advisories ?? null}
+                          maintainerConcentration={result.maintainerConcentration ?? null}
+                          vendorSdkMatch={!!result.vendorSdk}
+                        />
                       </div>
                     </div>
 

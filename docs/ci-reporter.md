@@ -124,6 +124,28 @@ If OSV is unavailable, the report still renders — the Uncertainty section
 lists "OSV vulnerability data was unavailable for this scan." and the
 Vulnerability Exposure dimension goes to `UNKNOWN` (never `LOW`).
 
+## Maintainer-concentration band-cap (AI signals v0.1)
+
+When a repo's recent commits are dominated by a single contributor (>85%
+share) AND there are 2 or fewer non-bot contributors AND the last commit
+was >30 days ago, the verdict band caps from USE READY to FORKABLE. The
+composite score is unchanged — only the band label is more conservative.
+
+Vendor-official SDKs (curated in `src/data/vendorSdks.ts`) are suppressed
+from this cap. A small team maintaining the official OpenAI SDK is a
+different shape of risk than a hobby project with one author.
+
+Known limitations:
+
+- Bot detection is heuristic. We filter `[bot]` suffix, common bot logins
+  (dependabot, renovate, github-actions, snyk-bot, mergify, codecov),
+  and the GitHub `type: Bot` flag. Some bot accounts pass through as
+  humans; a few human accounts with `-bot` in the login get filtered.
+- The 85% / 2-contributor / 30-day thresholds are conservative; we prefer
+  false-negatives (missing the cap) over false-positives.
+- Fork-velocity (the third AI-swarm signal called out by Arjun + Elena)
+  is deferred to v0.2.
+
 ## Dogfooded on OpenSoyce
 
 **Dogfooded:** 2026-05-14

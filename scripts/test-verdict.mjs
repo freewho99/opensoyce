@@ -190,6 +190,108 @@ test('verdictFor(8.0, { earlyBreakout: true }) editorial path still works', () =
   eq(verdictFor(6.5, { earlyBreakout: true }), 'HIGH MOMENTUM', 'editorial allowlist callers still earn the band');
 });
 
+// --- Maintainer-concentration cap (AI signals v0.1) -------------------
+// USE READY (>=8.5) + single-maintainer + >30 days since commit → FORKABLE.
+// Vendor-SDK match suppresses entirely. Cap is never a promotion: a sub-8.5
+// score with the same signals stays in whatever band the score earned.
+test('verdictFor(9.5, single-maintainer, 45d drift) → FORKABLE (cap fires)', () => {
+  eq(
+    verdictFor(9.5, { maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 45 } }),
+    'FORKABLE',
+    'USE READY -> FORKABLE cap',
+  );
+});
+test('verdictFor(9.5, single-maintainer, 45d drift, vendorSdkMatch) → USE READY (vendor suppresses)', () => {
+  eq(
+    verdictFor(9.5, {
+      maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 45 },
+      vendorSdkMatch: true,
+    }),
+    'USE READY',
+    'vendor SDK allowlist suppresses cap',
+  );
+});
+test('verdictFor(9.5, single-maintainer, 10d drift) → USE READY (recent commit, no cap)', () => {
+  eq(
+    verdictFor(9.5, { maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 10 } }),
+    'USE READY',
+    '<=30 days never trips the cap',
+  );
+});
+test('verdictFor(9.5, NOT single-maintainer, 200d drift) → USE READY', () => {
+  eq(
+    verdictFor(9.5, { maintainerConcentration: { isSingleMaintainer: false, daysSinceLastCommit: 200 } }),
+    'USE READY',
+    'isSingleMaintainer:false short-circuits',
+  );
+});
+test('verdictFor(7.5, single-maintainer, 200d) → FORKABLE (already FORKABLE, cap is no-op)', () => {
+  // The cap only fires when uncapped band is USE READY (score >= 8.5). A repo
+  // sitting at 7.5 is already FORKABLE; the cap pins this — cap never drops
+  // FORKABLE to a lower band.
+  eq(
+    verdictFor(7.5, { maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 200 } }),
+    'FORKABLE',
+    'cap never goes below FORKABLE',
+  );
+});
+test('verdictFor(5.5, single-maintainer, 200d) → WATCHLIST (cap is no-op below 8.5)', () => {
+  // 5.5 is in the WATCHLIST band (>=4.0 < 6.0 after Maya's tightening).
+  // Cap path requires score >= 8.5; this confirms low scores are untouched.
+  eq(
+    verdictFor(5.5, { maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 200 } }),
+    'WATCHLIST',
+    'maintainer cap requires score >= 8.5',
+  );
+});
+test('cap stacking — advisorySummary cap + maintainer cap both fire → take the lower band', () => {
+  // 9.5 + 4 open serious advisories alone would cap to WATCHLIST. Adding
+  // maintainer-concentration on top must not promote it back up.
+  eq(
+    verdictFor(9.5, {
+      advisorySummary: { critical: 1, high: 3 },
+      maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 200 },
+    }),
+    'WATCHLIST',
+    'advisory cap (WATCHLIST) is lower; combined result keeps it',
+  );
+});
+test('cap stacking — single open serious advisory + maintainer drift → FORKABLE (both caps converge)', () => {
+  // Either cap alone would land at FORKABLE; combined behavior is the same.
+  eq(
+    verdictFor(9.5, {
+      advisorySummary: { critical: 0, high: 1 },
+      maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 200 },
+    }),
+    'FORKABLE',
+    'both caps land at FORKABLE',
+  );
+});
+test('maintainer cap is a CAP, never a PROMOTION — verdictFor(3.0, single-maintainer, drift) === RISKY', () => {
+  // Defense-in-depth check: structurally bad repo at score 3.0 must stay RISKY
+  // (>=2.5 < 4.0) regardless of any maintainerConcentration signal.
+  eq(
+    verdictFor(3.0, { maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: 500 } }),
+    'RISKY',
+    'maintainer cap does not promote low scores',
+  );
+});
+test('verdictFor(9.5, single-maintainer, daysSinceLastCommit:null) → USE READY (null = unknown, no cap)', () => {
+  // Defensive: null daysSinceLastCommit means we couldn't tell; do not cap.
+  eq(
+    verdictFor(9.5, { maintainerConcentration: { isSingleMaintainer: true, daysSinceLastCommit: null } }),
+    'USE READY',
+    'unknown commit age does not trip the cap',
+  );
+});
+test('verdictFor(9.5, maintainerConcentration:null) → USE READY (no cap)', () => {
+  eq(
+    verdictFor(9.5, { maintainerConcentration: null }),
+    'USE READY',
+    'null maintainerConcentration is a no-op',
+  );
+});
+
 console.log('');
 console.log(`Verdict tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -8,6 +8,8 @@ import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
 import { isValidGithubName } from "./src/shared/validateRepo.js";
 import { resolveDepIdentity } from "./src/shared/resolveDepIdentity.js";
 import { runScan, mapWithConcurrency } from "./src/shared/runScan.js";
+import { computeMaintainerConcentration } from "./src/shared/maintainerConcentration.js";
+import { getVendorSdk } from "./src/data/vendorSdks.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -93,8 +95,15 @@ async function startServer() {
     }
 
     const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || [], readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
+    // AI signals v0.1 — surface the same maintainer-concentration + vendor-SDK
+    // fields the Vercel function (analyzeRepo.js) returns, so /api/analyze in
+    // dev (Express) matches the deployed shape.
+    const maintainerConcentration = computeMaintainerConcentration(contributors || [], commits || []);
+    const vendorSdk = getVendorSdk(repoData.owner.login, repoData.name);
     const data = {
       ...scoreResult,
+      maintainerConcentration,
+      vendorSdk,
       repo: {
         name: repoData.name,
         description: repoData.description,
