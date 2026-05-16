@@ -10,9 +10,12 @@
  */
 import {
   resolveDepIdentity,
+  resolvePypiIdentity,
   parseRepositoryField,
   extractGithubFromUrl,
   fetchGithubPackageJson,
+  fetchGithubPyProjectToml,
+  __internal as resolverInternal,
 } from '../src/shared/resolveDepIdentity.js';
 
 let pass = 0;
@@ -374,6 +377,186 @@ async function run() {
       directory: 'types/react',
     }),
   );
+
+  // -------------------------------------------------------------------------
+  // PyPI resolver (v0 — Python lockfile support)
+  // -------------------------------------------------------------------------
+
+  /** Build a stub PyPI fetchImpl. Pass `{ status: 404 }` to simulate a missing package. */
+  function stubPypiFetch(doc, { status = 200 } = {}) {
+    return async () => ({
+      ok: status >= 200 && status < 300,
+      status,
+      async json() { return doc; },
+      async text() { return JSON.stringify(doc); },
+    });
+  }
+
+  /** Build a deps.fetchGithubPyProjectToml stub. */
+  function stubPyProjectToml(map) {
+    return async (owner, repo) => {
+      const key = `${owner}/${repo}`;
+      const v = map[key];
+      if (v === undefined) return null;
+      if (v === '404') return { __missing: true };
+      if (v === 'error') return null;
+      return v;
+    };
+  }
+
+  console.log('\n[PyPI-1] langchain happy path: pyproject.toml name matches (HIGH + verified true)');
+  {
+    const r = await resolvePypiIdentity('langchain', {
+      cache: new Map(),
+      fetchImpl: stubPypiFetch({
+        info: {
+          name: 'langchain',
+          project_urls: {
+            Repository: 'https://github.com/langchain-ai/langchain',
+            Homepage: 'https://www.langchain.com',
+          },
+        },
+      }),
+      deps: { fetchGithubPyProjectToml: stubPyProjectToml({ 'langchain-ai/langchain': { name: 'langchain' } }) },
+    });
+    check('pypi-1: resolvedRepo', r.resolvedRepo === 'langchain-ai/langchain', r);
+    check('pypi-1: confidence HIGH', r.confidence === 'HIGH', r);
+    check('pypi-1: source pypi.project_urls.repository', r.source === 'pypi.project_urls.repository', r);
+    check('pypi-1: verified true', r.verified === true, r);
+  }
+
+  console.log('\n[PyPI-2] BORROWED TRUST: PyPI project_urls.Repository points at unrelated repo');
+  {
+    const r = await resolvePypiIdentity('langchain-evil', {
+      cache: new Map(),
+      fetchImpl: stubPypiFetch({
+        info: {
+          name: 'langchain-evil',
+          project_urls: { Repository: 'https://github.com/langchain-ai/langchain' },
+        },
+      }),
+      deps: { fetchGithubPyProjectToml: stubPyProjectToml({ 'langchain-ai/langchain': { name: 'langchain' } }) },
+    });
+    check('pypi-2: verified false', r.verified === false, r);
+    check('pypi-2: confidence downgraded MEDIUM', r.confidence === 'MEDIUM', r);
+    check('pypi-2: mismatchReason set', r.mismatchReason === 'github_pyproject_name_different', r);
+    check('pypi-2: resolvedRepo preserved', r.resolvedRepo === 'langchain-ai/langchain', r);
+    check('pypi-2: meta.githubPkgName surfaced', r.meta && r.meta.githubPkgName === 'langchain', r);
+  }
+
+  console.log('\n[PyPI-3] pyproject.toml fetch 404: HIGH preserved, verified unverified');
+  {
+    const r = await resolvePypiIdentity('legacy-setup-py', {
+      cache: new Map(),
+      fetchImpl: stubPypiFetch({
+        info: {
+          name: 'legacy-setup-py',
+          project_urls: { Repository: 'https://github.com/some-owner/some-repo' },
+        },
+      }),
+      deps: { fetchGithubPyProjectToml: stubPyProjectToml({ 'some-owner/some-repo': '404' }) },
+    });
+    check('pypi-3: HIGH preserved', r.confidence === 'HIGH', r);
+    check('pypi-3: verified unverified (legacy setup.py is normal)', r.verified === 'unverified', r);
+    check('pypi-3: no mismatchReason', r.mismatchReason === undefined, r);
+  }
+
+  console.log('\n[PyPI-4] PyPI 404 for unknown package: NONE');
+  {
+    const r = await resolvePypiIdentity('this-pkg-does-not-exist', {
+      cache: new Map(),
+      fetchImpl: stubPypiFetch({}, { status: 404 }),
+      deps: { fetchGithubPyProjectToml: stubPyProjectToml({}) },
+    });
+    check('pypi-4: confidence NONE', r.confidence === 'NONE', r);
+    check('pypi-4: resolvedRepo null', r.resolvedRepo === null, r);
+    check('pypi-4: source null', r.source === null, r);
+  }
+
+  console.log('\n[PyPI-5] homepage-only fallback: MEDIUM + verified unverified (no cross-check)');
+  {
+    let ghCalls = 0;
+    const r = await resolvePypiIdentity('homepage-only-py', {
+      cache: new Map(),
+      fetchImpl: stubPypiFetch({
+        info: {
+          name: 'homepage-only-py',
+          home_page: 'https://github.com/some-owner/some-repo',
+          project_urls: {},
+        },
+      }),
+      deps: {
+        fetchGithubPyProjectToml: async () => { ghCalls += 1; return { name: 'whatever' }; },
+      },
+    });
+    check('pypi-5: confidence MEDIUM', r.confidence === 'MEDIUM', r);
+    check('pypi-5: source pypi.homepage', r.source === 'pypi.homepage', r);
+    check('pypi-5: verified unverified', r.verified === 'unverified', r);
+    check('pypi-5: no github budget spent', ghCalls === 0, { ghCalls });
+  }
+
+  console.log('\n[PyPI-6] PEP 503 name normalization: python-dateutil matches python_dateutil');
+  {
+    const r = await resolvePypiIdentity('python-dateutil', {
+      cache: new Map(),
+      fetchImpl: stubPypiFetch({
+        info: {
+          name: 'python-dateutil',
+          project_urls: { Repository: 'https://github.com/dateutil/dateutil' },
+        },
+      }),
+      // GitHub repo's pyproject.toml uses the underscore form.
+      deps: { fetchGithubPyProjectToml: stubPyProjectToml({ 'dateutil/dateutil': { name: 'python_dateutil' } }) },
+    });
+    check('pypi-6: verified true (normalization handles _ vs -)', r.verified === true, r);
+    check('pypi-6: HIGH preserved', r.confidence === 'HIGH', r);
+  }
+
+  console.log('\n[PyPI-7] fetchGithubPyProjectToml helper unit checks');
+  {
+    // 404 path → __missing
+    const m1 = await fetchGithubPyProjectToml('a', 'b', {
+      cache: new Map(),
+      fetchImpl: async () => ({ ok: false, status: 404, async text() { return ''; } }),
+    });
+    check('helper-py 404 returns __missing', m1 && m1.__missing === true, m1);
+
+    // success path: extracts [project].name
+    const tomlBody = `
+[build-system]
+requires = ["setuptools"]
+
+[project]
+name = "thing"
+version = "1.0.0"
+`.trimStart();
+    const m2 = await fetchGithubPyProjectToml('a', 'b', {
+      cache: new Map(),
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async text() { return tomlBody; },
+      }),
+    });
+    check('helper-py extracts [project].name', m2 && m2.name === 'thing', m2);
+
+    // No [project] section → name null
+    const m3 = await fetchGithubPyProjectToml('a', 'b', {
+      cache: new Map(),
+      fetchImpl: async () => ({
+        ok: true, status: 200,
+        async text() { return '[tool.poetry]\nname = "legacy"\n'; },
+      }),
+    });
+    check('helper-py missing [project] returns name null', m3 && m3.name === null, m3);
+
+    // Network failure → null
+    const m4 = await fetchGithubPyProjectToml('a', 'b', {
+      cache: new Map(),
+      fetchImpl: async () => { throw new Error('boom'); },
+    });
+    check('helper-py swallows fetch errors', m4 === null, m4);
+  }
 
   console.log(`\nResults: ${pass} pass, ${fail} fail`);
   process.exit(fail === 0 ? 0 : 1);

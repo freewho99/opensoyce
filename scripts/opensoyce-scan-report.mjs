@@ -30,7 +30,7 @@ import { resolve as pathResolve } from 'node:path';
 import process from 'node:process';
 
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
-import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
+import { resolveDepIdentity, resolvePypiIdentity } from '../src/shared/resolveDepIdentity.js';
 import { runScan, mapWithConcurrency } from '../src/shared/runScan.js';
 import { summarizeScan } from '../src/shared/scanSummary.js';
 import { computeRiskProfile } from '../src/shared/riskProfile.js';
@@ -211,14 +211,31 @@ async function main(argv) {
   progress(args.quiet, 'Parsing lockfile...');
   progress(args.quiet, 'Querying OSV...');
 
+  // Resolver dispatch: runScan now passes `{ ecosystem }` in opts. Route
+  // npm packages through the npm registry resolver and PyPI packages through
+  // the PyPI JSON resolver. Both share the same return shape so the
+  // downstream code (repo-health attach, selected-health scoring) is
+  // ecosystem-agnostic.
+  const resolveIdentity = (name, opts) => {
+    const o = opts || {};
+    if (o.ecosystem === 'PyPI') return resolvePypiIdentity(name, o);
+    return resolveDepIdentity(name, o);
+  };
+
+  // Filename hint for parser format detection. We pass through the basename
+  // of the input path so future per-format dispatch can pick it up; today
+  // runScan still auto-detects by content. Common Python lockfile names:
+  // `uv.lock`, `poetry.lock`. Common npm: `package-lock.json`.
+  const filename = args.positionals[0].split(/[\\/]/).pop() || 'package-lock.json';
+
   let scanResult;
   try {
     scanResult = await runScan({
       lockfileText,
-      filename: 'package-lock.json',
+      filename,
       deps: {
         getAnalysis,
-        resolveIdentity: (name, opts) => resolveDepIdentity(name, opts || {}),
+        resolveIdentity,
         mapWithConcurrency,
       },
     });

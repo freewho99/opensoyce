@@ -12,12 +12,36 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const defaultCache = new Map();    // `${name}@${version}` -> {result, expiresAt}
 const vulnDetailCache = new Map(); // vuln id -> {data, expiresAt}
 
-/** @returns {'npm-v1'|'npm-v2'|'npm-v3'|'yarn-v1'|'yarn-v2'|'package-json'|'unknown'} */
+/** @returns {'npm-v1'|'npm-v2'|'npm-v3'|'yarn-v1'|'yarn-v2'|'package-json'|'uv-lock'|'poetry-lock'|'unknown'} */
 export function detectLockfileFormat(text) {
   if (typeof text !== 'string' || !text.trim()) return 'unknown';
   const t = text.trimStart();
   if (t.startsWith('# yarn lockfile v1')) return 'yarn-v1';
   if (t.includes('__metadata:')) return 'yarn-v2';
+  // Python lockfiles (TOML). Detect via the comment banner Poetry emits, and
+  // via uv's distinctive top-level `version = N` + `requires-python` keys.
+  // Both formats use [[package]] arrays so we can't disambiguate on that alone.
+  // Order: poetry banner first (most specific), then uv heuristic, then a
+  // generic [[package]]+[metadata] fall-through that we treat as poetry-lock
+  // (the conservative default — poetry is the older / broader format).
+  if (/^#\s*This file (is @generated|was generated) (by|automatically by) [Pp]oetry/m.test(t)) {
+    return 'poetry-lock';
+  }
+  if (/^#\s*This file (is @generated|was generated) (by|automatically by) uv/m.test(t)) {
+    return 'uv-lock';
+  }
+  // Content-based fall-through (no banner). uv.lock has `requires-python` at
+  // the top level alongside `version = N`; poetry.lock has `lock-version` in
+  // its `[metadata]` table.
+  const looksToml = /^\s*\[\[package\]\]\s*$/m.test(t);
+  if (looksToml) {
+    if (/^\s*requires-python\s*=/m.test(t) && /^\s*version\s*=\s*\d+\s*$/m.test(t)) {
+      return 'uv-lock';
+    }
+    if (/^\s*\[metadata\]\s*$/m.test(t) && /^\s*lock-version\s*=/m.test(t)) {
+      return 'poetry-lock';
+    }
+  }
   if (!t.startsWith('{')) return 'unknown';
   let obj;
   try { obj = JSON.parse(t); } catch { return 'unknown'; }
@@ -30,7 +54,260 @@ export function detectLockfileFormat(text) {
   return 'unknown';
 }
 
+/**
+ * Map a detected lockfile format to its OSV ecosystem name. Single source of
+ * truth so runScan + identity resolver dispatch + downstream filters all
+ * agree. Returns 'unknown' for unparseable inputs so callers can decide
+ * whether to query OSV at all.
+ * @param {string} format
+ * @returns {'npm'|'PyPI'|'unknown'}
+ */
+export function ecosystemForFormat(format) {
+  if (format === 'npm-v1' || format === 'npm-v2' || format === 'npm-v3'
+      || format === 'yarn-v1' || format === 'yarn-v2') {
+    return 'npm';
+  }
+  if (format === 'uv-lock' || format === 'poetry-lock') return 'PyPI';
+  return 'unknown';
+}
+
+/**
+ * Regex-based extractor for Python TOML lockfile [[package]] arrays.
+ *
+ * We deliberately do NOT pull in a full TOML library — uv.lock and
+ * poetry.lock use a tiny, well-bounded subset of TOML and a regex pass is
+ * deterministic, dependency-free, and easy to audit. The extractor only
+ * understands what these two files actually emit:
+ *
+ *   [[package]]
+ *   name = "pkg"
+ *   version = "1.2.3"
+ *   optional = true
+ *   category = "dev"          # legacy poetry
+ *   source = { registry = "https://pypi.org/simple" }
+ *
+ * Inline tables (`source = { ... }`) are read as a single line — neither
+ * lockfile generator multi-lines them in practice. Nested keys other than
+ * source.* are ignored; callers only need name/version/optional/category/
+ * source to build the inventory.
+ *
+ * @param {string} text
+ * @returns {Array<{
+ *   name: string|null,
+ *   version: string|null,
+ *   optional: boolean,
+ *   category: string|null,
+ *   source: { registry?: string, path?: string, git?: string, url?: string }|null,
+ * }>}
+ */
+function extractPythonPackageBlocks(text) {
+  /** @type {Array<any>} */
+  const blocks = [];
+  // Split the file into [[package]] sections. Each section ends at the next
+  // top-level `[[...]]` or `[...]` header (with no leading whitespace) — the
+  // [[package]] header itself sits at column 0 in both formats.
+  const lines = text.split(/\r?\n/);
+  let inPkg = false;
+  /** @type {any} */
+  let current = null;
+  function flush() {
+    if (current) blocks.push(current);
+    current = null;
+  }
+  function makeBlock() {
+    return { name: null, version: null, optional: false, category: null, source: null };
+  }
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const line = raw.replace(/\s+$/, '');
+    if (line.startsWith('[[')) {
+      flush();
+      inPkg = /^\[\[package\]\]\s*$/.test(line);
+      if (inPkg) current = makeBlock();
+      continue;
+    }
+    if (line.startsWith('[')) {
+      // A new top-level table ends the current [[package]] block.
+      flush();
+      inPkg = false;
+      continue;
+    }
+    if (!inPkg || !current) continue;
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    // Match `key = value` at the start of the line. Whitespace around `=`.
+    const m = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
+    if (!m) continue;
+    const key = m[1];
+    const rawVal = m[2];
+    if (key === 'name') current.name = unquoteToml(rawVal);
+    else if (key === 'version') current.version = unquoteToml(rawVal);
+    else if (key === 'optional') current.optional = /^true\b/i.test(rawVal.trim());
+    else if (key === 'category') current.category = unquoteToml(rawVal);
+    else if (key === 'source') current.source = parseInlineSourceTable(rawVal);
+  }
+  flush();
+  return blocks;
+}
+
+/** Strip surrounding quotes from a TOML scalar (string or unquoted literal). */
+function unquoteToml(v) {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith('\'') && s.endsWith('\''))) {
+    return s.slice(1, -1);
+  }
+  // Arrays / inline tables / numbers fall through — caller decides what to do.
+  return s;
+}
+
+/**
+ * Parse a `source = { registry = "...", path = "...", git = "..." }` inline
+ * table into a flat object. Unknown keys are ignored. Returns null if the
+ * value isn't an inline table.
+ */
+function parseInlineSourceTable(rawVal) {
+  const trimmed = rawVal.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+  const body = trimmed.slice(1, -1);
+  /** @type {Record<string,string>} */
+  const out = {};
+  // Split on commas that are NOT inside quotes. Inline-table values are
+  // simple key="quoted-string" pairs in practice for both lockfiles.
+  const parts = body.match(/(?:[^,"']|"[^"]*"|'[^']*')+/g) || [];
+  for (const part of parts) {
+    const m = /^\s*([A-Za-z0-9_-]+)\s*=\s*(.+?)\s*$/.exec(part);
+    if (!m) continue;
+    const key = m[1];
+    const val = unquoteToml(m[2]);
+    if (val != null) out[key] = val;
+  }
+  return out;
+}
+
+/**
+ * Find names listed under the uv.lock root [manifest] section's
+ * `dependencies = [ ... ]` array. Returns null if no manifest is present
+ * (uv may omit it for single-project lockfiles emitted in workspace mode).
+ *
+ * uv.lock's manifest looks like:
+ *   [manifest]
+ *   members = ["myproject"]
+ *
+ *   [[manifest.dependency]]
+ *   name = "requests"
+ *
+ *   [[manifest.dependency]]
+ *   name = "langchain"
+ *
+ * Older uv.lock layouts use an inline `dependencies = ["requests", "langchain"]`
+ * under [manifest]. Handle both.
+ *
+ * @param {string} text
+ * @returns {Set<string>|null}
+ */
+function extractUvDirectSet(text) {
+  const out = new Set();
+  let found = false;
+  const lines = text.split(/\r?\n/);
+  let section = null;
+  let inManifestDepBlock = false;
+  let pendingDepName = null;
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    if (/^\[\[manifest\.dependency\]\]\s*$/.test(line)) {
+      found = true;
+      if (pendingDepName) out.add(pendingDepName);
+      pendingDepName = null;
+      inManifestDepBlock = true;
+      section = '[[manifest.dependency]]';
+      continue;
+    }
+    if (/^\[\[/.test(line) || /^\[/.test(line)) {
+      if (pendingDepName) out.add(pendingDepName);
+      pendingDepName = null;
+      inManifestDepBlock = false;
+      section = line;
+      if (/^\[manifest\]\s*$/.test(line)) found = true;
+      continue;
+    }
+    if (inManifestDepBlock) {
+      const m = /^name\s*=\s*(.+)$/.exec(line);
+      if (m) pendingDepName = unquoteToml(m[1]);
+      continue;
+    }
+    // Inline `dependencies = ["a", "b"]` under [manifest].
+    if (section && /^\[manifest\]/.test(section)) {
+      const m = /^dependencies\s*=\s*\[(.+)\]\s*$/.exec(line);
+      if (m) {
+        found = true;
+        const parts = m[1].split(',').map(s => unquoteToml(s.trim())).filter(Boolean);
+        for (const name of parts) out.add(name);
+      }
+    }
+  }
+  if (pendingDepName) out.add(pendingDepName);
+  return found ? out : null;
+}
+
 function tagged(code) { const e = new Error(code); e.code = code; return e; }
+
+/**
+ * Parse any supported lockfile (npm or Python) into the same shape. Dispatches
+ * on the detected format. Returns the same `{ ecosystem, direct, all }` shape
+ * regardless of input — the only difference is `ecosystem` ('npm' or 'PyPI'),
+ * which downstream uses for OSV queries and resolver dispatch.
+ *
+ * @param {string} text
+ * @returns {{ ecosystem:'npm'|'PyPI', direct:string[], all:Array<{name:string,version:string}> }}
+ */
+export function parseLockfile(text) {
+  const fmt = detectLockfileFormat(text);
+  if (fmt === 'uv-lock' || fmt === 'poetry-lock') {
+    return parsePythonLockfile(text, fmt);
+  }
+  return parseNpmLockfile(text);
+}
+
+/**
+ * Parse a Python lockfile (uv.lock or poetry.lock) into the unified shape.
+ * Pure: extracts [[package]] blocks via regex, dedupes by name (first-seen
+ * version wins, matching npm parser semantics).
+ *
+ * Direct detection: uv.lock carries a [[manifest.dependency]] list of top-
+ * level deps; we use it when present. poetry.lock has no native
+ * direct-vs-transitive marker without a companion pyproject.toml — every
+ * package is reported as transitive (honest fallback; the inventory builder
+ * separately sets `directUnknown: true` so the UI/Risk Profile can surface
+ * the caveat).
+ *
+ * @param {string} text
+ * @param {'uv-lock'|'poetry-lock'} format
+ * @returns {{ ecosystem:'PyPI', direct:string[], all:Array<{name:string,version:string}> }}
+ */
+export function parsePythonLockfile(text, format) {
+  if (format !== 'uv-lock' && format !== 'poetry-lock') {
+    throw tagged('UNPARSEABLE_LOCKFILE');
+  }
+  const blocks = extractPythonPackageBlocks(text);
+  /** @type {Map<string,string>} */
+  const all = new Map();
+  for (const b of blocks) {
+    if (!b.name || !b.version) continue;
+    if (!all.has(b.name)) all.set(b.name, b.version);
+  }
+  let direct = [];
+  if (format === 'uv-lock') {
+    const directSet = extractUvDirectSet(text);
+    if (directSet) direct = [...directSet].filter(n => all.has(n)).sort();
+  }
+  // poetry-lock: direct stays empty (honest unknown).
+  return {
+    ecosystem: 'PyPI',
+    direct,
+    all: [...all.entries()].map(([name, version]) => ({ name, version })),
+  };
+}
 
 /**
  * Parse an npm package-lock.json (v1/v2/v3) into a flat package list.
@@ -88,21 +365,30 @@ function walkV1Deps(deps, all, direct, topLevel) {
 /**
  * Query OSV in batches and return per-package vulnerability summaries.
  * Omits non-vulnerable packages from the result.
+ *
+ * The ecosystem is supplied per scan (single scan = single ecosystem) and
+ * threaded into every OSV `package` query plus the affected-range filter
+ * used when extracting the fixedIn version. The cache key includes the
+ * ecosystem so a 'PyPI' lookup of `requests@2.0.0` cannot bleed into a
+ * later 'npm' lookup of a same-named package (theoretical, but the cost
+ * of guarding is zero).
+ *
  * @param {Array<{name:string,version:string}>} packages
  * @param {typeof fetch=} fetchImpl
- * @param {{cache?:Map<string,{result:any[],expiresAt:number}>}=} opts
+ * @param {{cache?:Map<string,{result:any[],expiresAt:number}>, ecosystem?:'npm'|'PyPI'}=} opts
  */
 export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
   const fetchFn = fetchImpl || globalThis.fetch;
   if (typeof fetchFn !== 'function') throw new Error('NO_FETCH_AVAILABLE');
   const cache = opts.cache || defaultCache;
+  const ecosystem = opts.ecosystem || 'npm';
   const now = Date.now();
 
   const pending = [];
   const cachedResults = [];
   for (const p of packages) {
     if (!p || !p.name || !p.version) continue;
-    const key = `${p.name}@${p.version}`;
+    const key = `${ecosystem}:${p.name}@${p.version}`;
     const hit = cache.get(key);
     if (hit && hit.expiresAt > now) cachedResults.push(...hit.result);
     else pending.push(p);
@@ -115,7 +401,7 @@ export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        queries: chunk.map(p => ({ package: { name: p.name, ecosystem: 'npm' }, version: p.version })),
+        queries: chunk.map(p => ({ package: { name: p.name, ecosystem }, version: p.version })),
       }),
     });
     if (!res.ok) throw new Error(`OSV_BATCH_${res.status}`);
@@ -123,7 +409,7 @@ export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
     const results = Array.isArray(data.results) ? data.results : [];
     chunk.forEach((p, idx) => {
       const vulns = results[idx] && Array.isArray(results[idx].vulns) ? results[idx].vulns : [];
-      idsByKey.set(`${p.name}@${p.version}`, vulns.map(v => v.id).filter(Boolean));
+      idsByKey.set(`${ecosystem}:${p.name}@${p.version}`, vulns.map(v => v.id).filter(Boolean));
     });
   }
 
@@ -133,9 +419,9 @@ export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
 
   const out = [...cachedResults];
   for (const p of pending) {
-    const key = `${p.name}@${p.version}`;
+    const key = `${ecosystem}:${p.name}@${p.version}`;
     const ids = idsByKey.get(key) || [];
-    const pkgResults = ids.length ? [mergeVulnRecords(p, ids, details)] : [];
+    const pkgResults = ids.length ? [mergeVulnRecords(p, ids, details, ecosystem)] : [];
     cache.set(key, { result: pkgResults, expiresAt: now + CACHE_TTL_MS });
     out.push(...pkgResults);
   }
@@ -169,7 +455,7 @@ async function fetchVulnDetails(ids, fetchFn) {
   return map;
 }
 
-function mergeVulnRecords(pkg, ids, details) {
+function mergeVulnRecords(pkg, ids, details, ecosystem) {
   const severities = [];
   const aliasIds = new Set(ids);
   let summary = '';
@@ -180,7 +466,7 @@ function mergeVulnRecords(pkg, ids, details) {
     if (!summary && typeof d.summary === 'string') summary = d.summary;
     if (Array.isArray(d.aliases)) for (const a of d.aliases) aliasIds.add(a);
     severities.push(extractSeverity(d));
-    const fixed = extractFixedVersion(d, pkg.name);
+    const fixed = extractFixedVersion(d, pkg.name, ecosystem || 'npm');
     if (fixed && (!fixedIn || compareSemverLoose(fixed, fixedIn) < 0)) fixedIn = fixed;
   }
   return {
@@ -217,10 +503,11 @@ function severityFromCvssVector(vec) {
   return 'low';
 }
 
-function extractFixedVersion(vuln, pkgName) {
+function extractFixedVersion(vuln, pkgName, ecosystem) {
   if (!Array.isArray(vuln.affected)) return null;
+  const eco = ecosystem || 'npm';
   for (const a of vuln.affected) {
-    if (!a || !a.package || a.package.ecosystem !== 'npm' || a.package.name !== pkgName) continue;
+    if (!a || !a.package || a.package.ecosystem !== eco || a.package.name !== pkgName) continue;
     if (!Array.isArray(a.ranges)) continue;
     for (const r of a.ranges) {
       if (!Array.isArray(r.events)) continue;
@@ -294,6 +581,9 @@ export function buildInventory(lockfile) {
     format = detectLockfileFormat(lockfile);
     if (format === 'yarn-v1') {
       return buildYarnV1Inventory(lockfile);
+    }
+    if (format === 'uv-lock' || format === 'poetry-lock') {
+      return buildPythonInventory(lockfile, format);
     }
     if (format !== 'npm-v1' && format !== 'npm-v2' && format !== 'npm-v3') {
       return empty;
@@ -373,6 +663,7 @@ export function buildInventory(lockfile) {
 function emptyInventory() {
   return {
     format: 'unknown',
+    ecosystem: 'unknown',
     packages: [],
     totals: {
       totalPackages: 0,
@@ -471,7 +762,7 @@ function walkV1ForInventory(deps, record, topLevel) {
   }
 }
 
-function finalizeInventory(format, byName, totalEntries) {
+function finalizeInventory(format, byName, totalEntries, opts = {}) {
   /** @type {Array<{name:string,versions:string[],direct:boolean,scope:string,hasLicense:boolean,hasRepository:boolean}>} */
   const packages = [];
   let directCount = 0;
@@ -510,23 +801,92 @@ function finalizeInventory(format, byName, totalEntries) {
     if (!acc.hasRepository) missingRepositoryCount += 1;
   }
 
+  const ecosystem = ecosystemForFormat(format);
+  /** @type {any} */
+  const totals = {
+    totalPackages: packages.length,
+    totalEntries,
+    directCount,
+    transitiveCount,
+    prodCount,
+    devCount,
+    optionalCount,
+    unknownScopeCount,
+    duplicateCount,
+    missingLicenseCount,
+    missingRepositoryCount,
+  };
+  if (opts.directUnknown) totals.directUnknown = true;
   return {
     format,
+    ecosystem,
     packages,
-    totals: {
-      totalPackages: packages.length,
-      totalEntries,
-      directCount,
-      transitiveCount,
-      prodCount,
-      devCount,
-      optionalCount,
-      unknownScopeCount,
-      duplicateCount,
-      missingLicenseCount,
-      missingRepositoryCount,
-    },
+    totals,
   };
+}
+
+/**
+ * Build inventory for a Python lockfile (uv.lock or poetry.lock).
+ *
+ * Direct detection differs by format:
+ *   - uv.lock: read the [[manifest.dependency]] / [manifest] section; names
+ *     listed there are direct, everything else is transitive.
+ *   - poetry.lock: native format has no direct-vs-transitive marker without
+ *     a companion pyproject.toml. v0: treat every package as transitive and
+ *     set `totals.directUnknown: true` so consumers can surface a caveat.
+ *
+ * Scope detection:
+ *   - poetry's legacy `category = "dev"` field maps to scope 'dev'.
+ *   - `optional = true` (either format) maps to scope 'optional'.
+ *   - Otherwise scope 'unknown' for uv (no native equivalent) and 'prod'
+ *     for poetry (poetry's default-category was 'main' = production).
+ */
+function buildPythonInventory(text, format) {
+  const blocks = extractPythonPackageBlocks(text);
+  const directSet = format === 'uv-lock' ? extractUvDirectSet(text) : null;
+  const directUnknown = format === 'poetry-lock';
+
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  const byName = new Map();
+  let totalEntries = 0;
+
+  for (const b of blocks) {
+    if (!b.name) continue;
+    totalEntries += 1;
+    let acc = byName.get(b.name);
+    if (!acc) {
+      acc = {
+        versions: new Set(),
+        direct: false,
+        scopes: new Set(),
+        hasLicense: false,
+        hasRepository: false,
+      };
+      byName.set(b.name, acc);
+    }
+    if (b.version) acc.versions.add(b.version);
+    if (directSet && directSet.has(b.name)) acc.direct = true;
+    // Scope mapping.
+    let scope = 'unknown';
+    if (b.optional) scope = 'optional';
+    else if (b.category === 'dev') scope = 'dev';
+    else if (format === 'poetry-lock' && (b.category === 'main' || b.category == null)) {
+      // Poetry's default category is 'main' (production). Newer poetry omits
+      // the field entirely — same meaning. We mark this as 'prod' so the
+      // tier classifier in selectHealthCandidates can act on it. The
+      // direct/transitive question is governed separately by directUnknown.
+      scope = 'prod';
+    } else if (format === 'uv-lock') {
+      // uv.lock has no scope flags — packages are just packages. Honest
+      // 'unknown' here keeps downstream from treating everything as prod.
+      scope = 'unknown';
+    }
+    acc.scopes.add(scope);
+    // Source field doesn't carry license/repository for Python lockfiles;
+    // both stay false. The resolver pulls repository info from PyPI directly.
+  }
+
+  return finalizeInventory(format, byName, totalEntries, { directUnknown });
 }
 
 function compareVersionsLoose(a, b) {
@@ -545,6 +905,7 @@ function compareVersionsLoose(a, b) {
 function buildYarnV1Inventory(text) {
   const inv = emptyInventory();
   inv.format = 'yarn-v1';
+  inv.ecosystem = 'npm';
   /** @type {Map<string, { versions: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
   const byName = new Map();
   let totalEntries = 0;

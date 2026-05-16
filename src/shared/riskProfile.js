@@ -301,6 +301,19 @@ export function computeRiskProfile({ vulnerabilities, inventory, selectedHealth,
       band: 'UNKNOWN',
       because: 'Inventory unavailable — cannot assess tree complexity.',
     };
+  } else if (totals.directUnknown) {
+    // Honesty caveat: lockfile didn't carry a manifest section we could use
+    // to distinguish direct from transitive (poetry.lock without a companion
+    // pyproject.toml is the canonical case). Treat the dimension as
+    // ELEVATED with an explicit "can't tell" reason rather than silently
+    // pretending everything is transitive.
+    const duplicateCount = typeof totals.duplicateCount === 'number' ? totals.duplicateCount : 0;
+    const duplicateRatio = totalInstalled > 0 ? duplicateCount / totalInstalled : 0;
+    const ratioPct = (duplicateRatio * 100).toFixed(1);
+    treeComplexity = {
+      band: 'ELEVATED',
+      because: `Direct vs. transitive split unknown for this lockfile (no manifest section). ${totalInstalled} installed packages, ${ratioPct}% duplicate-version ratio.`,
+    };
   } else {
     const directCount = typeof totals.directCount === 'number' ? totals.directCount : 0;
     const duplicateCount = typeof totals.duplicateCount === 'number' ? totals.duplicateCount : 0;

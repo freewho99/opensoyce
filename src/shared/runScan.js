@@ -35,9 +35,10 @@
  */
 
 import {
-  parseNpmLockfile,
+  parseLockfile,
   queryOsvBatch,
   detectLockfileFormat,
+  ecosystemForFormat,
   buildInventory,
 } from './scanLockfile.js';
 import { selectHealthCandidates } from './selectHealthCandidates.js';
@@ -78,10 +79,10 @@ function splitOwnerRepo(slug) {
  * Resolve GitHub identity for each vulnerable package. Skipping non-vulnerable
  * packages keeps npm-registry traffic minimal. Failures default to NONE.
  */
-async function attachIdentitiesToVulnerabilities(vulns, resolveIdentity) {
+async function attachIdentitiesToVulnerabilities(vulns, resolveIdentity, ecosystem) {
   if (!Array.isArray(vulns) || vulns.length === 0) return vulns || [];
   const results = await Promise.allSettled(
-    vulns.map(v => resolveIdentity(v.package, { version: v.version })),
+    vulns.map(v => resolveIdentity(v.package, { version: v.version, ecosystem })),
   );
   return vulns.map((v, i) => {
     const r = results[i];
@@ -169,7 +170,7 @@ async function attachRepoHealthToVulnerabilities(vulns, getAnalysis, mapWithConc
  * status:'IDENTITY_UNRESOLVED' with soyceScore null — no negative score is
  * computed.
  */
-async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalysis, resolveIdentity, mapWithConcurrency) {
+async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalysis, resolveIdentity, mapWithConcurrency, ecosystem) {
   const BUDGET = 25;
   const { selected, skippedBudget, qualifyingTotal } = selectHealthCandidates({
     inventory,
@@ -178,7 +179,7 @@ async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalys
   });
 
   const outcomes = await mapWithConcurrency(selected, 5, async (cand) => {
-    const ident = await resolveIdentity(cand.package, { version: cand.version });
+    const ident = await resolveIdentity(cand.package, { version: cand.version, ecosystem });
     const resolvedRepo = ident && ident.resolvedRepo ? ident.resolvedRepo : null;
     const confidence = ident && (ident.confidence === 'HIGH' || ident.confidence === 'MEDIUM')
       ? ident.confidence
@@ -301,9 +302,11 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   if (format === 'yarn-v1' || format === 'yarn-v2') throw taggedScanError('YARN_COMING_SOON');
   if (format === 'unknown' || format == null) throw taggedScanError('UNPARSEABLE_LOCKFILE');
 
+  const ecosystem = ecosystemForFormat(format);
+
   let parsed;
   try {
-    parsed = parseNpmLockfile(lockfileText);
+    parsed = parseLockfile(lockfileText);
   } catch {
     throw taggedScanError('UNPARSEABLE_LOCKFILE');
   }
@@ -316,7 +319,10 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   let vulnerabilities = [];
   let osvError = false;
   try {
-    vulnerabilities = await queryOsvBatch(parsed.all, fetchImpl);
+    // Per-scan ecosystem flows from the inventory format through to every
+    // OSV `package` query and the affected-range filter. Single-ecosystem
+    // scans (npm-only OR PyPI-only) — there's no mixed-tree case in v0.
+    vulnerabilities = await queryOsvBatch(parsed.all, fetchImpl, { ecosystem });
   } catch (e) {
     // Log lives at the route layer; runScan stays quiet for tests.
     osvError = true;
@@ -325,7 +331,7 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
 
   // Identity resolver: failure-isolated per-batch.
   try {
-    vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || [], resolveIdentity);
+    vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || [], resolveIdentity, ecosystem);
   } catch {
     vulnerabilities = (vulnerabilities || []).map(v => ({
       ...v, resolvedRepo: null, confidence: 'NONE', source: null, verified: 'unverified',
@@ -367,6 +373,7 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
         getAnalysis,
         resolveIdentity,
         mapWithConcurrency,
+        ecosystem,
       );
     }
   } catch {
@@ -377,6 +384,7 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   const payload = {
     totalDeps: parsed.all.length,
     directDeps: parsed.direct.length,
+    ecosystem,
     vulnerabilities: sortScanVulnerabilities(vulnerabilities || []),
     scannedAt: new Date().toISOString(),
     cacheHit: false,

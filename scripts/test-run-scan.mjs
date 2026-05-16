@@ -351,5 +351,95 @@ await test('exitCodeForFailOn: all four levels behave correctly', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// 7. Python (uv.lock) end-to-end: ecosystem flows to OSV + resolver dispatch
+// ---------------------------------------------------------------------------
+await test('uv.lock end-to-end: PyPI ecosystem flows through OSV + resolver', async () => {
+  resetCaches();
+  // A tiny uv.lock with one vulnerable package (langchain@0.0.300 — real-
+  // world advisory).
+  const UV_LOCK = `
+version = 1
+requires-python = ">=3.10"
+
+[[manifest.dependency]]
+name = "langchain"
+
+[[package]]
+name = "langchain"
+version = "0.0.300"
+source = { registry = "https://pypi.org/simple" }
+`.trimStart();
+
+  let osvEcosystemSeen = null;
+  let resolverEcosystemSeen = null;
+  const osvFetch = async (url, init) => {
+    if (url.includes('querybatch')) {
+      const body = JSON.parse(init.body);
+      // Capture the ecosystem the runScan pipeline forwarded.
+      osvEcosystemSeen = body.queries[0]?.package?.ecosystem;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ results: body.queries.map(q => ({ vulns: [{ id: `FAKE-${q.package.name}` }] })) }),
+      };
+    }
+    const idMatch = url.match(/\/v1\/vulns\/(.+)$/);
+    if (idMatch) {
+      const id = decodeURIComponent(idMatch[1]);
+      const pkg = id.replace(/^FAKE-/, '');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id,
+          summary: `Fake PyPI advisory for ${pkg}`,
+          severity: [{ type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' }],
+          affected: [{
+            package: { ecosystem: 'PyPI', name: pkg },
+            ranges: [{ events: [{ fixed: '0.1.0' }] }],
+          }],
+        }),
+      };
+    }
+    throw new Error(`stub fetch unhandled: ${url}`);
+  };
+
+  const resolveIdentity = async (name, opts) => {
+    resolverEcosystemSeen = opts && opts.ecosystem;
+    if (name === 'langchain') {
+      return {
+        dependency: name, resolvedRepo: 'langchain-ai/langchain',
+        confidence: 'HIGH', source: 'pypi.project_urls.repository', verified: true,
+      };
+    }
+    return { dependency: name, resolvedRepo: null, confidence: 'NONE', source: null };
+  };
+
+  const result = await runScan({
+    lockfileText: UV_LOCK,
+    filename: 'uv.lock',
+    deps: {
+      getAnalysis: async () => healthyAnalysis(),
+      resolveIdentity,
+      mapWithConcurrency,
+      fetchImpl: osvFetch,
+    },
+  });
+
+  eq(result.ecosystem, 'PyPI', 'top-level ecosystem');
+  eq(osvEcosystemSeen, 'PyPI', 'OSV query ecosystem');
+  eq(resolverEcosystemSeen, 'PyPI', 'resolver got ecosystem in opts');
+  eq(result.vulnerabilities.length, 1, 'one vuln (langchain)');
+  eq(result.vulnerabilities[0].package, 'langchain', 'pkg name');
+  eq(result.vulnerabilities[0].version, '0.0.300', 'pkg version');
+  eq(result.vulnerabilities[0].resolvedRepo, 'langchain-ai/langchain', 'resolved repo');
+  ok(result.vulnerabilities[0].repoHealth && typeof result.vulnerabilities[0].repoHealth.soyceScore === 'number',
+    'repoHealth attached');
+  // Inventory carries PyPI ecosystem so downstream renderers can label it.
+  ok(result.inventory, 'inventory built');
+  eq(result.inventory.ecosystem, 'PyPI', 'inventory.ecosystem');
+  eq(result.inventory.format, 'uv-lock', 'inventory.format');
+});
+
 console.log(`\n${passed} passed, ${failed} failed.`);
 process.exit(failed === 0 ? 0 : 1);

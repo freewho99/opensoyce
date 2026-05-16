@@ -473,4 +473,343 @@ function stripVersion(result) {
   return rest;
 }
 
-export const __internal = { identityCache, githubPkgJsonCache, CACHE_TTL_MS, verdictForCrossCheck };
+// ---------------------------------------------------------------------------
+// PyPI resolver (v0 — Python lockfile support)
+// ---------------------------------------------------------------------------
+
+/**
+ * PyPI's JSON metadata API. Same architectural pattern as the npm resolver:
+ * single fetch per package, top-level identity fields only (we never touch
+ * the `releases` map which can balloon for popular projects).
+ */
+const PYPI_REGISTRY = 'https://pypi.org/pypi/';
+
+// Separate caches so npm and PyPI never collide on same-named packages
+// (theoretical, but free to guard against). Keyed by package name.
+const pypiIdentityCache = new Map(); // packageName -> { result, expiresAt }
+const githubPyProjectTomlCache = new Map(); // owner/repo -> { name, expiresAt }
+
+/**
+ * Best-effort fetch of `pyproject.toml` from the root of a GitHub repo.
+ * Returns the `[project].name` value as a string, an explicit `__missing`
+ * marker on 404, or null on any other failure (rate limit, network, parse).
+ *
+ * pyproject.toml is the PEP 621 standard. Older Python projects still ship
+ * `setup.py` only — 404 there is normal, NOT a fraud signal. The verdict
+ * helper distinguishes the cases.
+ *
+ * We extract `name = "..."` from the `[project]` table via regex. No TOML
+ * library; the regex tolerates whitespace + comment lines but expects a
+ * standard quoted-string scalar. If the project block uses non-standard
+ * formatting (e.g. unquoted name, multi-line), we return null — that's an
+ * "unverified" outcome, identical to a fetch failure, which is the
+ * conservative choice.
+ *
+ * @param {string} owner
+ * @param {string} repo
+ * @param {{ fetchImpl?: typeof fetch, headers?: Record<string, string>, cache?: Map<string, any>, now?: () => number }} [opts]
+ * @returns {Promise<{ name?: string|null, __missing?: boolean }|null>}
+ */
+export async function fetchGithubPyProjectToml(owner, repo, opts = {}) {
+  if (typeof owner !== 'string' || typeof repo !== 'string') return null;
+  if (!owner.trim() || !repo.trim()) return null;
+  const key = `${owner}/${repo}`;
+  const cache = opts.cache || githubPyProjectTomlCache;
+  const now = (opts.now || Date.now)();
+
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.pkg;
+  }
+
+  const fetchFn = opts.fetchImpl || globalThis.fetch;
+  if (typeof fetchFn !== 'function') return null;
+
+  /** @type {Record<string, string>} */
+  const headers = {
+    accept: 'application/vnd.github.raw',
+    'user-agent': 'opensoyce-resolver',
+    ...(opts.headers || {}),
+  };
+
+  try {
+    const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/pyproject.toml`;
+    const res = await fetchFn(url, { headers });
+    if (res.status === 404) {
+      const pkg = { __missing: true };
+      cache.set(key, { pkg, expiresAt: now + CACHE_TTL_MS });
+      return pkg;
+    }
+    if (!res.ok) return null;
+    let text;
+    try {
+      text = await res.text();
+    } catch {
+      return null;
+    }
+    if (typeof text !== 'string' || !text) return null;
+    const name = extractPyProjectName(text);
+    const pkg = { name };
+    cache.set(key, { pkg, expiresAt: now + CACHE_TTL_MS });
+    return pkg;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract `[project].name = "..."` from a pyproject.toml body via regex.
+ * Tolerates whitespace, comments, and the `[project]` header appearing
+ * after other tables. Returns null when the value can't be confidently
+ * extracted — see fetchGithubPyProjectToml for the verdict semantics.
+ *
+ * @param {string} text
+ * @returns {string|null}
+ */
+function extractPyProjectName(text) {
+  if (typeof text !== 'string' || !text) return null;
+  // Find the [project] section. Walk forward line-by-line until the next
+  // top-level [section] header (or EOF). JS regex has no `\Z`, so we do
+  // this iteratively rather than with a fragile lookahead.
+  const lines = text.split(/\r?\n/);
+  let inProject = false;
+  for (const raw of lines) {
+    const line = raw;
+    const trimmed = line.replace(/\s+$/, '');
+    if (/^\s*\[project\]\s*$/.test(trimmed)) {
+      inProject = true;
+      continue;
+    }
+    if (inProject) {
+      if (/^\s*\[[^\]]+\]\s*$/.test(trimmed)) {
+        // Entered a new section — `[project]` ended without a name.
+        return null;
+      }
+      const nm = /^\s*name\s*=\s*(?:"([^"\r\n]+)"|'([^'\r\n]+)')\s*(?:#.*)?$/.exec(trimmed);
+      if (nm) return nm[1] || nm[2] || null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Compare a GitHub repo's pyproject.toml name to the PyPI package name we
+ * resolved from. Same verdict semantics as the npm-side cross-check.
+ *
+ * PyPI normalization: per PEP 503, `_`, `-`, and `.` are all equivalent and
+ * comparisons are case-insensitive. So `Django` == `django` and
+ * `python-dateutil` == `python_dateutil`. We normalize both sides before
+ * comparing to avoid false-positive mismatches.
+ *
+ * @param {string} packageName
+ * @param {{ name?: string|null, __missing?: boolean }|null} githubPkg
+ */
+function verdictForPyProjectCrossCheck(packageName, githubPkg) {
+  if (githubPkg == null) {
+    return { verified: 'unverified', githubPkgName: null };
+  }
+  if (githubPkg.__missing) {
+    // pyproject.toml missing — could be a `setup.py`-only legacy project, a
+    // monorepo, etc. v0: unverified rather than mismatch. Older Python
+    // projects ship setup.py only — that's NORMAL, not a fraud signal.
+    return { verified: 'unverified', githubPkgName: null };
+  }
+  const name = typeof githubPkg.name === 'string' ? githubPkg.name : null;
+  if (!name) {
+    // pyproject.toml exists but no [project].name parsed — could be poetry-
+    // legacy ([tool.poetry] only). Mark as unverified, not false. v0.1 can
+    // tighten this with a [tool.poetry] name fallback.
+    return { verified: 'unverified', githubPkgName: null };
+  }
+  if (normalizePypiName(name) === normalizePypiName(packageName)) {
+    return { verified: true, githubPkgName: name };
+  }
+  return {
+    verified: false,
+    mismatchReason: 'github_pyproject_name_different',
+    githubPkgName: name,
+  };
+}
+
+/** PEP 503 name normalization: lowercase, collapse runs of -._ to a single -. */
+function normalizePypiName(name) {
+  if (typeof name !== 'string') return '';
+  return name.trim().toLowerCase().replace(/[-_.]+/g, '-');
+}
+
+/**
+ * Resolve a PyPI package name to its GitHub identity. Mirrors
+ * resolveDepIdentity (npm) but reads `info.project_urls` / `info.home_page`
+ * and runs the borrowed-trust cross-check against pyproject.toml instead
+ * of package.json.
+ *
+ * Confidence ladder:
+ *   HIGH    — project_urls.Repository / Source / Code → GitHub
+ *   MEDIUM  — home_page or project_urls.Homepage → GitHub
+ *             (or HIGH downgraded by borrowed-trust mismatch)
+ *   NONE    — PyPI 404, no field parses to GitHub, network error
+ *
+ * @param {string} packageName
+ * @param {{
+ *   version?: string,
+ *   fetchImpl?: typeof fetch,
+ *   cache?: Map<string, any>,
+ *   now?: () => number,
+ *   deps?: {
+ *     fetchGithubPyProjectToml?: (owner: string, repo: string) => Promise<{name?: string|null, __missing?: boolean}|null>
+ *   },
+ *   githubHeaders?: Record<string, string>,
+ * }} [opts]
+ */
+export async function resolvePypiIdentity(packageName, opts = {}) {
+  if (typeof packageName !== 'string' || !packageName.trim()) {
+    return noneResult(String(packageName ?? ''), opts.version);
+  }
+  const name = packageName.trim();
+  const cache = opts.cache || pypiIdentityCache;
+  const now = (opts.now || Date.now)();
+
+  const cacheKey = `pypi:${name}`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return opts.version ? { ...cached.result, version: opts.version } : { ...cached.result };
+  }
+
+  const fetchFn = opts.fetchImpl || globalThis.fetch;
+  if (typeof fetchFn !== 'function') {
+    return noneResult(name, opts.version);
+  }
+
+  let meta;
+  try {
+    const res = await fetchFn(PYPI_REGISTRY + encodeURIComponent(name) + '/json', {
+      headers: { accept: 'application/json' },
+    });
+    if (res.status === 404) {
+      const result = noneResult(name);
+      cache.set(cacheKey, { result, expiresAt: now + CACHE_TTL_MS });
+      return opts.version ? { ...result, version: opts.version } : { ...result };
+    }
+    if (!res.ok) return noneResult(name, opts.version);
+    meta = await res.json();
+  } catch {
+    return noneResult(name, opts.version);
+  }
+  if (!meta || typeof meta !== 'object') return noneResult(name, opts.version);
+
+  // PyPI's metadata sits under `info`. project_urls is a plain dict of
+  // free-text labels to URLs — labels vary by package author. We accept the
+  // common conventions ("Repository", "Source", "Code", "Source Code") and
+  // are case-insensitive.
+  const info = meta.info && typeof meta.info === 'object' ? meta.info : meta;
+  const projectUrls = info.project_urls && typeof info.project_urls === 'object'
+    ? info.project_urls
+    : {};
+
+  /** @type {ResolvedIdentity} */
+  let result;
+
+  const repoCandidate = pickPypiRepoUrl(projectUrls);
+  if (repoCandidate) {
+    const gh = extractGithubFromUrl(repoCandidate);
+    if (gh) {
+      /** @type {ResolvedIdentity} */
+      const r = {
+        dependency: name,
+        resolvedRepo: `${gh.owner}/${gh.repo}`,
+        confidence: 'HIGH',
+        source: 'pypi.project_urls.repository',
+      };
+      if (gh.directory) r.directory = gh.directory;
+
+      // Borrowed-trust cross-check via pyproject.toml.
+      const ghFetcher = (opts.deps && opts.deps.fetchGithubPyProjectToml)
+        || ((owner, repo) => fetchGithubPyProjectToml(owner, repo, {
+          fetchImpl: fetchFn,
+          headers: opts.githubHeaders,
+          now: opts.now,
+        }));
+      let pyProj = null;
+      try {
+        pyProj = await ghFetcher(gh.owner, gh.repo);
+      } catch {
+        pyProj = null;
+      }
+      const verdict = verdictForPyProjectCrossCheck(name, pyProj);
+      r.verified = verdict.verified;
+      if (verdict.mismatchReason) {
+        r.mismatchReason = verdict.mismatchReason;
+        r.confidence = 'MEDIUM';
+      }
+      if (verdict.githubPkgName !== null || verdict.mismatchReason) {
+        r.meta = { githubPkgName: verdict.githubPkgName };
+      }
+      result = r;
+    } else {
+      // Project URL exists but isn't GitHub. Fall through to secondary
+      // (homepage). v0 only supports GitHub.
+      result = pypiSecondaryOrNone(name, info, projectUrls);
+    }
+  } else {
+    result = pypiSecondaryOrNone(name, info, projectUrls);
+  }
+
+  cache.set(cacheKey, { result, expiresAt: now + CACHE_TTL_MS });
+  return opts.version ? { ...result, version: opts.version } : { ...result };
+}
+
+/**
+ * Try to find a "this is the source repo" URL in PyPI's project_urls dict.
+ * Case-insensitive label match on the common conventions. Returns the URL
+ * string or null.
+ */
+function pickPypiRepoUrl(projectUrls) {
+  if (!projectUrls || typeof projectUrls !== 'object') return null;
+  const wanted = ['repository', 'source', 'source code', 'code'];
+  for (const [label, url] of Object.entries(projectUrls)) {
+    if (typeof url !== 'string') continue;
+    if (wanted.includes(label.toLowerCase())) return url;
+  }
+  return null;
+}
+
+/** MEDIUM-confidence fallback for PyPI: homepage / project_urls.Homepage. */
+function pypiSecondaryOrNone(name, info, projectUrls) {
+  const candidates = [];
+  if (typeof info.home_page === 'string' && info.home_page) {
+    candidates.push({ url: info.home_page, source: 'pypi.homepage' });
+  }
+  if (projectUrls && typeof projectUrls === 'object') {
+    for (const [label, url] of Object.entries(projectUrls)) {
+      if (typeof url !== 'string') continue;
+      if (label.toLowerCase() === 'homepage') {
+        candidates.push({ url, source: 'pypi.project_urls.homepage' });
+      }
+    }
+  }
+  for (const c of candidates) {
+    const gh = extractGithubFromUrl(c.url);
+    if (gh) {
+      return {
+        dependency: name,
+        resolvedRepo: `${gh.owner}/${gh.repo}`,
+        confidence: 'MEDIUM',
+        source: c.source,
+        verified: 'unverified',
+      };
+    }
+  }
+  return noneResult(name);
+}
+
+export const __internal = {
+  identityCache,
+  githubPkgJsonCache,
+  pypiIdentityCache,
+  githubPyProjectTomlCache,
+  CACHE_TTL_MS,
+  verdictForCrossCheck,
+  verdictForPyProjectCrossCheck,
+  extractPyProjectName,
+  normalizePypiName,
+};
