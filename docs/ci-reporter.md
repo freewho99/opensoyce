@@ -39,6 +39,8 @@ web app uses, so scoring is bit-identical across runtimes.
 | `<lockfile>`         | path                                                    | —       | Positional, required. The `package-lock.json`. |
 | `--out`              | path                                                    | stdout  | Write markdown report to this path.          |
 | `--json`             | path                                                    | —       | Also write the JSON report to this path.     |
+| `--sarif`            | path                                                    | —       | Also write a SARIF 2.1.0 report to this path. |
+| `--ignore`           | path                                                    | auto    | Path to a `.opensoyce-ignore` file (default: auto-discover in lockfile's parent dir). |
 | `--fail-on`          | `none` \| `review-required` \| `high-vuln` \| `critical-vuln` | `none`  | Exit nonzero when the threshold is crossed.  |
 | `--github-token`     | string                                                  | env     | Overrides `GITHUB_TOKEN` for this run.       |
 | `--quiet`            | boolean                                                 | false   | Suppress progress lines on stderr.           |
@@ -358,3 +360,60 @@ security audits, and citation links. The page still hydrates client-side
 into the normal React SPA after load. Run
 [`scripts/test-methodology-ssr.mjs`](../scripts/test-methodology-ssr.mjs)
 after deploy to assert the prerender survived the round trip.
+
+## SARIF output + suppression
+
+The CI Reporter can emit a SARIF 2.1.0 file alongside its markdown / JSON
+reports so GitHub Code Scanning, GitLab security dashboards, and
+SARIF-aware enterprise tools can ingest OpenSoyce findings natively. Two
+new flags drive this:
+
+- `--sarif <path>` — write SARIF 2.1.0 to `<path>`. Composes with `--out`
+  and `--json` (you can have all three).
+- `--ignore <path>` — explicit path to a `.opensoyce-ignore` file.
+  Defaults to auto-discovering `.opensoyce-ignore` in the lockfile's
+  parent directory.
+
+Severity → SARIF level mapping: `CRITICAL` and `HIGH` map to `error`,
+`MEDIUM` / `MODERATE` map to `warning`, `LOW` maps to `note`, and
+unknown / missing severity maps to `warning` (never `none` — we keep
+unrecognized advisories visible).
+
+When a vuln carries a borrowed-trust signal (`verified === false`,
+meaning the npm/PyPI metadata pointed at a source repo whose manifest
+named a different package), an additional SARIF result is emitted under
+rule id `opensoyce.borrowed-trust-identity` so reviewers see the
+identity mismatch as its own row.
+
+### .opensoyce-ignore file format
+
+gitignore-flavored. Lines beginning with `#` are comments. A trailing
+`# reason` on a rule line is captured and re-surfaced in the SARIF
+`run.properties.suppressions` block.
+
+```
+# .opensoyce-ignore — suppress specific advisories or packages
+pkg:minimist@1.2.5         # vendored, not actually exposed
+pkg:lodash                  # all lodash advisories (any version)
+cve:CVE-2020-28500          # mitigated by gateway rate-limit
+ghsa:GHSA-29mw-wpgm-hmr9    # accepted risk per security review 2026-04
+advisory:CVE-2020-28500     # advisory: accepts either CVE or GHSA
+```
+
+Suppression affects ONLY the SARIF output in v0 — markdown and JSON
+reports remain complete so users can't accidentally hide advisories from
+their own dashboards by setting up the ignore file. Suppressed results
+are listed under `runs[0].properties.suppressions` with the matching
+rule and comment.
+
+### GitHub Code Scanning workflow snippet
+
+```yaml
+- name: Run OpenSoyce
+  run: node scripts/opensoyce-scan-report.mjs package-lock.json --sarif opensoyce.sarif
+
+- name: Upload to GitHub Code Scanning
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: opensoyce.sarif
+```

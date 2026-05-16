@@ -13,6 +13,9 @@
  * Options:
  *   --out <path>          Write markdown report to <path> (default: stdout)
  *   --json <path>         Also write JSON report to <path>
+ *   --sarif <path>        Also write SARIF 2.1.0 report to <path>
+ *   --ignore <path>       Path to a .opensoyce-ignore file (default: auto-discover
+ *                         in the lockfile's parent directory)
  *   --fail-on <level>     Exit nonzero on: none|review-required|high-vuln|critical-vuln
  *                         (default: none)
  *   --github-token <tok>  Token for higher rate limits; otherwise reads GITHUB_TOKEN env
@@ -26,7 +29,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { resolve as pathResolve } from 'node:path';
+import { resolve as pathResolve, dirname as pathDirname, join as pathJoin } from 'node:path';
 import process from 'node:process';
 
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
@@ -35,6 +38,8 @@ import { runScan, mapWithConcurrency } from '../src/shared/runScan.js';
 import { summarizeScan } from '../src/shared/scanSummary.js';
 import { computeRiskProfile } from '../src/shared/riskProfile.js';
 import { buildMarkdownReport, buildJsonReport } from '../src/shared/buildScanReport.js';
+import { buildSarifReport } from '../src/shared/buildSarifReport.js';
+import { parseIgnoreFile, matchesIgnoreRule } from '../src/shared/parseIgnoreFile.js';
 
 const MAX_LOCKFILE_BYTES = 5_000_000;
 const FAIL_ON_LEVELS = new Set(['none', 'review-required', 'high-vuln', 'critical-vuln']);
@@ -44,6 +49,9 @@ const USAGE = `Usage: node scripts/opensoyce-scan-report.mjs <package-lock.json>
 Options:
   --out <path>          Write markdown report to <path> (default: stdout)
   --json <path>         Also write JSON report to <path>
+  --sarif <path>        Also write SARIF 2.1.0 report to <path>
+  --ignore <path>       Path to a .opensoyce-ignore file (default: auto-discover
+                        .opensoyce-ignore in the lockfile's parent directory)
   --fail-on <level>     none|review-required|high-vuln|critical-vuln (default: none)
   --github-token <tok>  Token for higher rate limits; otherwise reads GITHUB_TOKEN env
   --quiet               Suppress progress lines on stderr
@@ -55,11 +63,13 @@ Options:
  * @param {string[]} argv  process.argv.slice(2)
  */
 export function parseArgs(argv) {
-  /** @type {{ positionals: string[], out: string|null, json: string|null, failOn: string, token: string|null, quiet: boolean, help: boolean, _error: string|null }} */
+  /** @type {{ positionals: string[], out: string|null, json: string|null, sarif: string|null, ignore: string|null, failOn: string, token: string|null, quiet: boolean, help: boolean, _error: string|null }} */
   const out = {
     positionals: [],
     out: null,
     json: null,
+    sarif: null,
+    ignore: null,
     failOn: 'none',
     token: null,
     quiet: false,
@@ -86,6 +96,18 @@ export function parseArgs(argv) {
       const v = argv[++i];
       if (!v) { out._error = 'missing value for --json'; break; }
       out.json = v;
+      continue;
+    }
+    if (a === '--sarif') {
+      const v = argv[++i];
+      if (!v) { out._error = 'missing value for --sarif'; break; }
+      out.sarif = v;
+      continue;
+    }
+    if (a === '--ignore') {
+      const v = argv[++i];
+      if (!v) { out._error = 'missing value for --ignore'; break; }
+      out.ignore = v;
       continue;
     }
     if (a === '--fail-on') {
@@ -165,6 +187,46 @@ function makeCliAnalysisCache(token) {
 
 function progress(quiet, msg) {
   if (!quiet) process.stderr.write(`${msg}\n`);
+}
+
+/**
+ * Load + parse an `.opensoyce-ignore` file. Returns the parsed rules plus a
+ * human-readable source path for the progress line. Auto-discovery rule:
+ * if `--ignore` is unset, look for `.opensoyce-ignore` in the lockfile's
+ * parent directory. If neither path resolves to an existing file, returns
+ * an empty rules array — suppression silently no-ops.
+ *
+ * Parser errors are surfaced on stderr but never fail the run; the file is
+ * advisory, not authoritative.
+ *
+ * @param {string|null} explicitPath
+ * @param {string} lockfilePath  absolute path to the lockfile
+ * @param {boolean} quiet
+ * @returns {{ ignoreRules: any[], ignoreSource: string }}
+ */
+function loadIgnoreRules(explicitPath, lockfilePath, quiet) {
+  let candidate = null;
+  if (explicitPath) {
+    candidate = pathResolve(process.cwd(), explicitPath);
+  } else {
+    const auto = pathJoin(pathDirname(lockfilePath), '.opensoyce-ignore');
+    if (existsSync(auto)) candidate = auto;
+  }
+  if (!candidate || !existsSync(candidate)) {
+    return { ignoreRules: [], ignoreSource: 'no ignore file' };
+  }
+  let text = '';
+  try {
+    text = readFileSync(candidate, 'utf8');
+  } catch (e) {
+    process.stderr.write(`failed to read ignore file ${candidate}: ${e.message}\n`);
+    return { ignoreRules: [], ignoreSource: 'no ignore file' };
+  }
+  const { rules, errors } = parseIgnoreFile(text);
+  if (errors.length > 0 && !quiet) {
+    for (const err of errors) process.stderr.write(`opensoyce-ignore: ${err}\n`);
+  }
+  return { ignoreRules: rules, ignoreSource: candidate };
 }
 
 async function main(argv) {
@@ -301,6 +363,39 @@ async function main(argv) {
       writeFileSync(pathResolve(process.cwd(), args.json), JSON.stringify(jsonReport, null, 2), 'utf8');
     } catch (e) {
       process.stderr.write(`failed to write JSON: ${e.message}\n`);
+      return 1;
+    }
+  }
+
+  if (args.sarif) {
+    // Load + apply .opensoyce-ignore. Suppressions affect ONLY SARIF output —
+    // markdown and JSON above remain full so users can't accidentally hide
+    // advisories from their own dashboards by setting up the ignore file.
+    const { ignoreRules, ignoreSource } = loadIgnoreRules(args.ignore, lockfilePath, args.quiet);
+    /** @type {Array<{ vuln: any, rule: any }>} */
+    const suppressed = [];
+    /** @type {any[]} */
+    const visibleVulns = [];
+    if (ignoreRules.length > 0) {
+      for (const v of vulns) {
+        const rule = matchesIgnoreRule(v, ignoreRules);
+        if (rule) suppressed.push({ vuln: v, rule });
+        else visibleVulns.push(v);
+      }
+      progress(args.quiet, `Suppressed ${suppressed.length} of ${vulns.length} advisories per ${ignoreSource}`);
+    } else {
+      for (const v of vulns) visibleVulns.push(v);
+    }
+    const sarif = buildSarifReport({
+      scanResult: { vulnerabilities: visibleVulns, scannedAt: scanResult.scannedAt },
+      summary,
+      profile,
+      suppressions: suppressed,
+    });
+    try {
+      writeFileSync(pathResolve(process.cwd(), args.sarif), JSON.stringify(sarif, null, 2), 'utf8');
+    } catch (e) {
+      process.stderr.write(`failed to write SARIF: ${e.message}\n`);
       return 1;
     }
   }
