@@ -83,8 +83,8 @@ export default function Methodology() {
               <div className="space-y-8">
                  <ScoreRange label="8.5+" status="USE READY" desc="Production grade. Real CVE hygiene, active maintenance, strong docs." color="text-green-500" />
                  <ScoreRange label="7.0 – 8.4" status="FORKABLE" desc="Mature core infrastructure. Minor gaps in one or two pillars." color="text-blue-500" />
-                 <ScoreRange label="5.5 – 6.9" status="STABLE" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
-                 <ScoreRange label="4.0 – 5.4" status="WATCHLIST" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
+                 <ScoreRange label="6.0 – 6.9" status="STABLE" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
+                 <ScoreRange label="4.0 – 5.9" status="WATCHLIST" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
                  <ScoreRange label="2.5 – 3.9" status="RISKY" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." color="text-orange-500" />
                  <ScoreRange label="BELOW 2.5" status="STALE" desc="Effectively abandoned. No recent commits, no releases, no triage." color="text-soy-red" />
               </div>
@@ -154,8 +154,8 @@ export default function Methodology() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             <VocabCard title="USE READY" score="≥ 8.5" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
             <VocabCard title="FORKABLE" score="7.0–8.4" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
-            <VocabCard title="STABLE" score="5.5–6.9" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
-            <VocabCard title="WATCHLIST" score="4.0–5.4" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
+            <VocabCard title="STABLE" score="6.0–6.9" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
+            <VocabCard title="WATCHLIST" score="4.0–5.9" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
             <VocabCard title="RISKY" score="2.5–3.9" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
             <VocabCard title="STALE" score="< 2.5" desc="Effectively abandoned. No recent commits, no releases, no triage." />
             <VocabCard title="GRAVEYARD" score="Deprecated" desc="Shaped the ecosystem. Now a museum piece. Some have forkable infrastructure." />
@@ -163,6 +163,77 @@ export default function Methodology() {
 
           <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">
             Editorial tiers (e.g. HIGH MOMENTUM for hand-curated rising stars) are not shown in the public score card. A real momentum heuristic is on the roadmap — until then, the algorithm only earns the bands above.
+          </p>
+        </div>
+      </section>
+
+      {/* KNOWN LIMITATIONS — AI ECOSYSTEM CAVEATS */}
+      <section className="py-24 px-4 bg-white border-y-4 border-black">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <div className="inline-block bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.4em] mb-6">
+              OPEN SCIENTIFIC LIMITATIONS
+            </div>
+            <h2 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter mb-4">KNOWN LIMITATIONS</h2>
+            <p className="text-xl font-bold uppercase tracking-widest text-soy-red italic">What this scanner does not see — named out loud.</p>
+            <p className="mt-6 text-sm font-medium opacity-70 max-w-3xl mx-auto leading-relaxed italic">
+              Honest disclosure, not marketing. The AI tooling ecosystem moves faster than any static scoring model, and several failure modes are specific to it. Below is what we know we don't yet cover, and where a mitigation exists, the commit that ships it.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <LimitationCard
+              tag="VELOCITY"
+              title="AI ecosystem velocity"
+              body="Projects like LangChain and HuggingFace move weekly. Soyce scores reflect signals as of the most recent scan; a single bad release week can shift a score and a single good triage day can shift it back. Maintainers shouldn't read short-term score drift as a signal about the project's long-term health."
+              status="OPEN"
+            />
+            <LimitationCard
+              tag="BUS FACTOR"
+              title="Single-maintainer projects with massive adoption"
+              body="@huggingface/transformers.js has 18M monthly downloads and one primary maintainer. The current scoring model doesn't separately penalize bus-factor risk on these projects beyond the generic contributor-count signal. We see this as a real gap and a research direction for v0.x."
+              status="RESEARCH DIRECTION"
+            />
+            <LimitationCard
+              tag="NAMESPACE"
+              title="Federation of @scope/pkg namespaces"
+              body="@huggingface/* on npm is not the same as huggingface/* on GitHub. The resolver maps via the npm `repository` field but doesn't verify that the GitHub org name matches the npm scope. We cross-check package.json#name (P0-AI-2) but namespace-level verification is not yet enforced."
+              status="PARTIAL · 8c0d6ab"
+            />
+            <LimitationCard
+              tag="TYPO-SQUAT"
+              title="Typo-squat detection on AI namespaces"
+              body="We mitigate borrowed-trust attacks (an attacker pointing a typo-squat's `repository` field at a healthy repo) via the package.json cross-check, but we do NOT detect homoglyph typo-squats (e.g. `l&#1072;ngchain` with Cyrillic &#1072;). That's a known research direction."
+              status="PARTIAL · 8c0d6ab"
+            />
+            <LimitationCard
+              tag="CROSS-ECOSYSTEM"
+              title="Cross-ecosystem bridge attacks"
+              body="The npm `langchain` package transitively installs a Python `langchain` via Python bindings; our scanner sees only the npm side. PyPI dependency confusion against the Python side is invisible to a single-ecosystem scan today."
+              status="OPEN"
+            />
+            <LimitationCard
+              tag="WEIGHTS"
+              title="huggingface_hub and model weights"
+              body="OpenSoyce scores the maintainer + code health of repos. It does NOT analyze model weight pulls (e.g. pickle RCE risk in `from_pretrained` arbitrary downloads). That's a different threat class and is out of scope for v0."
+              status="OUT OF SCOPE · v0"
+            />
+            <LimitationCard
+              tag="PYPI"
+              title="PyPI coverage edge cases"
+              body="For poetry.lock without a companion pyproject.toml, we cannot reliably tell direct vs transitive dependencies. The Risk Profile surfaces this honestly via the `directUnknown` caveat in the Tree Complexity dimension."
+              status="SURFACED · 2c07e54"
+            />
+            <LimitationCard
+              tag="VERDICT BAND"
+              title="Verdict bands cap on hidden vulns"
+              body="If a repo's composite score is high (≥7.0) but the repo has 3+ open HIGH/CRITICAL advisories on its own code, the verdict band is capped at WATCHLIST. This is intentional honesty (P0-AI-1) but it means a repo with strong maintenance + many self-disclosed CVEs may score lower in the band display than its raw composite would suggest."
+              status="BY DESIGN · 8c0d6ab"
+            />
+          </div>
+
+          <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">
+            If you find a failure mode that isn't listed here, that's a bug in our disclosure — please open an issue.
           </p>
         </div>
       </section>
@@ -232,6 +303,19 @@ function VocabCard({ title, score, desc }: { title: string, score: string, desc:
         <div className="text-soy-red font-black text-xs uppercase tracking-widest">{score}</div>
       </div>
       <p className="text-sm font-medium opacity-80 leading-relaxed italic">"{desc}"</p>
+    </div>
+  );
+}
+
+function LimitationCard({ tag, title, body, status }: { tag: string, title: string, body: string, status: string }) {
+  return (
+    <div className="bg-soy-label border-4 border-black p-8 shadow-[8px_8px_0px_#000] flex flex-col">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <span className="inline-block bg-black text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.3em]">{tag}</span>
+        <span className="inline-block bg-soy-red text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em]">{status}</span>
+      </div>
+      <h3 className="text-xl font-black uppercase italic tracking-tight mb-3 leading-tight">{title}</h3>
+      <p className="text-sm font-medium opacity-80 leading-relaxed">{body}</p>
     </div>
   );
 }

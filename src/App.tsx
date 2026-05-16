@@ -20,6 +20,8 @@ import BlogPost from './pages/BlogPost';
 import FAQ from './pages/FAQ';
 import About from './pages/About';
 import Graveyard from './pages/Graveyard';
+import AiLeaderboard from './pages/AiLeaderboard';
+import AiGraveyard from './pages/AiGraveyard';
 import Methodology from './pages/Methodology';
 import Remix from './pages/Remix';
 import HeatCheck from './pages/HeatCheck';
@@ -66,6 +68,8 @@ export function AppRoutes() {
         <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />
         <Route path="/compare/:slug" element={<Compare />} />
         <Route path="/graveyard" element={<Graveyard />} />
+        <Route path="/leaderboard/ai" element={<AiLeaderboard />} />
+        <Route path="/graveyard/ai" element={<AiGraveyard />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
         <Route path="/project/:owner/:repo" element={<ProjectDetail />} />

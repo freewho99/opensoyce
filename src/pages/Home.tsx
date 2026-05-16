@@ -281,6 +281,23 @@ export default function Home() {
           <p className="mt-8 text-[10px] font-bold uppercase tracking-widest opacity-50 italic">
             Verdict bands shown; click any card for the live score. Now supports npm, uv, and Poetry lockfiles.
           </p>
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-4">
+            <Link
+              to="/leaderboard/ai"
+              onClick={() => trackEvent('ai_leaderboard_cta_click', { source: 'ai_framing_band' })}
+              className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest border-b-2 border-black pb-1 hover:text-soy-red hover:border-soy-red transition-all"
+            >
+              See the full AI ecosystem leaderboard <ArrowRight size={14} />
+            </Link>
+            <Link
+              to="/graveyard/ai"
+              onClick={() => trackEvent('ai_graveyard_cta_click', { source: 'ai_framing_band' })}
+              className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest border-b-2 border-black pb-1 hover:text-soy-red hover:border-soy-red transition-all"
+            >
+              Browse the AI graveyard <ArrowRight size={14} />
+            </Link>
+          </div>
         </div>
       </section>
 

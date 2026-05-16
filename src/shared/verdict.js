@@ -14,8 +14,11 @@
  * whatever the calculator returned — only the label is capped.
  *
  * The override is a CAP, never a PROMOTION: a low-score repo with no
- * advisories does NOT jump up. Bands themselves (8.5 / 7.0 / 5.5 / 4.0 / 2.5)
- * are unchanged.
+ * advisories does NOT jump up. Band cutoffs are 8.5 / 7.0 / 6.0 / 4.0 / 2.5
+ * (STABLE lower bound tightened from 5.5 → 6.0 per Maya's swarm calibration:
+ * 5.5–5.99 was too forgiving and let drifted projects keep the "STABLE"
+ * badge, which carries an implicit "actively maintained" promise; that band
+ * now reads as WATCHLIST).
  *
  * Public verdict bands surfaced by runScan / API: USE READY, FORKABLE, STABLE,
  * WATCHLIST, RISKY, STALE.
@@ -61,7 +64,7 @@ export function verdictFor(score, opts = {}) {
   // score would normally land in. Public scoring callers should leave this
   // off — the band is not rendered as a public verdict.
   if (opts && opts.earlyBreakout) return 'HIGH MOMENTUM';
-  if (score >= 5.5) return 'STABLE';
+  if (score >= 6.0) return 'STABLE';
   if (score >= 4.0) return 'WATCHLIST';
   if (score >= 2.5) return 'RISKY';
   return 'STALE';

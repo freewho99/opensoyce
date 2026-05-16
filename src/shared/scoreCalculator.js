@@ -14,6 +14,7 @@
  * @property {number}   high
  * @property {number}   medium
  * @property {number}   low
+ * @property {number}   disclosureSpan Months between the oldest and most-recent non-withdrawn advisory (0 when fewer than 2 timestamps are available). Downstream UIs can use this to surface "has been disclosing for N months/years" without redoing the math.
  *
  * @typedef {Object} MaintenanceBreakdown
  * @property {number}   commit   0.0 – 1.5  bucketed days-since-last-commit
@@ -328,13 +329,35 @@ function scoreReadme(readme) {
  *
  * Pure: no I/O, no input mutation.
  *
- * Returns a number in [-0.6, +0.5]:
+ * Returns a number in [-0.6, +1.0]:
  *   +0.5 baseline when no published, non-withdrawn advisories exist
  *   subtract penalty per advisory weighted by severity × recency
+ *   add an active-disclosure bonus (up to +0.2) when the repo has used
+ *   the security-advisory mechanism and the penalty has aged out
  *
  * Failure modes:
  *   null / undefined / non-array → 0.0 (unknown — neither rewarded nor penalized)
- *   []                          → +0.5 (no self-disclosed CVEs)
+ *   []                          → +0.5 (no self-disclosed CVEs — hygiene-by-absence;
+ *                                       baseline only, no bonus because there is no signal)
+ *
+ * Disclosure-bonus rationale (Phase-2b calibration nit):
+ *   The old "[] → 0.5" + "old advisory → ~0.475" output collapsed two very
+ *   different stories — "never filed an advisory" vs. "filed, fixed, time
+ *   decayed the penalty" — into the same number. Worse, it rewarded silence:
+ *   a repo that quietly ships and never publishes a CVE scored identically to
+ *   one that transparently disclosed and patched vulnerabilities years ago.
+ *   The Security pillar is supposed to measure hygiene, not opacity, so we
+ *   add a small, capped bonus when there is *evidence* of active disclosure.
+ *
+ *     +0.1  >= 1 non-withdrawn advisory AND the most recent published_at
+ *           is older than 365 days (they used the mechanism, penalty decayed)
+ *     +0.2  >= 3 non-withdrawn advisories AND the OLDEST published_at is
+ *           older than 365 days (sustained disclosure history)
+ *
+ *   The bonus is capped at +0.2 so a repo that files 100 trivial advisories
+ *   does not race to a perfect score. The final return is clamped to
+ *   [-0.6, +1.0]; +0.2 can push a clean-history repo from 0.5 to 0.7, but
+ *   never above 1.0, leaving headroom for SECURITY.md and future signals.
  *
  * Caveat: this measures CVEs the maintainers themselves disclosed in this
  * repo's own code. It does NOT measure vulnerabilities in dependencies.
@@ -343,7 +366,7 @@ function scoreReadme(readme) {
  * @param {Date} now
  * @returns {number}
  */
-function scoreRepoAdvisories(advisories, now) {
+export function scoreRepoAdvisories(advisories, now) {
   if (advisories === null || advisories === undefined) return 0;
   if (!Array.isArray(advisories)) return 0;
   if (advisories.length === 0) return 0.5;
@@ -351,11 +374,21 @@ function scoreRepoAdvisories(advisories, now) {
   const sevWeight = { critical: 0.4, high: 0.25, medium: 0.1, moderate: 0.1, low: 0.05 };
   let penalty = 0;
 
+  // Track non-withdrawn, published advisories for the disclosure-bonus computation.
+  // We use the same filter as the penalty loop so the two signals stay in sync:
+  // a withdrawn or non-published row does not earn a penalty AND does not earn a
+  // bonus — neither story is "this repo used the disclosure mechanism."
+  const eligible = [];
   for (const a of advisories) {
     if (!a || a.withdrawn_at) continue;
     if (a.state && a.state !== 'published') continue;
     const sev = (a.severity || '').toLowerCase();
     const w = sevWeight[sev];
+
+    // Even an advisory with an unrecognized severity still counts as a disclosure
+    // event — record it for the bonus before bailing on the penalty loop.
+    if (a.published_at) eligible.push(new Date(a.published_at).getTime());
+
     if (!w) continue;
 
     let recencyMult = 0.1;
@@ -368,8 +401,29 @@ function scoreRepoAdvisories(advisories, now) {
     penalty += w * recencyMult;
   }
 
-  const result = 0.5 - penalty;
-  return result < -0.6 ? -0.6 : result;
+  // Compute the disclosure bonus. Both tiers require time to have passed since
+  // the relevant advisory was published — a recent disclosure does not (yet)
+  // demonstrate "fixed it, time passed, still healthy." If we have no
+  // published_at timestamps at all, we cannot tell, so no bonus.
+  let disclosureBonus = 0;
+  if (eligible.length >= 1) {
+    const newest = Math.max(...eligible);
+    const newestDays = (now.getTime() - newest) / 86400000;
+    if (eligible.length >= 3) {
+      const oldest = Math.min(...eligible);
+      const oldestDays = (now.getTime() - oldest) / 86400000;
+      if (oldestDays > 365) disclosureBonus = 0.2;
+      else if (newestDays > 365) disclosureBonus = 0.1;
+    } else if (newestDays > 365) {
+      disclosureBonus = 0.1;
+    }
+  }
+  if (disclosureBonus > 0.2) disclosureBonus = 0.2;
+
+  let result = 0.5 - penalty + disclosureBonus;
+  if (result < -0.6) result = -0.6;
+  if (result > 1.0) result = 1.0;
+  return result;
 }
 
 /**
@@ -384,11 +438,12 @@ function scoreRepoAdvisories(advisories, now) {
  * @param {Date} now
  * @returns {AdvisorySummary | null}
  */
-function summarizeAdvisories(advisories, now) {
+export function summarizeAdvisories(advisories, now) {
   if (advisories === null || advisories === undefined) return null;
   if (!Array.isArray(advisories)) return null;
 
-  const out = { total: 0, openCount: 0, recentOpen: 0, critical: 0, high: 0, medium: 0, low: 0 };
+  const out = { total: 0, openCount: 0, recentOpen: 0, critical: 0, high: 0, medium: 0, low: 0, disclosureSpan: 0 };
+  const timestamps = [];
   for (const a of advisories) {
     if (!a || a.withdrawn_at) continue;
     if (a.state && a.state !== 'published') continue;
@@ -400,9 +455,16 @@ function summarizeAdvisories(advisories, now) {
     else if (sev === 'medium' || sev === 'moderate') out.medium += 1;
     else if (sev === 'low') out.low += 1;
     if (a.published_at) {
-      const days = (now.getTime() - new Date(a.published_at).getTime()) / 86400000;
+      const ts = new Date(a.published_at).getTime();
+      timestamps.push(ts);
+      const days = (now.getTime() - ts) / 86400000;
       if (days <= 365) out.recentOpen += 1;
     }
+  }
+  if (timestamps.length >= 2) {
+    const spanDays = (Math.max(...timestamps) - Math.min(...timestamps)) / 86400000;
+    // ~30.4375 days per month (average across a 4-year cycle).
+    out.disclosureSpan = Math.round(spanDays / 30.4375);
   }
   return out;
 }

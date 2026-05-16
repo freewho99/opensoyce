@@ -35,6 +35,22 @@ test('verdictFor(7.0) === FORKABLE (lower edge)', () => {
 test('verdictFor(6.0) === STABLE', () => {
   eq(verdictFor(6.0), 'STABLE', 'stable band');
 });
+// --- STABLE band tightening (Maya's swarm calibration): 5.5 → 6.0 ----
+// The lower bound of STABLE was 5.5; projects that had drifted but still
+// cleared 5.5 read as "STABLE" which falsely implies active maintenance.
+// 5.5–5.99 now reads as WATCHLIST. Bands 8.5 / 7.0 / 4.0 / 2.5 unchanged.
+test('verdictFor(6.0) === STABLE (exact threshold pin)', () => {
+  eq(verdictFor(6.0), 'STABLE', 'STABLE lower edge is 6.0');
+});
+test('verdictFor(5.99) === WATCHLIST (just below STABLE)', () => {
+  eq(verdictFor(5.99), 'WATCHLIST', '5.99 falls into WATCHLIST after tightening');
+});
+test('verdictFor(5.5) === WATCHLIST (was STABLE in old 5.5+ logic)', () => {
+  eq(verdictFor(5.5), 'WATCHLIST', '5.5 dropped from STABLE to WATCHLIST');
+});
+test('verdictFor(5.0) === WATCHLIST (unchanged from old logic)', () => {
+  eq(verdictFor(5.0), 'WATCHLIST', '5.0 was and still is WATCHLIST');
+});
 test('verdictFor(4.5) === WATCHLIST', () => {
   eq(verdictFor(4.5), 'WATCHLIST', 'watchlist band');
 });
