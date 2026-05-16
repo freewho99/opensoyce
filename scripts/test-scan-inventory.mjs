@@ -394,6 +394,287 @@ python-versions = "^3.10"
   eq(findPkg(inv, 'urllib3').direct, false, 'urllib3 direct=false (honest)');
 });
 
+// ---------------------------------------------------------------------------
+// pnpm lockfile inventory (v0 — pnpm-lock.yaml v6/v9)
+// ---------------------------------------------------------------------------
+
+// pnpm-1: happy path — 2 direct (lodash prod + jest dev) + 1 transitive (helper).
+test('pnpm v6 happy path: 2 direct + 1 transitive, prod/dev split', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    dependencies:
+      lodash: 4.17.21
+    devDependencies:
+      jest: 29.0.0
+
+packages:
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-fake}
+  /jest@29.0.0:
+    resolution: {integrity: sha512-fake}
+    dev: true
+  /helper@1.0.0:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(inv.format, 'pnpm-lock', 'format');
+  eq(inv.ecosystem, 'npm', 'ecosystem');
+  eq(inv.totals.totalPackages, 3, 'totalPackages');
+  eq(inv.totals.directCount, 2, 'directCount');
+  eq(inv.totals.transitiveCount, 1, 'transitiveCount');
+  eq(findPkg(inv, 'lodash').direct, true, 'lodash direct');
+  eq(findPkg(inv, 'lodash').scope, 'prod', 'lodash scope=prod');
+  eq(findPkg(inv, 'jest').direct, true, 'jest direct');
+  eq(findPkg(inv, 'jest').scope, 'dev', 'jest scope=dev');
+  eq(findPkg(inv, 'helper').direct, false, 'helper transitive');
+  eq(findPkg(inv, 'lodash').versions[0], '4.17.21', 'lodash version');
+});
+
+// pnpm-2: scoped packages — both direct and transitive variants.
+test('pnpm scoped packages: direct + transitive scoped keys parse', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    dependencies:
+      '@scope/pkg': 1.0.0
+
+packages:
+  /@scope/pkg@1.0.0:
+    resolution: {integrity: sha512-fake}
+  /@scope/other@2.0.0:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(findPkg(inv, '@scope/pkg').direct, true, '@scope/pkg direct');
+  eq(findPkg(inv, '@scope/pkg').versions[0], '1.0.0', '@scope/pkg version');
+  eq(findPkg(inv, '@scope/other').direct, false, '@scope/other transitive');
+  eq(findPkg(inv, '@scope/other').versions[0], '2.0.0', '@scope/other version');
+});
+
+// pnpm-3: v6 peer-suffix underscore form `_react@18.2.0`.
+test('pnpm v6 peer-suffix underscore: /foo@1.0.0_react@18.2.0 -> name=foo, v=1.0.0', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    dependencies:
+      foo: 1.0.0
+
+packages:
+  /foo@1.0.0_react@18.2.0:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(inv.totals.totalPackages, 1, 'totalPackages');
+  eq(findPkg(inv, 'foo').versions[0], '1.0.0', 'foo version (peer stripped)');
+  eq(findPkg(inv, 'foo').direct, true, 'foo direct');
+});
+
+// pnpm-4: v9 peer-suffix paren form `(react@18.2.0)`.
+test('pnpm v9 peer-suffix paren: /foo@1.0.0(react@18.2.0) -> name=foo, v=1.0.0', () => {
+  const lock = `
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      foo: 1.0.0
+
+packages:
+  /foo@1.0.0(react@18.2.0):
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(inv.totals.totalPackages, 1, 'totalPackages');
+  eq(findPkg(inv, 'foo').versions[0], '1.0.0', 'foo version (paren stripped)');
+  eq(findPkg(inv, 'foo').direct, true, 'foo direct');
+});
+
+// pnpm-5: optionalDependencies + optional flag -> scope='optional'.
+test('pnpm optional dep: optional bucket + optional flag -> scope=optional', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    optionalDependencies:
+      fsevents: 2.3.0
+
+packages:
+  /fsevents@2.3.0:
+    resolution: {integrity: sha512-fake}
+    optional: true
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(findPkg(inv, 'fsevents').direct, true, 'fsevents direct');
+  eq(findPkg(inv, 'fsevents').scope, 'optional', 'fsevents scope=optional');
+  eq(inv.totals.optionalCount, 1, 'optionalCount');
+});
+
+// pnpm-6: prod + dev across workspaces -> prod wins (mergeScopes precedence).
+test('pnpm prod+dev across workspaces: prod wins (mergeScopes)', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    dependencies:
+      shared: 1.0.0
+  ./packages/inner:
+    devDependencies:
+      shared: 1.0.0
+
+packages:
+  /shared@1.0.0:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(findPkg(inv, 'shared').direct, true, 'shared direct');
+  eq(findPkg(inv, 'shared').scope, 'prod', 'prod wins over dev');
+});
+
+// pnpm-7: workspace `link:` value excluded from direct count.
+test('pnpm link:/workspace: values are not counted as direct deps', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    dependencies:
+      lodash: 4.17.21
+      inner: link:./packages/inner
+      other: workspace:*
+
+packages:
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  // Only lodash should appear; inner/other are workspace-internal.
+  eq(inv.totals.totalPackages, 1, 'totalPackages = 1');
+  eq(findPkg(inv, 'lodash').direct, true, 'lodash direct');
+  eq(inv.totals.directCount, 1, 'directCount = 1 (workspace links excluded)');
+});
+
+// pnpm-8: no `importers:` section -> directUnknown: true, no crash.
+test('pnpm missing importers: directUnknown=true, no crash', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+packages:
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-fake}
+  /helper@1.0.0:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(inv.totals.directUnknown, true, 'directUnknown flag set');
+  eq(inv.totals.directCount, 0, 'directCount=0 (cannot tell)');
+  eq(inv.totals.totalPackages, 2, 'totalPackages=2');
+  eq(findPkg(inv, 'lodash').direct, false, 'lodash direct=false (honest)');
+});
+
+// pnpm-9: lockfileVersion '9.0' parses identically to '6.0'.
+test('pnpm v9 lockfileVersion: parses identically', () => {
+  const lock = `
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      lodash: 4.17.21
+
+packages:
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(inv.format, 'pnpm-lock', 'format');
+  eq(findPkg(inv, 'lodash').direct, true, 'lodash direct (v9)');
+});
+
+// pnpm-10: flow-map dependencies: {...} syntax.
+test('pnpm flow-map dependencies: {lodash: 4.17.21} works', () => {
+  const lock = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    dependencies: {lodash: 4.17.21, react: '18.2.0'}
+
+packages:
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-fake}
+  /react@18.2.0:
+    resolution: {integrity: sha512-fake}
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(inv.totals.directCount, 2, 'directCount = 2 (flow form)');
+  eq(findPkg(inv, 'lodash').direct, true, 'lodash direct');
+  eq(findPkg(inv, 'react').direct, true, 'react direct');
+});
+
+// pnpm-11: realistic 8-package fixture (workspaces + scopes + peer suffixes).
+test('pnpm realistic fixture: workspaces + scopes + peer suffixes', () => {
+  const lock = `
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+
+importers:
+  .:
+    dependencies:
+      '@scope/core': 1.2.3
+      lodash: 4.17.21
+    devDependencies:
+      jest: 29.0.0
+    optionalDependencies:
+      fsevents: 2.3.0
+  ./packages/app:
+    dependencies:
+      react: 18.2.0
+
+packages:
+  /@scope/core@1.2.3:
+    resolution: {integrity: sha512-fake}
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-fake}
+  /jest@29.0.0:
+    resolution: {integrity: sha512-fake}
+    dev: true
+  /fsevents@2.3.0:
+    resolution: {integrity: sha512-fake}
+    optional: true
+  /react@18.2.0:
+    resolution: {integrity: sha512-fake}
+  /react-dom@18.2.0(react@18.2.0):
+    resolution: {integrity: sha512-fake}
+  /scheduler@0.23.0:
+    resolution: {integrity: sha512-fake}
+  /tslib@2.6.0:
+    resolution: {integrity: sha512-fake}
+    dev: true
+`.trimStart();
+  const inv = buildInventory(lock);
+  eq(inv.format, 'pnpm-lock', 'format');
+  eq(inv.totals.totalPackages, 8, 'totalPackages = 8');
+  eq(inv.totals.directCount, 5, 'directCount = 5 (@scope/core, lodash, jest, fsevents, react)');
+  eq(inv.totals.transitiveCount, 3, 'transitiveCount = 3 (react-dom, scheduler, tslib)');
+  eq(findPkg(inv, '@scope/core').direct, true, '@scope/core direct');
+  eq(findPkg(inv, 'jest').scope, 'dev', 'jest dev');
+  eq(findPkg(inv, 'fsevents').scope, 'optional', 'fsevents optional');
+  eq(findPkg(inv, 'react-dom').direct, false, 'react-dom transitive');
+  eq(findPkg(inv, 'react-dom').versions[0], '18.2.0', 'react-dom version (paren stripped)');
+  eq(findPkg(inv, 'tslib').scope, 'dev', 'tslib dev (transitive flag)');
+});
+
 console.log('');
 console.log(`${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

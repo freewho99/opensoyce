@@ -12,12 +12,23 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const defaultCache = new Map();    // `${name}@${version}` -> {result, expiresAt}
 const vulnDetailCache = new Map(); // vuln id -> {data, expiresAt}
 
-/** @returns {'npm-v1'|'npm-v2'|'npm-v3'|'yarn-v1'|'yarn-v2'|'package-json'|'uv-lock'|'poetry-lock'|'unknown'} */
+/** @returns {'npm-v1'|'npm-v2'|'npm-v3'|'yarn-v1'|'yarn-v2'|'pnpm-lock'|'package-json'|'uv-lock'|'poetry-lock'|'unknown'} */
 export function detectLockfileFormat(text) {
   if (typeof text !== 'string' || !text.trim()) return 'unknown';
   const t = text.trimStart();
   if (t.startsWith('# yarn lockfile v1')) return 'yarn-v1';
   if (t.includes('__metadata:')) return 'yarn-v2';
+  // pnpm-lock.yaml: a top-level `lockfileVersion:` scalar (number OR quoted
+  // string) AND at least one of pnpm's distinctive top-level sections
+  // (importers, packages, snapshots, settings). Must NOT be a JSON object
+  // (npm package-lock.json also has a top-level `lockfileVersion` field).
+  if (!t.startsWith('{')) {
+    const pnpmHeader = /^lockfileVersion:\s*['"]?[0-9]+(?:\.[0-9]+)?['"]?\s*$/m;
+    const pnpmStructure = /^(importers|packages|snapshots|settings):\s*$/m;
+    if (pnpmHeader.test(t) && pnpmStructure.test(t)) {
+      return 'pnpm-lock';
+    }
+  }
   // Python lockfiles (TOML). Detect via the comment banner Poetry emits, and
   // via uv's distinctive top-level `version = N` + `requires-python` keys.
   // Both formats use [[package]] arrays so we can't disambiguate on that alone.
@@ -64,7 +75,8 @@ export function detectLockfileFormat(text) {
  */
 export function ecosystemForFormat(format) {
   if (format === 'npm-v1' || format === 'npm-v2' || format === 'npm-v3'
-      || format === 'yarn-v1' || format === 'yarn-v2') {
+      || format === 'yarn-v1' || format === 'yarn-v2'
+      || format === 'pnpm-lock') {
     return 'npm';
   }
   if (format === 'uv-lock' || format === 'poetry-lock') return 'PyPI';
@@ -266,6 +278,7 @@ export function parseLockfile(text) {
   if (fmt === 'uv-lock' || fmt === 'poetry-lock') {
     return parsePythonLockfile(text, fmt);
   }
+  if (fmt === 'pnpm-lock') return parsePnpmLockfile(text);
   return parseNpmLockfile(text);
 }
 
@@ -585,6 +598,9 @@ export function buildInventory(lockfile) {
     if (format === 'uv-lock' || format === 'poetry-lock') {
       return buildPythonInventory(lockfile, format);
     }
+    if (format === 'pnpm-lock') {
+      return buildPnpmInventory(lockfile);
+    }
     if (format !== 'npm-v1' && format !== 'npm-v2' && format !== 'npm-v3') {
       return empty;
     }
@@ -887,6 +903,439 @@ function buildPythonInventory(text, format) {
   }
 
   return finalizeInventory(format, byName, totalEntries, { directUnknown });
+}
+
+// ---------------------------------------------------------------------------
+// pnpm lockfile parser (pnpm-lock.yaml, v6/v9)
+//
+// Hand-rolled, dependency-free, indentation-aware YAML reader scoped to the
+// bounded subset pnpm actually emits: `lockfileVersion:`, `importers:` (with
+// nested workspace paths -> dependency buckets), and `packages:` (keyed by
+// `/name@version` or `/@scope/name@version`, value = inline map with `dev`,
+// `optional`, etc. flags). Everything else (settings, snapshots,
+// patchedDependencies, peerDependencies metadata, resolution blobs) is
+// ignored.
+//
+// Supports BOTH block-form dependency maps and inline flow-maps:
+//   dependencies:
+//     lodash: 4.17.21         # block form
+//   dependencies: {lodash: 4.17.21, react: 18.2.0}    # flow form
+//
+// Strictness: malformed lines are silently skipped. Tab-indented lines are
+// skipped defensively (pnpm always emits spaces). The parser never throws.
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a pnpm-lock.yaml into its three sections of interest.
+ *
+ * @param {string} text
+ * @returns {{
+ *   lockfileVersion: string|null,
+ *   importers: Record<string, { dependencies?: Record<string,string>, devDependencies?: Record<string,string>, optionalDependencies?: Record<string,string> }>,
+ *   packages: Record<string, { dev?: boolean, optional?: boolean }>,
+ * }}
+ */
+export function parsePnpmYaml(text) {
+  /** @type {{ lockfileVersion: string|null, importers: Record<string, any>, packages: Record<string, any> }} */
+  const out = { lockfileVersion: null, importers: {}, packages: {} };
+  if (typeof text !== 'string' || !text.trim()) return out;
+
+  const lines = text.split(/\r?\n/);
+  // Strip trailing whitespace + comments, drop tab-indented lines defensively
+  // (pnpm always emits spaces; tabs are a malformed-file canary).
+  const norm = lines.map(raw => {
+    if (/^\t/.test(raw)) return null; // skip tab-indented lines
+    // Strip line comments. A `#` inside quotes is treated as content; we keep
+    // it simple: a `#` preceded by whitespace OR at column 0 starts a comment.
+    let s = raw.replace(/\s+$/, '');
+    return s;
+  });
+
+  // Helper: count leading spaces on a line (after we've already filtered tabs).
+  function indentOf(line) {
+    let i = 0;
+    while (i < line.length && line[i] === ' ') i += 1;
+    return i;
+  }
+
+  // First pass: top-level scalars + section starts.
+  for (let i = 0; i < norm.length; i += 1) {
+    const line = norm[i];
+    if (line == null) continue;
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (indentOf(line) !== 0) continue;
+
+    const mVer = /^lockfileVersion:\s*['"]?([0-9]+(?:\.[0-9]+)?)['"]?\s*$/.exec(line);
+    if (mVer) { out.lockfileVersion = mVer[1]; continue; }
+
+    if (/^importers:\s*$/.test(line)) {
+      i = parseImportersSection(norm, i + 1, out.importers);
+      i -= 1; // step back so the outer loop sees the section-ending line.
+      continue;
+    }
+    if (/^packages:\s*$/.test(line)) {
+      i = parsePackagesSection(norm, i + 1, out.packages);
+      i -= 1;
+      continue;
+    }
+    // Skip everything else: settings:, snapshots:, patchedDependencies:,
+    // overrides:, dependenciesMeta:, etc. We don't need them.
+  }
+
+  return out;
+}
+
+// Read pnpm's `importers:` section. Children are workspace paths (`.`, `./`,
+// or `./packages/foo`), each containing `dependencies` / `devDependencies` /
+// `optionalDependencies` maps. Returns the index AFTER the section ends.
+function parseImportersSection(lines, start, importers) {
+  let i = start;
+  let currentImporter = null;
+  let currentBucket = null;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line == null) { i += 1; continue; }
+    if (!line.trim() || line.trim().startsWith('#')) { i += 1; continue; }
+    const indent = leadingSpaces(line);
+    if (indent === 0) return i; // end of section
+
+    // Indent 2 spaces → workspace key (e.g. `.:` or `./packages/foo:`).
+    if (indent === 2) {
+      const m = /^\s+(['"]?)(.+?)\1:\s*$/.exec(line);
+      if (m) {
+        currentImporter = m[2];
+        if (!importers[currentImporter]) importers[currentImporter] = {};
+        currentBucket = null;
+      }
+      i += 1; continue;
+    }
+    // Indent 4 spaces → dep bucket (dependencies / devDependencies / etc.).
+    if (indent === 4 && currentImporter) {
+      const mBucket = /^\s+(dependencies|devDependencies|optionalDependencies):\s*(.*)$/.exec(line);
+      if (mBucket) {
+        currentBucket = mBucket[1];
+        const rest = mBucket[2].trim();
+        if (!importers[currentImporter][currentBucket]) importers[currentImporter][currentBucket] = {};
+        // Flow-form: `dependencies: {lodash: 4.17.21, react: 18.2.0}`.
+        if (rest.startsWith('{')) {
+          assignFlowMap(rest, importers[currentImporter][currentBucket]);
+        }
+        i += 1; continue;
+      }
+      // Some pnpm files indent buckets at 4 but their entries can also be
+      // expressed as inline maps under bucket-less workspace keys. Ignore.
+      i += 1; continue;
+    }
+    // Indent 6+ spaces → entries inside a bucket (block form).
+    if (indent >= 6 && currentImporter && currentBucket) {
+      const trimmed = line.trim();
+      // Skip nested block form like `lodash:\n  specifier: ^4\n  version: 4.17.21`
+      // For pnpm v9: dep entries can be `name: version` OR a nested object.
+      // We accept the simple `name: version` shape AND for nested shape, walk
+      // forward to find `version: <val>`.
+      const mPair = /^(['"]?)([^'"\s:]+(?:\/[^'"\s:]+)?)\1:\s*(.+)?$/.exec(trimmed);
+      if (mPair) {
+        const name = mPair[2];
+        let value = (mPair[3] || '').trim();
+        if (!value) {
+          // Nested form — walk children for `version:` field.
+          let j = i + 1;
+          while (j < lines.length) {
+            const sub = lines[j];
+            if (sub == null) { j += 1; continue; }
+            if (!sub.trim()) { j += 1; continue; }
+            const subIndent = leadingSpaces(sub);
+            if (subIndent <= indent) break;
+            const mv = /^\s+version:\s*(['"]?)([^'"\s]+)\1\s*$/.exec(sub);
+            if (mv) { value = mv[2]; break; }
+            j += 1;
+          }
+        } else {
+          // Strip quotes if present.
+          if ((value.startsWith("'") && value.endsWith("'"))
+              || (value.startsWith('"') && value.endsWith('"'))) {
+            value = value.slice(1, -1);
+          }
+        }
+        importers[currentImporter][currentBucket][name] = value;
+      }
+      i += 1; continue;
+    }
+    i += 1;
+  }
+  return i;
+}
+
+// Read pnpm's `packages:` section. Children are keys like `/lodash@4.17.21`
+// or `/@scope/pkg@1.0.0`, each containing flag fields (`dev`, `optional`,
+// plus `resolution`, `dependencies`, etc. which we ignore).
+function parsePackagesSection(lines, start, packages) {
+  let i = start;
+  let currentKey = null;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line == null) { i += 1; continue; }
+    if (!line.trim() || line.trim().startsWith('#')) { i += 1; continue; }
+    const indent = leadingSpaces(line);
+    if (indent === 0) return i; // end of section
+
+    // Indent 2 spaces → package key (`'/lodash@4.17.21':`).
+    if (indent === 2) {
+      const m = /^\s+(['"]?)(.+?)\1:\s*(.*)$/.exec(line);
+      if (m) {
+        currentKey = m[2];
+        if (!packages[currentKey]) packages[currentKey] = {};
+        // Some flow-form values appear inline after the colon — pnpm doesn't
+        // usually emit them, but be tolerant.
+        const rest = (m[3] || '').trim();
+        if (rest.startsWith('{')) {
+          assignFlowMap(rest, packages[currentKey]);
+        }
+      }
+      i += 1; continue;
+    }
+    // Indent 4 spaces → flag/field on the current package.
+    if (indent === 4 && currentKey) {
+      const mFlag = /^\s+(dev|optional):\s*(true|false)\s*$/.exec(line);
+      if (mFlag) {
+        packages[currentKey][mFlag[1]] = (mFlag[2] === 'true');
+      }
+      // Ignore resolution:, engines:, dependencies:, peerDependencies:, etc.
+      i += 1; continue;
+    }
+    // Deeper indents are nested data we don't read.
+    i += 1;
+  }
+  return i;
+}
+
+function leadingSpaces(line) {
+  let i = 0;
+  while (i < line.length && line[i] === ' ') i += 1;
+  return i;
+}
+
+// Parse a flow-form inline map like `{lodash: 4.17.21, react: '18.2.0', dev: true}`
+// and assign into `target`. Boolean literals are converted; everything else is
+// kept as string. Unknown / malformed entries are silently skipped.
+function assignFlowMap(raw, target) {
+  const t = raw.trim();
+  if (!t.startsWith('{') || !t.endsWith('}')) return;
+  const body = t.slice(1, -1);
+  const parts = body.match(/(?:[^,"']|"[^"]*"|'[^']*')+/g) || [];
+  for (const part of parts) {
+    const m = /^\s*(['"]?)([^'"\s:]+)\1\s*:\s*(.+?)\s*$/.exec(part);
+    if (!m) continue;
+    const key = m[2];
+    let val = m[3];
+    if ((val.startsWith("'") && val.endsWith("'"))
+        || (val.startsWith('"') && val.endsWith('"'))) {
+      val = val.slice(1, -1);
+    }
+    if (val === 'true') target[key] = true;
+    else if (val === 'false') target[key] = false;
+    else target[key] = val;
+  }
+}
+
+/**
+ * Parse a pnpm package key into { name, version }. Handles:
+ *   /lodash@4.17.21                  -> { name: 'lodash', version: '4.17.21' }
+ *   /@scope/pkg@1.0.0                -> { name: '@scope/pkg', version: '1.0.0' }
+ *   /foo@1.0.0_react@18.2.0          -> { name: 'foo', version: '1.0.0' }   (v6 peer)
+ *   /foo@1.0.0(react@18.2.0)         -> { name: 'foo', version: '1.0.0' }   (v9 peer)
+ *   lodash@4.17.21                    -> works without leading slash too
+ *
+ * Returns null on malformed input.
+ *
+ * @param {string} key
+ * @returns {{ name: string, version: string }|null}
+ */
+export function parsePnpmPackageKey(key) {
+  if (typeof key !== 'string' || !key) return null;
+  let k = key.startsWith('/') ? key.slice(1) : key;
+  if (!k) return null;
+  // Strip the v9 paren-suffix `(...)` first — it always comes AFTER the
+  // version, and the inner `@` in `(react@18.2.0)` would otherwise fool the
+  // lastIndexOf('@') split.
+  const parenAt = k.indexOf('(');
+  if (parenAt >= 0) k = k.slice(0, parenAt);
+  // Strip the v6 underscore-suffix `_peer@version` — same rationale.
+  const underAt = k.indexOf('_');
+  if (underAt >= 0) k = k.slice(0, underAt);
+
+  // Scoped package: starts with `@`, name = `@scope/pkg`, version after the
+  // `@` that follows the scope's `/`.
+  if (k.startsWith('@')) {
+    const slash = k.indexOf('/');
+    if (slash <= 0) return null;
+    const atIdx = k.indexOf('@', slash);
+    if (atIdx <= slash + 1) return null;
+    const name = k.slice(0, atIdx);
+    const version = k.slice(atIdx + 1);
+    if (!name || !version) return null;
+    return { name, version };
+  }
+  const atIdx = k.lastIndexOf('@');
+  if (atIdx <= 0) return null;
+  const name = k.slice(0, atIdx);
+  const version = k.slice(atIdx + 1);
+  if (!name || !version) return null;
+  return { name, version };
+}
+
+/**
+ * Generator yielding direct deps from a parsed `importers` map.
+ * Skips workspace-internal values (link:, workspace:, file:, git+, http*).
+ *
+ * @param {Record<string, any>} importers
+ * @returns {Generator<{ name: string, version: string, scope: 'prod'|'dev'|'optional' }>}
+ */
+export function* directDepsFromImporters(importers) {
+  if (!importers || typeof importers !== 'object') return;
+  for (const importer of Object.values(importers)) {
+    if (!importer || typeof importer !== 'object') continue;
+    for (const [bucket, scope] of /** @type {const} */ ([
+      ['dependencies', 'prod'],
+      ['devDependencies', 'dev'],
+      ['optionalDependencies', 'optional'],
+    ])) {
+      const deps = importer[bucket];
+      if (!deps || typeof deps !== 'object') continue;
+      for (const [name, raw] of Object.entries(deps)) {
+        if (typeof raw !== 'string') continue;
+        if (isWorkspaceInternalValue(raw)) continue;
+        // The recorded `version` for a direct dep in pnpm's importer block
+        // can be a plain semver, OR a suffixed `1.0.0(react@18.2.0)` /
+        // `1.0.0_react@18.2.0` shape. Strip suffixes the same way.
+        let version = raw;
+        const parenAt = version.indexOf('(');
+        if (parenAt >= 0) version = version.slice(0, parenAt);
+        const underAt = version.indexOf('_');
+        if (underAt >= 0) version = version.slice(0, underAt);
+        yield { name, version, scope };
+      }
+    }
+  }
+}
+
+function isWorkspaceInternalValue(v) {
+  if (typeof v !== 'string') return true;
+  return v.startsWith('link:')
+    || v.startsWith('workspace:')
+    || v.startsWith('file:')
+    || v.startsWith('git+')
+    || v.startsWith('http://')
+    || v.startsWith('https://');
+}
+
+/**
+ * Build the canonical inventory shape from a pnpm-lock.yaml.
+ *
+ * Direct/transitive: derived from `importers:` (every workspace member's
+ * dependency buckets). If `importers:` is missing entirely we set
+ * `directUnknown: true` and mark nothing as direct — same honesty rule as the
+ * Python path for poetry.lock without a companion pyproject.toml.
+ *
+ * Scope: importer-declared scopes win for direct deps. Transitive deps use
+ * the per-package `optional` / `dev` flags (optional > dev > prod default).
+ * mergeScopes() reconciles when the same package appears under multiple
+ * scopes across workspaces.
+ *
+ * License / repository: pnpm doesn't write either into the lockfile. Both
+ * stay false; resolver fetches them on demand.
+ */
+export function buildPnpmInventory(text) {
+  const { importers, packages } = parsePnpmYaml(text);
+  const importerKeys = importers ? Object.keys(importers) : [];
+  const directUnknown = importerKeys.length === 0;
+
+  // Map: name -> Set of scopes declared by importers (direct deps only).
+  /** @type {Map<string, Set<string>>} */
+  const directScopes = new Map();
+  for (const { name, scope } of directDepsFromImporters(importers)) {
+    let s = directScopes.get(name);
+    if (!s) { s = new Set(); directScopes.set(name, s); }
+    s.add(scope);
+  }
+
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  const byName = new Map();
+  let totalEntries = 0;
+
+  function record(name, version, isDirect, scopes) {
+    if (!name) return;
+    totalEntries += 1;
+    let acc = byName.get(name);
+    if (!acc) {
+      acc = {
+        versions: new Set(),
+        direct: false,
+        scopes: new Set(),
+        hasLicense: false,
+        hasRepository: false,
+      };
+      byName.set(name, acc);
+    }
+    if (version) acc.versions.add(version);
+    if (isDirect) acc.direct = true;
+    for (const s of scopes) acc.scopes.add(s);
+  }
+
+  for (const [key, meta] of Object.entries(packages || {})) {
+    const parsed = parsePnpmPackageKey(key);
+    if (!parsed) continue;
+    const isDirect = directScopes.has(parsed.name);
+    const scopes = isDirect
+      ? [...directScopes.get(parsed.name)]
+      : [scopeFromPnpmFlags(meta)];
+    record(parsed.name, parsed.version, isDirect, scopes);
+  }
+
+  // Also record direct deps that for some reason don't appear in `packages:`
+  // (defensive — keeps directCount honest if the user truncated the file).
+  for (const [name, scopes] of directScopes.entries()) {
+    if (!byName.has(name)) {
+      record(name, '', true, [...scopes]);
+    }
+  }
+
+  return finalizeInventory('pnpm-lock', byName, totalEntries, { directUnknown });
+}
+
+function scopeFromPnpmFlags(meta) {
+  if (!meta || typeof meta !== 'object') return 'prod';
+  if (meta.optional === true) return 'optional';
+  if (meta.dev === true) return 'dev';
+  return 'prod';
+}
+
+/**
+ * Parse a pnpm-lock.yaml into the unified `{ ecosystem, direct, all }` shape.
+ * First-seen version wins on dedupe, matching npm parser semantics.
+ *
+ * @param {string} text
+ * @returns {{ ecosystem:'npm', direct:string[], all:Array<{name:string,version:string}> }}
+ */
+export function parsePnpmLockfile(text) {
+  const { importers, packages } = parsePnpmYaml(text);
+  /** @type {Map<string,string>} */
+  const all = new Map();
+  for (const key of Object.keys(packages || {})) {
+    const parsed = parsePnpmPackageKey(key);
+    if (!parsed) continue;
+    if (!all.has(parsed.name)) all.set(parsed.name, parsed.version);
+  }
+  /** @type {Set<string>} */
+  const direct = new Set();
+  for (const { name } of directDepsFromImporters(importers)) {
+    direct.add(name);
+  }
+  return {
+    ecosystem: 'npm',
+    direct: [...direct].sort(),
+    all: [...all.entries()].map(([name, version]) => ({ name, version })),
+  };
 }
 
 function compareVersionsLoose(a, b) {

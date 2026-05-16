@@ -441,5 +441,50 @@ source = { registry = "https://pypi.org/simple" }
   eq(result.inventory.format, 'uv-lock', 'inventory.format');
 });
 
+// ---------------------------------------------------------------------------
+// 8. pnpm-lock.yaml end-to-end: parser flows through OSV + resolver + analyzer
+// ---------------------------------------------------------------------------
+await test('pnpm-lock end-to-end: minimist HIGH, v3d shape, ecosystem=npm', async () => {
+  resetCaches();
+  // Minimal pnpm v6 lockfile with minimist@1.2.5 — the vulnerable canary.
+  const PNPM_LOCK = `
+lockfileVersion: '6.0'
+
+importers:
+  .:
+    dependencies:
+      minimist: 1.2.5
+
+packages:
+  /minimist@1.2.5:
+    resolution: {integrity: sha512-fakeintegrityforfilethatdoesntneedtoresolve}
+  /helper@1.0.0:
+    resolution: {integrity: sha512-fakeintegrityforhelpertransitive}
+`.trimStart();
+
+  const result = await runScan({
+    lockfileText: PNPM_LOCK,
+    filename: 'pnpm-lock.yaml',
+    deps: {
+      getAnalysis: async () => healthyAnalysis(),
+      resolveIdentity: makeResolveIdentity(),
+      mapWithConcurrency,
+      fetchImpl: osvFetchStub(new Set(['minimist'])),
+    },
+  });
+
+  eq(result.ecosystem, 'npm', 'top-level ecosystem');
+  ok(result.inventory, 'inventory built');
+  eq(result.inventory.format, 'pnpm-lock', 'inventory.format');
+  eq(result.inventory.ecosystem, 'npm', 'inventory.ecosystem');
+  eq(result.totalDeps, 2, 'totalDeps = 2 (minimist + helper)');
+  eq(result.directDeps, 1, 'directDeps = 1 (minimist)');
+  eq(result.vulnerabilities.length, 1, 'one vuln (minimist)');
+  eq(result.vulnerabilities[0].package, 'minimist', 'vuln pkg name');
+  eq(result.vulnerabilities[0].version, '1.2.5', 'vuln version');
+  eq(result.vulnerabilities[0].repoHealth.verdict, 'FORKABLE', 'repoHealth attached');
+  ok(!('inventoryError' in result), 'no inventoryError');
+});
+
 console.log(`\n${passed} passed, ${failed} failed.`);
 process.exit(failed === 0 ? 0 : 1);

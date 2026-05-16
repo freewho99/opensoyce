@@ -9,7 +9,8 @@ file). A GitHub Actions example posts/updates that report as a PR comment.
 
 Given a `package-lock.json`, the CLI:
 
-1. Parses the lockfile (npm v1/v2/v3 supported; yarn coming).
+1. Parses the lockfile (npm v1/v2/v3, pnpm v6/v9, and Python uv.lock /
+   poetry.lock supported; yarn is best-effort).
 2. Queries OSV for known vulnerabilities.
 3. Resolves each vulnerable package's GitHub source repo via the npm registry.
 4. Calls 8 GitHub endpoints per resolved repo, runs the Soyce scorer, and
@@ -268,8 +269,10 @@ GitHub asks for these on the install screen; accept them all.
 - **Events:** only `pull_request` with action `opened`, `synchronize`,
   or `reopened`. Other actions (labeled, edited, closed, etc.) are
   acked with `{ ignored: '<action>' }` and no Check Run is posted.
-- **Lockfile coverage:** `package-lock.json` (npm v1/v2/v3) only.
-  Yarn and pnpm support tracks the rest of the scanner roadmap.
+- **Lockfile coverage:** `package-lock.json` (npm v1/v2/v3),
+  `pnpm-lock.yaml` (pnpm v6/v9), and Python `uv.lock` / `poetry.lock`.
+  Yarn is best-effort (`yarn.lock` v1 parses but direct/transitive
+  and scope are reported as `unknown`).
 - **Never blocks merges.** The Check Run always reports
   `conclusion: success` in v0 — the title carries the decision label
   (CLEAN / PATCH AVAILABLE / REVIEW REQUIRED / VERIFY LATER) but the
@@ -345,6 +348,61 @@ as `verified: 'unverified'` — that's normal, not a fraud signal.
   packages but do not get any extra metadata in v0.
 - Only the GitHub host is supported for source-repo resolution. GitLab /
   Codeberg / self-hosted lands in v0.1.
+
+## pnpm lockfile support (pnpm-lock.yaml)
+
+OpenSoyce v0 supports pnpm lockfiles (v6 and v9) alongside npm. Because
+pnpm uses the npm registry, scans of `pnpm-lock.yaml` route through OSV's
+`npm` ecosystem — the same scoring, Risk Profile, and Maintainer Trust
+pipeline the npm path uses.
+
+**CLI usage**
+
+```bash
+node scripts/opensoyce-scan-report.mjs path/to/pnpm-lock.yaml
+```
+
+The CLI auto-detects pnpm from a top-level `lockfileVersion:` scalar plus
+one of pnpm's distinctive sections (`importers:`, `packages:`,
+`snapshots:`, `settings:`). Filename is passed through as a hint for
+future per-format dispatch but does not gate detection today.
+
+**Direct vs. transitive**
+
+The `importers:` section is the source of truth for direct dependencies.
+Every workspace path (`.` for the root, plus any `./packages/*` members)
+contributes its `dependencies` / `devDependencies` / `optionalDependencies`
+buckets. Scope precedence follows the existing `mergeScopes` rule —
+prod > optional > dev > unknown — so a package declared `prod` in the
+root and `dev` in a sub-workspace is reported as `prod`.
+
+**Workspace handling**
+
+Values like `link:../inner`, `workspace:*`, `file:./vendor`, and `git+`
+URLs are recognised as workspace-internal and excluded from the direct-
+dep count (they are not queryable against OSV). Regular versioned deps
+inside sub-workspaces flow through normally.
+
+**Peer suffix collapse**
+
+pnpm v6 emits per-peer-variant keys like `/foo@1.0.0_react@18.2.0`; pnpm
+v9 emits the paren form `/foo@1.0.0(react@18.2.0)`. v0 collapses both to
+a single `foo@1.0.0` entry. Per-variant reporting is deferred to v0.1.
+
+**Known limitations**
+
+- pnpm v5 and earlier are not supported (different layout with
+  `specifiers:` + flat `dependencies:` instead of `importers:`).
+- The `snapshots:` block (v9 split-out) is parsed for package keys only;
+  per-snapshot peer variants are collapsed.
+- `overrides:` and `patchedDependencies:` are ignored.
+- License and repository fields are not present in `pnpm-lock.yaml`; the
+  resolver fetches both from the npm registry on demand. Inventory rows
+  always report `hasLicense: false` / `hasRepository: false`.
+- If `importers:` is missing entirely, the inventory sets
+  `totals.directUnknown: true` and marks every package as transitive —
+  same honesty rule the Python path uses for `poetry.lock` without a
+  companion `pyproject.toml`.
 
 ## Build-time prerender of `/methodology`
 
