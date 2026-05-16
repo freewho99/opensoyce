@@ -544,7 +544,7 @@ Hono - 9.0/10. Ultrafast edge framework, now the standard for Cloudflare Workers
 
 Bun - 8.5/10. Fast Node replacement with real team adoption. MOMENTUM and FRESH signals, but the score reflects that it's still maturing - which is information you need before you bet a production service on it.
 
-Then there are projects where the story is more complicated. A 7.2 on the Soyce Score with HIGH MOMENTUM means you're looking at something growing fast but with real questions around maintenance discipline or security posture. That's not a rejection - it might be perfect for your use case - but it's a flag that deserves a second look before you add it as a core dependency.
+Then there are projects where the story is more complicated. A 7.2 on the Soyce Score with FORKABLE means you're looking at something growing fast but with real questions around maintenance discipline or security posture. That's not a rejection - it might be perfect for your use case - but it's a flag that deserves a second look before you add it as a core dependency.
 
 [img:/blog/trending-safe-3.png:The OpenSoyce Heat Check leaderboard - trending projects ranked by Soyce Score, not just star count.]
 

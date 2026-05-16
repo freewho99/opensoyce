@@ -154,13 +154,16 @@ export default function Methodology() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             <VocabCard title="USE READY" score="≥ 8.5" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
             <VocabCard title="FORKABLE" score="7.0–8.4" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
-            <VocabCard title="HIGH MOMENTUM" score="earlyBreakout override" desc="A sub-8.5 project with strong rising-signal curation. GitHub stats catching up to real adoption." />
             <VocabCard title="STABLE" score="5.5–6.9" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
             <VocabCard title="WATCHLIST" score="4.0–5.4" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
             <VocabCard title="RISKY" score="2.5–3.9" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
             <VocabCard title="STALE" score="< 2.5" desc="Effectively abandoned. No recent commits, no releases, no triage." />
             <VocabCard title="GRAVEYARD" score="Deprecated" desc="Shaped the ecosystem. Now a museum piece. Some have forkable infrastructure." />
           </div>
+
+          <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">
+            Editorial tiers (e.g. HIGH MOMENTUM for hand-curated rising stars) are not shown in the public score card. A real momentum heuristic is on the roadmap — until then, the algorithm only earns the bands above.
+          </p>
         </div>
       </section>
 

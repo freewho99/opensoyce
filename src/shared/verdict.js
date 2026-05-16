@@ -17,6 +17,16 @@
  * advisories does NOT jump up. Bands themselves (8.5 / 7.0 / 5.5 / 4.0 / 2.5)
  * are unchanged.
  *
+ * Public verdict bands surfaced by runScan / API: USE READY, FORKABLE, STABLE,
+ * WATCHLIST, RISKY, STALE.
+ *
+ * HIGH MOMENTUM is an editorial-only tier — it is still returned by this
+ * function when callers explicitly pass `earlyBreakout: true`, but it is not
+ * exposed by `runScan` and is not rendered as a public verdict band. Only
+ * `src/data/categories.ts` (the curated editorial allowlist) opts in. Removed
+ * from public display because no public-facing call site passes
+ * `earlyBreakout: true`, so users could never earn it via the algorithm.
+ *
  * @typedef {'USE READY' | 'FORKABLE' | 'HIGH MOMENTUM' | 'STABLE' | 'WATCHLIST' | 'RISKY' | 'STALE'} SoyceVerdict
  *
  * @typedef {object} AdvisorySummaryLike
@@ -45,9 +55,11 @@ export function verdictFor(score, opts = {}) {
   }
   if (score >= 8.5) return 'USE READY';
   if (score >= 7.0) return 'FORKABLE';
-  // earlyBreakout: a sub-8.5 project with strong rising-signal curation.
-  // Renders as HIGH MOMENTUM in any of the lower tiers so the breakout
-  // story isn't swallowed by a STABLE / WATCHLIST label.
+  // earlyBreakout: opt-in editorial tier for hand-curated "rising star"
+  // projects. Currently used only by src/data/categories.ts. Not exposed by
+  // runScan. When set, returns 'HIGH MOMENTUM' regardless of the band the
+  // score would normally land in. Public scoring callers should leave this
+  // off — the band is not rendered as a public verdict.
   if (opts && opts.earlyBreakout) return 'HIGH MOMENTUM';
   if (score >= 5.5) return 'STABLE';
   if (score >= 4.0) return 'WATCHLIST';

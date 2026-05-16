@@ -88,7 +88,10 @@ const TRENDING_DATA = [
   { owner: 'prisma', repo: 'prisma', band: 'USE READY', tagline: 'Next-generation Node.js and TypeScript ORM', signals: ['LOW RISK', 'DOCS STRONG'], category: 'orm-database', hotLine: '↑ Prisma 6 GA · Accelerate edge queries launching' },
   { owner: 'supabase', repo: 'supabase', band: 'USE READY', tagline: 'The open source Firebase alternative', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'orm-database', hotLine: '↑ Auth + storage + DB in one · Vector/AI features shipping' },
   { owner: 'coleam00', repo: 'archon', band: 'USE READY', tagline: 'YAML-DEFINED AI CODING WORKFLOWS', signals: ['FRESH', 'MOMENTUM'], category: 'ai-agent-harnesses', hotLine: '↑ YAML-defined agent workflows surging' },
-  { owner: 'openharness', repo: 'ohmo', band: 'HIGH MOMENTUM', tagline: 'LIGHTWEIGHT CLI-FIRST HARNESS', signals: ['MOMENTUM', 'FRESH'], category: 'ai-agent-harnesses', earlyBreakout: true, hotLine: '↑ CLI-native agent infra surfacing' },
+  // openharness/ohmo previously baked band: 'HIGH MOMENTUM' here. Removed
+  // because HIGH MOMENTUM is no longer a publicly-displayed verdict tier
+  // (editorial-only — see src/shared/verdict.js). Reintroduce when a real
+  // momentum heuristic ships so the band can be earned by the algorithm.
 ];
 
 export default function Home() {
@@ -205,6 +208,80 @@ export default function Home() {
         </div>
         
         <div className="absolute top-0 right-0 w-full h-full opacity-[0.03] pointer-events-none -z-10 bg-[radial-gradient(#302C26_1px,transparent_1px)] [background-size:40px_40px]"></div>
+      </section>
+
+      {/* AI Dependency Framing Band */}
+      {/* Bands below are baked once via verdictFor() from src/shared/verdict.js.
+          langchain WATCHLIST = verdict-cap from commit 8c0d6ab firing on
+          1 critical + 3 high open advisories (hidden-vulns cap). Numeric
+          scores are deliberately not shown — click-through hits /lookup
+          for the live scan. */}
+      <section className="py-16 px-4 bg-white border-b-4 border-black">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-10 flex flex-wrap items-center gap-3">
+            <span className="bg-soy-red text-white px-4 py-2 text-xs font-black uppercase tracking-[0.4em] shadow-[4px_4px_0px_#000]">
+              NOW SCANNING AI DEPS
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic">
+              Verdict bands shown — click any card for the live score.
+            </span>
+          </div>
+
+          <div className="mb-3">
+            <h2 className="text-5xl font-black uppercase italic tracking-tighter leading-none mb-4">
+              BUILT FOR THE AI DEPENDENCY TREE
+            </h2>
+            <p className="text-xl font-bold uppercase tracking-wide opacity-70 italic max-w-3xl">
+              Lockfile-aware scoring across npm, uv, and Poetry — so the models, agents, and SDKs you ship on get the same nutrition label as everything else.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-10">
+            {[
+              { owner: 'langchain-ai', repo: 'langchain', band: 'WATCHLIST', tagline: 'LLM app framework', note: '⚠ 4 OPEN HIGH/CRIT' },
+              { owner: 'huggingface', repo: 'transformers', band: 'USE READY', tagline: 'State-of-the-art ML models', note: 'Reference stack for OSS AI' },
+              { owner: 'vercel', repo: 'ai', band: 'USE READY', tagline: 'AI SDK for TS/React', note: 'Vercel-backed · fast-moving' },
+              { owner: 'openai', repo: 'openai-node', band: 'USE READY', tagline: 'Official OpenAI Node SDK', note: 'First-party SDK · widely used' },
+            ].map((pkg, i) => {
+              const bandStyle = pkg.band === 'WATCHLIST'
+                ? { bg: 'bg-yellow-500', textCol: 'text-black' }
+                : { bg: 'bg-green-600', textCol: 'text-white' };
+              return (
+                <Link
+                  key={i}
+                  to={`/lookup?q=${pkg.owner}/${pkg.repo}`}
+                  onClick={() => trackEvent('ai_band_card_click', { repo: `${pkg.owner}/${pkg.repo}`, source: 'ai_framing_band' })}
+                  className="group bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000] hover:shadow-[10px_10px_0px_#D12D2D] hover:-translate-y-1 transition-all flex flex-col"
+                >
+                  <div className="flex justify-between items-start mb-4 gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-40 leading-none mb-1 truncate">{pkg.owner} /</span>
+                      <h3 className="text-2xl font-black uppercase italic tracking-tighter leading-none group-hover:text-soy-red transition-all truncate">
+                        {pkg.repo}
+                      </h3>
+                    </div>
+                    <div className={`px-2 py-1 ${bandStyle.bg} ${bandStyle.textCol} text-[9px] font-black uppercase tracking-[0.15em] border-2 border-black shadow-[3px_3px_0px_#000] shrink-0`}>
+                      {pkg.band}
+                    </div>
+                  </div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest opacity-60 italic mb-3">
+                    "{pkg.tagline}"
+                  </p>
+                  <p className={`text-[10px] font-black uppercase tracking-wider mt-auto ${pkg.band === 'WATCHLIST' ? 'text-soy-red' : 'opacity-70'}`}>
+                    {pkg.note}
+                  </p>
+                  <div className="mt-4 pt-3 border-t border-black/10 text-[9px] font-black uppercase tracking-[0.2em] text-soy-red flex items-center gap-2">
+                    SCAN LIVE <ArrowRight size={12} />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <p className="mt-8 text-[10px] font-bold uppercase tracking-widest opacity-50 italic">
+            Verdict bands shown; click any card for the live score. Now supports npm, uv, and Poetry lockfiles.
+          </p>
+        </div>
       </section>
 
       {/* Features Grid */}
@@ -501,10 +578,13 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
   // Band is baked at curation time via verdictFor() — see TRENDING_DATA.
   // Numeric scores are deliberately not displayed here to avoid drift vs.
   // the live /api/analyze. Click-through to /lookup shows the real score.
+  //
+  // HIGH MOMENTUM is intentionally not mapped here: it is an editorial-only
+  // tier and is not surfaced on the public home page. See verdict.js for the
+  // full rationale.
   const getBadge = () => {
     const band = trend.band || 'FORKABLE';
     if (band === 'STALE') return { text: 'STALE', bg: 'bg-gray-600', textCol: 'text-white' };
-    if (band === 'HIGH MOMENTUM') return { text: 'HIGH MOMENTUM', bg: 'bg-orange-500', textCol: 'text-white' };
     if (band === 'USE READY') return { text: 'USE READY', bg: 'bg-green-600', textCol: 'text-white' };
     if (band === 'FORKABLE') return { text: 'FORKABLE', bg: 'bg-blue-600', textCol: 'text-white' };
     if (band === 'STABLE') return { text: 'STABLE', bg: 'bg-slate-500', textCol: 'text-white' };

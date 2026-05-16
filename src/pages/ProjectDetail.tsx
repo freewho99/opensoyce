@@ -165,7 +165,11 @@ export default function ProjectDetail() {
           </div>
           <div className="flex items-center gap-4">
             <div className="shadow-[-4px_4px_0px_white]">
-              <SoyceScore value={project.score.overall ?? 0} size="sm" earlyBreakout={!!curated?.earlyBreakout} advisorySummary={project.advisories ?? null} link />
+              {/* earlyBreakout intentionally NOT forwarded: HIGH MOMENTUM is an editorial-only
+                  tier and is not shown in the public score card. The curated flag stays in
+                  src/data/categories.ts for internal use and is still surfaced via the
+                  Compare / SimilarProjects "rising" marker. See src/shared/verdict.js. */}
+              <SoyceScore value={project.score.overall ?? 0} size="sm" advisorySummary={project.advisories ?? null} link />
             </div>
           </div>
         </div>
@@ -367,7 +371,9 @@ export default function ProjectDetail() {
                     to={`/challenge?repo=${project.owner}/${project.name}`}
                     onClick={() => trackEvent('challenge_label_click', { 
                       repo: `${project.owner}/${project.name}`, 
-                      currentLabel: verdictFor(project.score.overall, { earlyBreakout: !!curated?.earlyBreakout, advisorySummary: project.advisories ?? null }),
+                      // earlyBreakout omitted: HIGH MOMENTUM is editorial-only and is not
+                      // a public verdict band. See src/shared/verdict.js.
+                      currentLabel: verdictFor(project.score.overall, { advisorySummary: project.advisories ?? null }),
                       score: project.score.overall
                     })}
                     className="inline-block bg-black text-white px-6 py-3 text-xs font-black uppercase italic tracking-widest hover:bg-soy-red transition-all"

@@ -154,6 +154,26 @@ test('verdictFor(8.0, {}) === FORKABLE (no advisorySummary key)', () => {
   eq(verdictFor(8.0, {}), 'FORKABLE', 'absent advisorySummary is a no-op');
 });
 
+// --- HIGH MOMENTUM is editorial-only — never produced without earlyBreakout
+// Public callers (runScan etc) never pass earlyBreakout, so HIGH MOMENTUM
+// must NEVER appear in their results. The opt-in editorial path still
+// works for hand-curated callers like src/data/categories.ts.
+test('verdictFor(7.0) without earlyBreakout NEVER returns HIGH MOMENTUM', () => {
+  const samples = [9.5, 8.5, 8.0, 7.5, 7.0, 6.8, 6.0, 5.5, 4.5, 4.0, 3.0, 2.5, 1.5, 0.0];
+  for (const s of samples) {
+    const v = verdictFor(s);
+    if (v === 'HIGH MOMENTUM') {
+      throw new Error(`score ${s} produced HIGH MOMENTUM without earlyBreakout — public bands must not surface the editorial tier`);
+    }
+  }
+});
+test('verdictFor(8.0, { earlyBreakout: true }) editorial path still works', () => {
+  // The lower-tier scores still get HIGH MOMENTUM. At 8.0 the FORKABLE band
+  // already wins over the breakout opt (verified in the test above), so
+  // pick a sub-7.0 score to confirm the editorial path is intact.
+  eq(verdictFor(6.5, { earlyBreakout: true }), 'HIGH MOMENTUM', 'editorial allowlist callers still earn the band');
+});
+
 console.log('');
 console.log(`Verdict tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

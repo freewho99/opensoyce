@@ -1116,6 +1116,9 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
 // The "REPO" prefix is mandatory at call sites so this never visually collides
 // with the advisory severity pill (which is also green/amber/red but means
 // something entirely different).
+//
+// HIGH MOMENTUM is included for type completeness only — the runScan path
+// never produces it (editorial-only tier; see src/shared/verdict.js).
 const VERDICT_CHIP: Record<RepoVerdict, string> = {
   'USE READY': 'bg-emerald-500 text-black',
   'FORKABLE': 'bg-emerald-500 text-black',
@@ -1236,11 +1239,14 @@ const LABEL_STYLES: Record<SummaryLabel, { pill: string; copy: string }> = {
 
 // Distribution band display order. UNAVAILABLE last so the eye lands on
 // healthy bands first when they exist. Reuses the VERDICT_CHIP colors.
+//
+// HIGH MOMENTUM is intentionally omitted: it is an editorial-only tier
+// (see src/shared/verdict.js) and runScan never produces it, so it does
+// not appear in the scan-result health distribution chip set.
 const HEALTH_BAND_ORDER: HealthBandKey[] = [
   'USE READY',
   'FORKABLE',
   'STABLE',
-  'HIGH MOMENTUM',
   'WATCHLIST',
   'RISKY',
   'STALE',
