@@ -13,5 +13,8 @@
         { "key": "Cache-Control", "value": "public, max-age=300" }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/band-drop-tick", "schedule": "0 */6 * * *" }
   ]
 }

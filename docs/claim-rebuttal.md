@@ -70,22 +70,42 @@ When opted in:
 - The issue is labeled `band-drop-subscribed` in addition to `claim-rebuttal`.
 - The success screen confirms the subscription.
 
-**The opt-in surface is real and the receipt is durable.** What's NOT
-shipping in v0 is the notifier daemon itself — the cron job that watches
-bands and re-opens / @-mentions on drop is scheduled for **v0.1**. Until
-then, maintainers can self-poll by watching the issue's repo state or
-checking their Soyce Score on `/lookup`.
+**The opt-in surface is real, the receipt is durable, and as of v0.1 the
+notifier itself is live.** A Vercel cron job runs every 6 hours, walks
+all open issues labeled `band-drop-subscribed`, re-scans each subscribed
+repo, and posts a comment on the rebuttal issue when the band drops.
 
 **"Band drop" definition.** Bands form an ordered ladder:
 USE READY &rarr; FORKABLE &rarr; STABLE &rarr; WATCHLIST &rarr; RISKY &rarr; STALE.
 Only band-tier transitions DOWN that ladder trigger notifications. Score
 fluctuations within a band do not trigger. Bands moving UP do not trigger.
 
-**v0.1 trigger model (planned, not running).** A cron job re-scans every
-claimed-and-subscribed repo every ~6 hours, compares the new band against
-the previous scan's band, and on a drop posts a comment on the existing
-rebuttal issue with the `@{login}` mention. The HTML comment marker lets
-that future job enumerate subscribers without a separate database.
+**v0.1 trigger model (live).** The cron endpoint `/api/band-drop-tick`
+runs every 6 hours. Each tick:
+
+1. Mints an installation token for the OpenSoyce GitHub App.
+2. Lists open issues on `freewho99/opensoyce` labeled
+   `band-drop-subscribed` (paginated, up to 1000 subscribers per tick).
+3. Parses each issue's subscriber marker for `{ login, owner, repo }`
+   and the optional `<!-- opensoyce-last-band: BAND -->` marker.
+4. Re-runs the full `analyzeRepo` pipeline at concurrency 3, with
+   per-subscriber failure isolation (rate limits, 404s, etc. don't
+   poison the batch).
+5. On the **first** tick for a given issue (no last-band marker present),
+   writes a baseline marker and does NOT post a comment. This is the
+   v0 backfill rule: pre-existing subscribers get one quiet tick before
+   they can be notified.
+6. On a downward band transition, posts a comment that `@`-mentions
+   the subscriber, names the old &rarr; new band, links the Soyce
+   lookup, and reminds them they can unsubscribe by closing the issue.
+   Then updates the last-band marker.
+7. On unchanged or upward transitions, silently syncs the marker with
+   no comment.
+
+The cron is gated by `Authorization: Bearer ${CRON_SECRET}` (Vercel adds
+this header automatically for cron-invoked endpoints). The endpoint
+always returns 200 with a `{ scanned, baselined, dropped, errored }`
+summary, so partial failure doesn't false-alarm Vercel's cron retry logic.
 
 ## Subscribing as the rebuttal author
 
