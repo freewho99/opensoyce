@@ -35,6 +35,37 @@ const TITLE = 'OpenSoyce Methodology — How Scores Are Calculated';
 const DESCRIPTION =
   'How the Soyce Score is computed: thirteen GitHub signals across Maintenance (30%), Community (25%), Security (20%), Documentation (15%), and Activity (10%). Includes verdict bands, graveyard rules, and the signal vocabulary.';
 
+async function writeWellKnownSigningKey() {
+  // Publish the Ed25519 signing public key into dist/.well-known so Vercel
+  // serves it as a static asset at /.well-known/opensoyce-signing-key.pem.
+  // We write to BOTH dist/ (the actual built output) and public/ (so
+  // `vite preview` works without a rebuild). prerender runs AFTER `vite build`,
+  // so the dist/ write is the load-bearing one.
+  const distWellKnown = path.join(DIST_DIR, '.well-known');
+  const publicWellKnown = path.join(root, 'public', '.well-known');
+  const filename = 'opensoyce-signing-key.pem';
+  const pem = process.env.OPENSOYCE_SIGNING_PUBLIC_KEY;
+  const content = (typeof pem === 'string' && pem.includes('BEGIN PUBLIC KEY'))
+    ? (pem.endsWith('\n') ? pem : `${pem}\n`)
+    : (
+      '# OpenSoyce signing public key (placeholder)\n'
+      + '# Set OPENSOYCE_SIGNING_PUBLIC_KEY in the build environment to publish\n'
+      + '# the real Ed25519 public key here. Until then, signed reports cannot\n'
+      + '# be verified via the public .well-known URL.\n'
+    );
+  await fs.mkdir(distWellKnown, { recursive: true });
+  await fs.writeFile(path.join(distWellKnown, filename), content, 'utf8');
+  await fs.mkdir(publicWellKnown, { recursive: true });
+  await fs.writeFile(path.join(publicWellKnown, filename), content, 'utf8');
+  if (pem && pem.includes('BEGIN PUBLIC KEY')) {
+    console.log(`prerender: wrote .well-known/${filename} (${content.length} bytes)`);
+  } else {
+    console.warn(
+      `prerender: OPENSOYCE_SIGNING_PUBLIC_KEY env var missing; wrote placeholder to .well-known/${filename}`,
+    );
+  }
+}
+
 async function main() {
   // Sanity: the regular Vite build must have run first.
   try {
@@ -44,6 +75,9 @@ async function main() {
       `prerender: ${SHELL_HTML} not found. Run \`vite build\` before this script.`,
     );
   }
+
+  // 0. Publish the Ed25519 signing public key to dist/.well-known.
+  await writeWellKnownSigningKey();
 
   // 1. Build a Node-targeted SSR bundle of the prerender entry.
   console.log('prerender: building SSR bundle...');

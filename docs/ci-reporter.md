@@ -546,3 +546,125 @@ rule and comment.
   with:
     sarif_file: opensoyce.sarif
 ```
+
+## Signed reports (Ed25519)
+
+Every JSON and SARIF report OpenSoyce emits via the CLI carries an Ed25519
+cryptographic signature anchored to a public OpenSoyce signing key. The
+signature proves two things:
+
+1. **Artifact integrity** — the report bytes have not been altered since
+   OpenSoyce emitted them. A single character change anywhere in the JSON
+   invalidates the signature.
+2. **OpenSoyce origin** — only the holder of the OpenSoyce private key
+   (Vercel env `OPENSOYCE_SIGNING_PRIVATE_KEY`) can produce a signature
+   that verifies against the public key.
+
+The signature does NOT prove anything about the scan input or the upstream
+data sources (OSV, GitHub, npm). It is integrity for the artifact only.
+
+### Signature format
+
+The signature is embedded inside the report. For a JSON report it appears
+at the top level:
+
+```json
+{
+  "schemaVersion": 1,
+  "decision": { "label": "CLEAN", "reason": "..." },
+  "totals": { "...": "..." },
+  "signature": {
+    "algorithm": "Ed25519",
+    "keyFingerprint": "<sha256-hex of the public key>",
+    "signedAt": "2026-05-14T12:34:56.789Z",
+    "signature": "<base64-encoded 64-byte Ed25519 signature>"
+  }
+}
+```
+
+For a SARIF report the signature lives at `runs[0].properties.signature`
+(SARIF allows arbitrary properties on `run.properties`), with the same
+four fields.
+
+The signed bytes are a sorted-keys JSON canonicalization of the report
+without the signature field. Re-signing the same content with the same
+key always produces the same 64-byte signature (Ed25519 is deterministic
+per RFC 8032).
+
+### Public key
+
+Published at `https://www.opensoyce.com/.well-known/opensoyce-signing-key.pem`.
+Anyone — including external auditors with no OpenSoyce account — can fetch
+the PEM and verify a report locally.
+
+### Verifying via CLI
+
+```bash
+node scripts/opensoyce-scan-report.mjs --verify report.json
+# OK signature: <fingerprint> signed at 2026-05-14T12:34:56.789Z
+#   verified against env OPENSOYCE_SIGNING_PUBLIC_KEY (fingerprint <fingerprint>)
+```
+
+The CLI loads the public key from `OPENSOYCE_SIGNING_PUBLIC_KEY` env var
+if set; otherwise it fetches the PEM from the well-known URL above. Exit
+code is 0 on `OK`, 1 on `INVALID: <reason>` printed to stderr.
+
+`--verify` works on both JSON and SARIF reports — the location is detected
+automatically from the document shape.
+
+### Verifying via the web endpoint
+
+```bash
+curl -X POST https://www.opensoyce.com/api/verify-report \
+  -H 'Content-Type: application/json' \
+  --data @report.json
+
+# {"valid":true,"keyFingerprint":"<fingerprint>","signedAt":"2026-05-14T12:34:56.789Z"}
+# or
+# {"valid":false,"reason":"signature does not match canonical report bytes"}
+```
+
+CORS is open, so browsers can call the endpoint directly.
+
+### Failure modes the verifier surfaces
+
+| Verifier exit / response | Cause                                                       |
+| ------------------------ | ----------------------------------------------------------- |
+| `INVALID: no signature`  | Report has no `signature` field at the expected location.   |
+| `INVALID: unsupported signature algorithm: <name>` | `signature.algorithm` is not `Ed25519`. |
+| `INVALID: signature is not valid base64` | `signature.signature` decodes to garbage. |
+| `INVALID: Ed25519 signatures must be 64 bytes, got <n>` | Base64 decodes to wrong length. |
+| `INVALID: public key is not parseable: <err>` | Operator passed a malformed PEM. |
+| `INVALID: signature does not match canonical report bytes` | Report was tampered with, OR was signed with a different key than the one being used to verify. |
+
+### Backward compat
+
+If `OPENSOYCE_SIGNING_PRIVATE_KEY` is not set in the environment, the CLI
+emits reports **unsigned** and prints a single warning to stderr:
+
+```
+WARN OPENSOYCE_SIGNING_PRIVATE_KEY not set; reports will be emitted unsigned
+```
+
+Existing CI workflows that don't set the env var continue to work; their
+output is just not verifiable.
+
+### Key rotation
+
+If the fingerprint at `/.well-known/opensoyce-signing-key.pem` changes,
+the old signing key has been rotated. Reports signed under the old key
+will show as `INVALID: signature does not match canonical report bytes`
+when verified against the new public key. A formal key-rotation timeline
+and a published rotation log are deferred to a future release.
+
+### Out of scope for v0
+
+- **Retention / history.** OpenSoyce does not durably store every signed
+  report it has ever emitted. The signature proves the artifact you have
+  in front of you is authentic; if you need a longer-lived record, archive
+  the signed report yourself.
+- **SOC 2 compliance.** Cryptographic signing is one input to a SOC 2
+  audit, not the whole story. The SOC 2 operational work (control
+  ownership, evidence collection, auditor engagement) is tracked
+  separately from this engineering deliverable.
+

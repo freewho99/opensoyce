@@ -16,7 +16,11 @@
  *     under rule id `opensoyce.borrowed-trust-identity`.
  *   - Suppressions are applied at the result level — suppressed vulns are
  *     OMITTED from `results` and recorded in `run.properties.suppressions`.
+ *   - Optional Ed25519 signature is embedded at `runs[0].properties.signature`
+ *     (SARIF allows arbitrary properties on run.properties).
  */
+
+import { signReport } from './reportSigning.js';
 
 const SCHEMA_URI = 'https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.6.json';
 const TOOL_NAME = 'OpenSoyce';
@@ -188,7 +192,12 @@ function buildBorrowedTrustResult(v) {
 }
 
 /**
- * Build a SARIF 2.1.0 document for a scan result. Pure function.
+ * Build a SARIF 2.1.0 document for a scan result.
+ *
+ * If `opts.privateKeyPem` is provided, the returned document includes an
+ * Ed25519 signature at `runs[0].properties.signature` — SARIF permits
+ * arbitrary properties on `run.properties` so this stays spec-compliant.
+ * Backward compat: omit the opt for unsigned SARIF output.
  *
  * @param {{
  *   scanResult: { vulnerabilities?: any[] | null, scannedAt?: string },
@@ -196,9 +205,10 @@ function buildBorrowedTrustResult(v) {
  *   profile?: any,
  *   suppressions?: Array<{ vuln: any, rule: { kind: string, value: string, comment?: string } }>,
  * }} args
+ * @param {{ privateKeyPem?: string, publicKeyPem?: string, keyId?: string, now?: () => string }} [opts]
  * @returns {object} SARIF 2.1.0 JSON
  */
-export function buildSarifReport({ scanResult, summary, profile, suppressions } = {}) {
+export function buildSarifReport({ scanResult, summary, profile, suppressions } = {}, opts = {}) {
   const vulns = Array.isArray(scanResult?.vulnerabilities) ? scanResult.vulnerabilities : [];
   const results = [];
   for (const v of vulns) {
@@ -252,11 +262,24 @@ export function buildSarifReport({ scanResult, summary, profile, suppressions } 
     run.properties = runProps;
   }
 
-  return {
+  /** @type {any} */
+  const sarif = {
     version: '2.1.0',
     $schema: SCHEMA_URI,
     runs: [run],
   };
+
+  if (opts && typeof opts.privateKeyPem === 'string' && opts.privateKeyPem.trim()) {
+    return signReport(sarif, {
+      privateKeyPem: opts.privateKeyPem,
+      publicKeyPem: opts.publicKeyPem,
+      keyId: opts.keyId,
+      location: 'sarif-run0',
+      now: opts.now,
+    });
+  }
+
+  return sarif;
 }
 
 export const __internal = {

@@ -21,3 +21,9 @@ scan-resp.json
 # Catches Windows-path-mangled curl output (`curl > C:\Users\pfinn\Downloads\foo.json`
 # ends up as `UserspfinnDownloadsfoo.json` in cwd under msys2 shells).
 Userspfinn*.json
+
+# Build-time-injected signing public key. The PEM itself isn't secret, but
+# committing it would cause drift if the key is ever rotated — the canonical
+# source is the build env var (OPENSOYCE_SIGNING_PUBLIC_KEY) which writes
+# this file via scripts/prerender.mjs.
+public/.well-known/opensoyce-signing-key.pem

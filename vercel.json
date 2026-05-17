@@ -3,6 +3,15 @@
     { "source": "/api/github/:owner/:repo", "destination": "/api/github" },
     { "source": "/api/badge/:owner/:repo.svg", "destination": "/api/badge" },
     { "source": "/methodology", "destination": "/methodology/index.html" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|\\.well-known/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/opensoyce-signing-key.pem",
+      "headers": [
+        { "key": "Content-Type", "value": "application/x-pem-file" },
+        { "key": "Cache-Control", "value": "public, max-age=300" }
+      ]
+    }
   ]
 }

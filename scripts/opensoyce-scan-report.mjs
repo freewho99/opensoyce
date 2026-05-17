@@ -40,11 +40,14 @@ import { computeRiskProfile } from '../src/shared/riskProfile.js';
 import { buildMarkdownReport, buildJsonReport } from '../src/shared/buildScanReport.js';
 import { buildSarifReport } from '../src/shared/buildSarifReport.js';
 import { parseIgnoreFile, matchesIgnoreRule } from '../src/shared/parseIgnoreFile.js';
+import { verifyReport, detectSignatureLocation, keyFingerprint } from '../src/shared/reportSigning.js';
 
 const MAX_LOCKFILE_BYTES = 5_000_000;
 const FAIL_ON_LEVELS = new Set(['none', 'review-required', 'high-vuln', 'critical-vuln']);
+const PUBLIC_KEY_URL = 'https://www.opensoyce.com/.well-known/opensoyce-signing-key.pem';
 
 const USAGE = `Usage: node scripts/opensoyce-scan-report.mjs <package-lock.json> [options]
+       node scripts/opensoyce-scan-report.mjs --verify <report-path>
 
 Options:
   --out <path>          Write markdown report to <path> (default: stdout)
@@ -54,8 +57,19 @@ Options:
                         .opensoyce-ignore in the lockfile's parent directory)
   --fail-on <level>     none|review-required|high-vuln|critical-vuln (default: none)
   --github-token <tok>  Token for higher rate limits; otherwise reads GITHUB_TOKEN env
+  --verify <path>       Verify a previously emitted JSON or SARIF report. Reads
+                        OPENSOYCE_SIGNING_PUBLIC_KEY env var; if unset, fetches
+                        ${PUBLIC_KEY_URL}.
+                        Exits 0 on OK, 1 on INVALID.
   --quiet               Suppress progress lines on stderr
   --help                Print this message and exit
+
+Signing:
+  Reports emitted via --json / --sarif (or --out into a file) are signed when
+  OPENSOYCE_SIGNING_PRIVATE_KEY is set in the environment. The signature is
+  Ed25519 over a canonical (sorted-key) JSON form of the report. If the env
+  var is unset, reports are emitted unsigned and a warning is printed to
+  stderr.
 `;
 
 /**
@@ -63,7 +77,7 @@ Options:
  * @param {string[]} argv  process.argv.slice(2)
  */
 export function parseArgs(argv) {
-  /** @type {{ positionals: string[], out: string|null, json: string|null, sarif: string|null, ignore: string|null, failOn: string, token: string|null, quiet: boolean, help: boolean, _error: string|null }} */
+  /** @type {{ positionals: string[], out: string|null, json: string|null, sarif: string|null, ignore: string|null, failOn: string, token: string|null, verify: string|null, quiet: boolean, help: boolean, _error: string|null }} */
   const out = {
     positionals: [],
     out: null,
@@ -72,6 +86,7 @@ export function parseArgs(argv) {
     ignore: null,
     failOn: 'none',
     token: null,
+    verify: null,
     quiet: false,
     help: false,
     _error: null,
@@ -124,6 +139,12 @@ export function parseArgs(argv) {
       const v = argv[++i];
       if (!v) { out._error = 'missing value for --github-token'; break; }
       out.token = v;
+      continue;
+    }
+    if (a === '--verify') {
+      const v = argv[++i];
+      if (!v) { out._error = 'missing value for --verify'; break; }
+      out.verify = v;
       continue;
     }
     if (a.startsWith('--')) {
@@ -229,6 +250,95 @@ function loadIgnoreRules(explicitPath, lockfilePath, quiet) {
   return { ignoreRules: rules, ignoreSource: candidate };
 }
 
+/**
+ * Resolve the public key for --verify. Order: explicit env var, then a
+ * fetched copy from the .well-known URL. Returns the PEM string or null +
+ * a human-readable reason.
+ *
+ * @returns {Promise<{ pem: string|null, source: string, reason?: string }>}
+ */
+async function resolveVerifyPublicKey() {
+  const env = process.env.OPENSOYCE_SIGNING_PUBLIC_KEY;
+  if (typeof env === 'string' && env.trim()) {
+    return { pem: env, source: 'env OPENSOYCE_SIGNING_PUBLIC_KEY' };
+  }
+  try {
+    const resp = await fetch(PUBLIC_KEY_URL);
+    if (!resp.ok) {
+      return {
+        pem: null,
+        source: PUBLIC_KEY_URL,
+        reason: `fetched ${PUBLIC_KEY_URL} returned HTTP ${resp.status}`,
+      };
+    }
+    const text = await resp.text();
+    if (!text || !text.includes('BEGIN PUBLIC KEY')) {
+      return {
+        pem: null,
+        source: PUBLIC_KEY_URL,
+        reason: `fetched ${PUBLIC_KEY_URL} did not contain a PUBLIC KEY block`,
+      };
+    }
+    return { pem: text, source: PUBLIC_KEY_URL };
+  } catch (e) {
+    return {
+      pem: null,
+      source: PUBLIC_KEY_URL,
+      reason: `failed to fetch ${PUBLIC_KEY_URL}: ${e.message}`,
+    };
+  }
+}
+
+/**
+ * Handle --verify <path>: read the file, parse JSON, run verifyReport, print
+ * OK / INVALID and exit 0 / 1 accordingly.
+ *
+ * @param {string} verifyPath
+ * @returns {Promise<0|1>}
+ */
+async function runVerify(verifyPath) {
+  const abs = pathResolve(process.cwd(), verifyPath);
+  if (!existsSync(abs)) {
+    process.stderr.write(`INVALID: report file not found at ${abs}\n`);
+    return 1;
+  }
+  let text;
+  try {
+    text = readFileSync(abs, 'utf8');
+  } catch (e) {
+    process.stderr.write(`INVALID: failed to read ${abs}: ${e.message}\n`);
+    return 1;
+  }
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch (e) {
+    process.stderr.write(`INVALID: ${abs} is not valid JSON: ${e.message}\n`);
+    return 1;
+  }
+  const { pem, source, reason } = await resolveVerifyPublicKey();
+  if (!pem) {
+    process.stderr.write(`INVALID: could not load OpenSoyce public key (${reason || 'no source'})\n`);
+    return 1;
+  }
+  const location = detectSignatureLocation(obj);
+  const result = verifyReport(obj, { publicKeyPem: pem, location });
+  if (result.valid) {
+    let expectedFingerprint = '';
+    try {
+      expectedFingerprint = keyFingerprint(pem);
+    } catch { /* non-fatal */ }
+    const lines = [
+      `OK signature: ${result.keyFingerprint || '(no fingerprint in signature)'} signed at ${result.signedAt || '(unknown time)'}`,
+      `  verified against ${source}${expectedFingerprint ? ` (fingerprint ${expectedFingerprint})` : ''}`,
+    ];
+    process.stdout.write(`${lines.join('\n')}\n`);
+    return 0;
+  }
+  process.stderr.write(`INVALID: ${result.reason}\n`);
+  return 1;
+}
+
 async function main(argv) {
   const args = parseArgs(argv);
   if (args.help) {
@@ -238,6 +348,10 @@ async function main(argv) {
   if (args._error) {
     process.stderr.write(`opensoyce-scan-report: ${args._error}\n\n${USAGE}`);
     return 2;
+  }
+  if (args.verify) {
+    // Verify path: ignores all other flags / positionals.
+    return runVerify(args.verify);
   }
   if (args.positionals.length === 0) {
     process.stderr.write(`opensoyce-scan-report: lockfile path is required\n\n${USAGE}`);
@@ -269,6 +383,19 @@ async function main(argv) {
 
   const token = args.token || process.env.GITHUB_TOKEN || '';
   const getAnalysis = makeCliAnalysisCache(token);
+
+  // Signing: opt-in via OPENSOYCE_SIGNING_PRIVATE_KEY. If unset, emit a
+  // single stderr warning so CI logs make the unsigned state visible.
+  const signingPrivateKey = process.env.OPENSOYCE_SIGNING_PRIVATE_KEY || '';
+  const signingPublicKey = process.env.OPENSOYCE_SIGNING_PUBLIC_KEY || '';
+  if (!signingPrivateKey && !args.quiet) {
+    process.stderr.write(
+      'WARN OPENSOYCE_SIGNING_PRIVATE_KEY not set; reports will be emitted unsigned\n',
+    );
+  }
+  const signingOpts = signingPrivateKey
+    ? { privateKeyPem: signingPrivateKey, publicKeyPem: signingPublicKey || undefined }
+    : {};
 
   progress(args.quiet, 'Parsing lockfile...');
   progress(args.quiet, 'Querying OSV...');
@@ -358,7 +485,7 @@ async function main(argv) {
       selectedHealth,
       scannedAt: scanResult.scannedAt,
       osvError: !!scanResult.osvError,
-    });
+    }, signingOpts);
     try {
       writeFileSync(pathResolve(process.cwd(), args.json), JSON.stringify(jsonReport, null, 2), 'utf8');
     } catch (e) {
@@ -391,7 +518,7 @@ async function main(argv) {
       summary,
       profile,
       suppressions: suppressed,
-    });
+    }, signingOpts);
     try {
       writeFileSync(pathResolve(process.cwd(), args.sarif), JSON.stringify(sarif, null, 2), 'utf8');
     } catch (e) {

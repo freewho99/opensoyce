@@ -237,6 +237,12 @@ export default function Methodology() {
               status="BY DESIGN · v0.1"
             />
             <LimitationCard
+              tag="INTEGRITY"
+              title="Signed reports (Ed25519)"
+              body="Reports emitted by --out, --json, and --sarif flags are cryptographically signed with OpenSoyce's Ed25519 signing key. The signature lives inside each report (top-level `signature` field for JSON; `runs[0].properties.signature` for SARIF) and is computed over a sorted-keys JSON canonicalization. Anyone can verify a report wasn't tampered with via `node scripts/opensoyce-scan-report.mjs --verify report.json` (exit 0 OK, exit 1 INVALID) or by POSTing the report to https://www.opensoyce.com/api/verify-report. The public key is published at https://www.opensoyce.com/.well-known/opensoyce-signing-key.pem so external auditors can verify locally with no OpenSoyce account. Signature proves artifact integrity + OpenSoyce origin only — it does NOT vouch for the upstream scan data (OSV, GitHub, npm). Retention and SOC 2 compliance are tracked separately and not part of v0."
+              status="SHIPPED · v0"
+            />
+            <LimitationCard
               tag="INSTALL SCRIPTS"
               title="Postinstall script detection (informational only)"
               body="npm preinstall / install / postinstall hooks run arbitrary code on `npm install` — the attack vector behind event-stream, ua-parser-js, colors.js, and faker.js. Inventory + vuln rows surface a ⚠ INSTALL SCRIPT chip when the lockfile flags `hasInstallScript: true` (npm v1/v2/v3) or `requiresBuild: true` (pnpm). A curated allowlist (src/data/trustedInstallScripts.js) suppresses the chip for ~30 packages where install scripts are expected and legitimate (TypeScript, esbuild, sharp, husky, electron, puppeteer, …). The chip is informational only — it does NOT contribute to the Risk Profile, does NOT band-cap the verdict, and does NOT change the composite score. Coverage gaps: yarn-v1 lockfiles don't expose the flag, and Python lockfiles (uv.lock, poetry.lock) have no equivalent — both are documented in docs/ci-reporter.md and reported as hasInstallScript: false."

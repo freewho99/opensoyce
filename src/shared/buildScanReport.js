@@ -15,6 +15,7 @@
  */
 
 import { plural } from './pluralize.js';
+import { signReport } from './reportSigning.js';
 
 /** @typedef {'CLEAN'|'PATCH_AVAILABLE'|'REVIEW_REQUIRED'|'VERIFY_LATER'} DecisionLabel */
 
@@ -367,6 +368,14 @@ export function buildMarkdownReport({
 /**
  * Build the JSON report.
  *
+ * If `opts.privateKeyPem` is provided, the returned object includes a
+ * top-level `signature` field anchored to that Ed25519 key. The signing is
+ * deterministic (Ed25519 + sorted-key canonicalization), so re-signing the
+ * same report content with the same key produces an identical signature.
+ *
+ * Backward compat: when `opts.privateKeyPem` is omitted, no signature field
+ * is added — callers without the env var keep the original v3d shape.
+ *
  * @param {{
  *   summary: any,
  *   profile: any,
@@ -376,6 +385,7 @@ export function buildMarkdownReport({
  *   scannedAt?: string,
  *   osvError?: boolean,
  * }} args
+ * @param {{ privateKeyPem?: string, publicKeyPem?: string, keyId?: string, now?: () => string }} [opts]
  */
 export function buildJsonReport({
   summary,
@@ -385,7 +395,7 @@ export function buildJsonReport({
   selectedHealth,
   scannedAt,
   osvError,
-} = {}) {
+} = {}, opts = {}) {
   const vulns = Array.isArray(vulnerabilities) ? vulnerabilities : [];
   const bySev = summary?.totals?.bySeverity || {
     CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0,
@@ -463,6 +473,16 @@ export function buildJsonReport({
       totals: inventory.totals || {},
       packages,
     };
+  }
+
+  if (opts && typeof opts.privateKeyPem === 'string' && opts.privateKeyPem.trim()) {
+    return signReport(out, {
+      privateKeyPem: opts.privateKeyPem,
+      publicKeyPem: opts.publicKeyPem,
+      keyId: opts.keyId,
+      location: 'top-level',
+      now: opts.now,
+    });
   }
 
   return out;
