@@ -254,6 +254,12 @@ export default function Methodology() {
               body="npm preinstall / install / postinstall hooks run arbitrary code on `npm install` — the attack vector behind event-stream, ua-parser-js, colors.js, and faker.js. Inventory + vuln rows surface a ⚠ INSTALL SCRIPT chip when the lockfile flags `hasInstallScript: true` (npm v1/v2/v3) or `requiresBuild: true` (pnpm). A curated allowlist (src/data/trustedInstallScripts.js) suppresses the chip for ~30 packages where install scripts are expected and legitimate (TypeScript, esbuild, sharp, husky, electron, puppeteer, …). The chip is informational only — it does NOT contribute to the Risk Profile, does NOT band-cap the verdict, and does NOT change the composite score. Coverage gaps: yarn-v1 lockfiles don't expose the flag, and Python lockfiles (uv.lock, poetry.lock) have no equivalent — both are documented in docs/ci-reporter.md and reported as hasInstallScript: false."
               status="BY DESIGN · v0"
             />
+            <LimitationCard
+              tag="DEP CONFUSION"
+              title="Dependency confusion detection (user-declared private list)"
+              body="Birsan 2021 attack: an attacker publishes a package on public PyPI / npm matching your private package name, and misconfigured index priority pulls the public copy into your CI. There is no public registry of 'this name is private to my company' — the user has to declare it. v0 ships a `.opensoyce-private` file (gitignore-flavored, auto-discovered next to the lockfile, override with --private). Names listed there are flagged with a ⚠ POSSIBLE DEP CONFUSION chip (MEDIUM, static match). When the public registry returns 200 for that same name, the chip escalates to ⚠ ACTIVE DEP CONFUSION (HIGH — an attacker may already be squatting). Scope: npm + PyPI only. No inference — zero false positives if the list is correct. Active checks are 24h-cached per (ecosystem, name); a failed probe leaves the static MEDIUM signal in place. Informational only — does NOT contribute to the composite score, Risk Profile, or verdict band."
+              status="SHIPPED · v0"
+            />
           </div>
 
           <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">

@@ -40,6 +40,7 @@ import { computeRiskProfile } from '../src/shared/riskProfile.js';
 import { buildMarkdownReport, buildJsonReport } from '../src/shared/buildScanReport.js';
 import { buildSarifReport } from '../src/shared/buildSarifReport.js';
 import { parseIgnoreFile, matchesIgnoreRule } from '../src/shared/parseIgnoreFile.js';
+import { parsePrivateFile } from '../src/shared/parsePrivateFile.js';
 import { verifyReport, detectSignatureLocation, keyFingerprint } from '../src/shared/reportSigning.js';
 
 const MAX_LOCKFILE_BYTES = 5_000_000;
@@ -55,6 +56,9 @@ Options:
   --sarif <path>        Also write SARIF 2.1.0 report to <path>
   --ignore <path>       Path to a .opensoyce-ignore file (default: auto-discover
                         .opensoyce-ignore in the lockfile's parent directory)
+  --private <path>      Path to a .opensoyce-private file (default: auto-discover
+                        .opensoyce-private in the lockfile's parent directory).
+                        Names listed there flip on dependency-confusion detection.
   --fail-on <level>     none|review-required|high-vuln|critical-vuln (default: none)
   --github-token <tok>  Token for higher rate limits; otherwise reads GITHUB_TOKEN env
   --verify <path>       Verify a previously emitted JSON or SARIF report. Reads
@@ -77,13 +81,14 @@ Signing:
  * @param {string[]} argv  process.argv.slice(2)
  */
 export function parseArgs(argv) {
-  /** @type {{ positionals: string[], out: string|null, json: string|null, sarif: string|null, ignore: string|null, failOn: string, token: string|null, verify: string|null, quiet: boolean, help: boolean, _error: string|null }} */
+  /** @type {{ positionals: string[], out: string|null, json: string|null, sarif: string|null, ignore: string|null, private: string|null, failOn: string, token: string|null, verify: string|null, quiet: boolean, help: boolean, _error: string|null }} */
   const out = {
     positionals: [],
     out: null,
     json: null,
     sarif: null,
     ignore: null,
+    private: null,
     failOn: 'none',
     token: null,
     verify: null,
@@ -123,6 +128,12 @@ export function parseArgs(argv) {
       const v = argv[++i];
       if (!v) { out._error = 'missing value for --ignore'; break; }
       out.ignore = v;
+      continue;
+    }
+    if (a === '--private') {
+      const v = argv[++i];
+      if (!v) { out._error = 'missing value for --private'; break; }
+      out.private = v;
       continue;
     }
     if (a === '--fail-on') {
@@ -248,6 +259,42 @@ function loadIgnoreRules(explicitPath, lockfilePath, quiet) {
     for (const err of errors) process.stderr.write(`opensoyce-ignore: ${err}\n`);
   }
   return { ignoreRules: rules, ignoreSource: candidate };
+}
+
+/**
+ * Load + parse a `.opensoyce-private` file. Same auto-discovery pattern as
+ * `.opensoyce-ignore`: explicit `--private <path>` wins, otherwise look in
+ * the lockfile's parent directory. Missing file is the silent default —
+ * dep-confusion detection simply doesn't fire.
+ *
+ * @param {string|null} explicitPath
+ * @param {string} lockfilePath
+ * @param {boolean} quiet
+ * @returns {{ privateList: any|null, privateSource: string }}
+ */
+function loadPrivateList(explicitPath, lockfilePath, quiet) {
+  let candidate = null;
+  if (explicitPath) {
+    candidate = pathResolve(process.cwd(), explicitPath);
+  } else {
+    const auto = pathJoin(pathDirname(lockfilePath), '.opensoyce-private');
+    if (existsSync(auto)) candidate = auto;
+  }
+  if (!candidate || !existsSync(candidate)) {
+    return { privateList: null, privateSource: 'no private file' };
+  }
+  let text = '';
+  try {
+    text = readFileSync(candidate, 'utf8');
+  } catch (e) {
+    process.stderr.write(`failed to read private file ${candidate}: ${e.message}\n`);
+    return { privateList: null, privateSource: 'no private file' };
+  }
+  const parsed = parsePrivateFile(text);
+  if (parsed.errors.length > 0 && !quiet) {
+    for (const err of parsed.errors) process.stderr.write(`opensoyce-private: ${err}\n`);
+  }
+  return { privateList: parsed, privateSource: candidate };
 }
 
 /**
@@ -417,6 +464,15 @@ async function main(argv) {
   // `uv.lock`, `poetry.lock`. Common npm: `package-lock.json`.
   const filename = args.positionals[0].split(/[\\/]/).pop() || 'package-lock.json';
 
+  // Dependency-confusion detection v0. Auto-discover `.opensoyce-private` in
+  // the lockfile's parent directory (or honor explicit --private path). When
+  // present, runScan flags inventory rows whose name appears in the list and
+  // (active escalation) probes the public registry to escalate MEDIUM → HIGH.
+  const { privateList, privateSource } = loadPrivateList(args.private, lockfilePath, args.quiet);
+  if (privateList && privateList.names.length > 0) {
+    progress(args.quiet, `Dependency-confusion: loaded ${privateList.names.length} private name(s) from ${privateSource}`);
+  }
+
   let scanResult;
   try {
     scanResult = await runScan({
@@ -426,6 +482,7 @@ async function main(argv) {
         getAnalysis,
         resolveIdentity,
         mapWithConcurrency,
+        privateList: privateList || null,
       },
     });
   } catch (err) {

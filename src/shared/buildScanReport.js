@@ -466,6 +466,9 @@ export function buildJsonReport({
         scope: p?.scope || 'unknown',
         hasLicense: !!p?.hasLicense,
         hasRepository: !!p?.hasRepository,
+        hasInstallScript: !!p?.hasInstallScript,
+        possibleTypoSquat: p?.possibleTypoSquat || null,
+        dependencyConfusion: p?.dependencyConfusion || null,
       }))
       : [];
     out.inventory = {

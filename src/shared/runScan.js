@@ -43,6 +43,7 @@ import {
 } from './scanLockfile.js';
 import { selectHealthCandidates } from './selectHealthCandidates.js';
 import { verdictFor } from './verdict.js';
+import { checkPublicRegistry as defaultCheckPublicRegistry } from './checkPublicRegistry.js';
 
 // Severity tiering for response sort. Lower index = higher severity.
 // Duplicated only as a tiny lookup constant (intentional — it's 6 tokens,
@@ -310,7 +311,20 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   if (!deps || typeof deps !== 'object') {
     throw new Error('runScan: deps is required');
   }
-  const { getAnalysis, resolveIdentity, mapWithConcurrency, fetchImpl } = deps;
+  const {
+    getAnalysis,
+    resolveIdentity,
+    mapWithConcurrency,
+    fetchImpl,
+    // Dep-confusion v0. `privateList` is the parsed `.opensoyce-private`
+    // shape { nameSet, comments, ... }. `checkPublicRegistry` is the
+    // injection seam for tests; default falls through to the shared module.
+    privateList,
+    checkPublicRegistry,
+  } = deps;
+  const depConfusionCheck = typeof checkPublicRegistry === 'function'
+    ? checkPublicRegistry
+    : defaultCheckPublicRegistry;
   if (typeof getAnalysis !== 'function') throw new Error('runScan: deps.getAnalysis required');
   if (typeof resolveIdentity !== 'function') throw new Error('runScan: deps.resolveIdentity required');
   if (typeof mapWithConcurrency !== 'function') throw new Error('runScan: deps.mapWithConcurrency required');
@@ -373,13 +387,61 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   }
 
   // Scanner v3a — whole-tree inventory. Additive; never fails the scan.
+  // `privateList` (when present) seeds the static MEDIUM dep-confusion signal
+  // on each matching package row; the active escalation to HIGH happens
+  // immediately after inventory construction (async path, bounded concurrency).
   let inventory = null;
   let inventoryError = null;
   try {
-    inventory = buildInventory(lockfileText);
+    inventory = buildInventory(lockfileText, { privateList: privateList || null });
   } catch {
     inventory = null;
     inventoryError = 'INVENTORY_FAILED';
+  }
+
+  // Dep-confusion v0 — active escalation. For every package row whose
+  // dependencyConfusion is MEDIUM (static match), probe the public registry.
+  // If the public registry confirms a package by that name, escalate to
+  // HIGH. Bounded concurrency = 5, same as the v2.1a resolver. Any failure
+  // leaves the MEDIUM signal in place — we never DROP the static signal,
+  // only escalate or not.
+  if (inventory && Array.isArray(inventory.packages) && privateList && privateList.nameSet instanceof Set && privateList.nameSet.size > 0) {
+    const targets = [];
+    for (let i = 0; i < inventory.packages.length; i += 1) {
+      const p = inventory.packages[i];
+      if (p && p.dependencyConfusion && p.dependencyConfusion.confidence === 'MEDIUM') {
+        targets.push({ idx: i, name: p.name });
+      }
+    }
+    if (targets.length > 0) {
+      const probeOutcomes = await mapWithConcurrency(targets, 5, async (t) => {
+        try {
+          return await depConfusionCheck(t.name, ecosystem, { fetchImpl });
+        } catch {
+          return false;
+        }
+      });
+      let activeCount = 0;
+      for (let i = 0; i < targets.length; i += 1) {
+        const outcome = probeOutcomes[i];
+        const exists = !!(outcome && outcome.ok && outcome.value === true);
+        if (!exists) continue;
+        const p = inventory.packages[targets[i].idx];
+        if (!p || !p.dependencyConfusion) continue;
+        p.dependencyConfusion = {
+          confidence: 'HIGH',
+          reason:
+            'Active squat detected: this private name has been published to the public registry. An attacker may be attempting dependency confusion.',
+          userComment: p.dependencyConfusion.userComment || null,
+        };
+        activeCount += 1;
+      }
+      // Surface count of HIGH-confidence (active) hits separately so the UI
+      // can render "X active squat(s) detected" without recounting.
+      if (inventory.totals && typeof inventory.totals === 'object') {
+        inventory.totals.activeDependencyConfusionCount = activeCount;
+      }
+    }
   }
 
   // Postinstall analysis v0 — informational `hasInstallScript` flag flows
@@ -397,16 +459,19 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     // whose package is absent from the inventory (e.g. inventory build
     // failed) so the chip stays hidden in that degraded mode.
     const typoSquatIndex = new Map();
+    const depConfusionIndex = new Map();
     for (const p of inventory.packages) {
       if (p && p.name) {
         installScriptIndex.set(p.name, p.hasInstallScript === true);
         typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
+        depConfusionIndex.set(p.name, p.dependencyConfusion || null);
       }
     }
     vulnerabilities = vulnerabilities.map(v => ({
       ...v,
       hasInstallScript: installScriptIndex.get(v.package) === true,
       possibleTypoSquat: typoSquatIndex.get(v.package) || null,
+      dependencyConfusion: depConfusionIndex.get(v.package) || null,
     }));
   }
 
@@ -438,10 +503,12 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   if (inventory && Array.isArray(inventory.packages) && selectedHealth && Array.isArray(selectedHealth.scored)) {
     const installScriptIndex = new Map();
     const typoSquatIndex = new Map();
+    const depConfusionIndex = new Map();
     for (const p of inventory.packages) {
       if (p && p.name) {
         installScriptIndex.set(p.name, p.hasInstallScript === true);
         typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
+        depConfusionIndex.set(p.name, p.dependencyConfusion || null);
       }
     }
     selectedHealth = {
@@ -450,6 +517,7 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
         ...r,
         hasInstallScript: installScriptIndex.get(r.package) === true,
         possibleTypoSquat: typoSquatIndex.get(r.package) || null,
+        dependencyConfusion: depConfusionIndex.get(r.package) || null,
       })),
     };
   }

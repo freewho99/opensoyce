@@ -561,6 +561,11 @@ export const __internal = { defaultCache, vulnDetailCache, severityFromCvssVecto
  * is dev-only.
  *
  * @param {string|object} lockfile  raw text or pre-parsed lockfile object
+ * @param {{ privateList?: { nameSet: Set<string>, comments: Map<string,string> } | null }} [opts]
+ *        Optional `.opensoyce-private` list. When present, each finalized
+ *        package row gets a `dependencyConfusion` field at MEDIUM confidence
+ *        when the package name matches the list. Active escalation to HIGH
+ *        happens later in runScan after the inventory is built (async path).
  * @returns {{
  *   format: 'npm-v3'|'npm-v2'|'npm-v1'|'yarn-v1'|'unknown',
  *   packages: Array<{
@@ -586,22 +591,23 @@ export const __internal = { defaultCache, vulnDetailCache, severityFromCvssVecto
  *   },
  * }}
  */
-export function buildInventory(lockfile) {
+export function buildInventory(lockfile, opts = {}) {
   const empty = emptyInventory();
   if (lockfile == null) return empty;
+  const privateList = (opts && opts.privateList) || null;
 
   let format = 'unknown';
   let obj = null;
   if (typeof lockfile === 'string') {
     format = detectLockfileFormat(lockfile);
     if (format === 'yarn-v1') {
-      return buildYarnV1Inventory(lockfile);
+      return buildYarnV1Inventory(lockfile, { privateList });
     }
     if (format === 'uv-lock' || format === 'poetry-lock') {
-      return buildPythonInventory(lockfile, format);
+      return buildPythonInventory(lockfile, format, { privateList });
     }
     if (format === 'pnpm-lock') {
-      return buildPnpmInventory(lockfile);
+      return buildPnpmInventory(lockfile, { privateList });
     }
     if (format !== 'npm-v1' && format !== 'npm-v2' && format !== 'npm-v3') {
       return empty;
@@ -681,7 +687,7 @@ export function buildInventory(lockfile) {
     walkV1ForInventory(obj.dependencies || {}, record, true);
   }
 
-  return finalizeInventory(format, byName, totalEntries);
+  return finalizeInventory(format, byName, totalEntries, { privateList });
 }
 
 function emptyInventory() {
@@ -703,6 +709,7 @@ function emptyInventory() {
       missingRepositoryCount: 0,
       installScriptCount: 0,
       possibleTypoSquatCount: 0,
+      dependencyConfusionCount: 0,
     },
   };
 }
@@ -803,6 +810,9 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
   let missingRepositoryCount = 0;
   let installScriptCount = 0;
   let possibleTypoSquatCount = 0;
+  let dependencyConfusionCount = 0;
+  const privateList = (opts && opts.privateList) || null;
+  const ecosystem = ecosystemForFormat(format);
 
   const names = [...byName.keys()].sort((a, b) => a.localeCompare(b));
   for (const name of names) {
@@ -816,6 +826,21 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     // install resolves to null. Informational only — never affects score,
     // verdict band, or Risk Profile dimensions.
     const possibleTypoSquat = detectTypoSquat(name);
+    // Dependency-confusion static signal (MEDIUM baseline). The active
+    // public-registry probe runs later in runScan; here we only seed the
+    // MEDIUM hit so the synchronous inventory builder doesn't need to
+    // become async. Ecosystem-agnostic: a name in the user's private list
+    // applies wherever it appears.
+    const dependencyConfusion = (privateList && privateList.nameSet instanceof Set && privateList.nameSet.has(name))
+      ? {
+          confidence: 'MEDIUM',
+          reason:
+            'Listed as private but also resolving to public registry — verify your index priority configuration.',
+          userComment: (privateList.comments instanceof Map && privateList.comments.has(name))
+            ? privateList.comments.get(name)
+            : null,
+        }
+      : null;
 
     packages.push({
       name,
@@ -826,6 +851,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
       hasRepository: acc.hasRepository,
       hasInstallScript,
       possibleTypoSquat,
+      dependencyConfusion,
     });
 
     if (direct) directCount += 1; else transitiveCount += 1;
@@ -838,9 +864,9 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     if (!acc.hasRepository) missingRepositoryCount += 1;
     if (hasInstallScript) installScriptCount += 1;
     if (possibleTypoSquat) possibleTypoSquatCount += 1;
+    if (dependencyConfusion) dependencyConfusionCount += 1;
   }
 
-  const ecosystem = ecosystemForFormat(format);
   /** @type {any} */
   const totals = {
     totalPackages: packages.length,
@@ -856,7 +882,9 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     missingRepositoryCount,
     installScriptCount,
     possibleTypoSquatCount,
+    dependencyConfusionCount,
   };
+  void ecosystem; // computed for parity with other downstream consumers
   if (opts.directUnknown) totals.directUnknown = true;
   return {
     format,
@@ -882,10 +910,11 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
  *   - Otherwise scope 'unknown' for uv (no native equivalent) and 'prod'
  *     for poetry (poetry's default-category was 'main' = production).
  */
-function buildPythonInventory(text, format) {
+function buildPythonInventory(text, format, opts = {}) {
   const blocks = extractPythonPackageBlocks(text);
   const directSet = format === 'uv-lock' ? extractUvDirectSet(text) : null;
   const directUnknown = format === 'poetry-lock';
+  const privateList = (opts && opts.privateList) || null;
 
   /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean, hasInstallScript: boolean }>} */
   const byName = new Map();
@@ -931,7 +960,7 @@ function buildPythonInventory(text, format) {
     // both stay false. The resolver pulls repository info from PyPI directly.
   }
 
-  return finalizeInventory(format, byName, totalEntries, { directUnknown });
+  return finalizeInventory(format, byName, totalEntries, { directUnknown, privateList });
 }
 
 // ---------------------------------------------------------------------------
@@ -1274,10 +1303,11 @@ function isWorkspaceInternalValue(v) {
  * License / repository: pnpm doesn't write either into the lockfile. Both
  * stay false; resolver fetches them on demand.
  */
-export function buildPnpmInventory(text) {
+export function buildPnpmInventory(text, opts = {}) {
   const { importers, packages } = parsePnpmYaml(text);
   const importerKeys = importers ? Object.keys(importers) : [];
   const directUnknown = importerKeys.length === 0;
+  const privateList = (opts && opts.privateList) || null;
 
   // Map: name -> Set of scopes declared by importers (direct deps only).
   /** @type {Map<string, Set<string>>} */
@@ -1336,7 +1366,7 @@ export function buildPnpmInventory(text) {
     }
   }
 
-  return finalizeInventory('pnpm-lock', byName, totalEntries, { directUnknown });
+  return finalizeInventory('pnpm-lock', byName, totalEntries, { directUnknown, privateList });
 }
 
 function scopeFromPnpmFlags(meta) {
@@ -1387,10 +1417,11 @@ function compareVersionsLoose(a, b) {
  * direct/transitive without the consuming package.json. All scope and
  * direct fields fall back to 'unknown' / false; the UI shows a note.
  */
-function buildYarnV1Inventory(text) {
+function buildYarnV1Inventory(text, opts = {}) {
   const inv = emptyInventory();
   inv.format = 'yarn-v1';
   inv.ecosystem = 'npm';
+  const privateList = (opts && opts.privateList) || null;
   /** @type {Map<string, { versions: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
   const byName = new Map();
   let totalEntries = 0;
@@ -1448,6 +1479,7 @@ function buildYarnV1Inventory(text) {
   let missingLicenseCount = 0;
   let missingRepositoryCount = 0;
   let possibleTypoSquatCount = 0;
+  let dependencyConfusionCount = 0;
   for (const name of names) {
     const acc = byName.get(name);
     const versions = [...acc.versions].sort(compareVersionsLoose);
@@ -1455,6 +1487,16 @@ function buildYarnV1Inventory(text) {
     // package name itself, not lockfile metadata. yarn-v1 gets the chip
     // the same as npm v2/v3 and pnpm.
     const possibleTypoSquat = detectTypoSquat(name);
+    const dependencyConfusion = (privateList && privateList.nameSet instanceof Set && privateList.nameSet.has(name))
+      ? {
+          confidence: 'MEDIUM',
+          reason:
+            'Listed as private but also resolving to public registry — verify your index priority configuration.',
+          userComment: (privateList.comments instanceof Map && privateList.comments.has(name))
+            ? privateList.comments.get(name)
+            : null,
+        }
+      : null;
     inv.packages.push({
       name,
       versions,
@@ -1466,11 +1508,13 @@ function buildYarnV1Inventory(text) {
       // docs/ci-reporter.md as a known v0 caveat alongside Python lockfiles.
       hasInstallScript: false,
       possibleTypoSquat,
+      dependencyConfusion,
     });
     if (versions.length > 1) duplicateCount += 1;
     if (!acc.hasLicense) missingLicenseCount += 1;
     if (!acc.hasRepository) missingRepositoryCount += 1;
     if (possibleTypoSquat) possibleTypoSquatCount += 1;
+    if (dependencyConfusion) dependencyConfusionCount += 1;
   }
 
   inv.totals.totalPackages = inv.packages.length;
@@ -1485,5 +1529,6 @@ function buildYarnV1Inventory(text) {
   inv.totals.missingLicenseCount = missingLicenseCount;
   inv.totals.missingRepositoryCount = missingRepositoryCount;
   inv.totals.possibleTypoSquatCount = possibleTypoSquatCount;
+  inv.totals.dependencyConfusionCount = dependencyConfusionCount;
   return inv;
 }

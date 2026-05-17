@@ -42,6 +42,7 @@ web app uses, so scoring is bit-identical across runtimes.
 | `--json`             | path                                                    | —       | Also write the JSON report to this path.     |
 | `--sarif`            | path                                                    | —       | Also write a SARIF 2.1.0 report to this path. |
 | `--ignore`           | path                                                    | auto    | Path to a `.opensoyce-ignore` file (default: auto-discover in lockfile's parent dir). |
+| `--private`          | path                                                    | auto    | Path to a `.opensoyce-private` file (default: auto-discover in lockfile's parent dir). |
 | `--fail-on`          | `none` \| `review-required` \| `high-vuln` \| `critical-vuln` | `none`  | Exit nonzero when the threshold is crossed.  |
 | `--github-token`     | string                                                  | env     | Overrides `GITHUB_TOKEN` for this run.       |
 | `--quiet`            | boolean                                                 | false   | Suppress progress lines on stderr.           |
@@ -258,6 +259,51 @@ False-positive bounds:
 - Scoped names (`@langchain/core`) include the `@` + `/` in the
   skeleton, so a scoped attack only collides with the scoped target,
   not with the bare unscoped name.
+
+## Dependency confusion detection
+
+The attack class: your team uses a private package
+(`mycompany-internal-utils` on internal PyPI, `@mycompany/ai-client` on
+private npm). An attacker publishes the same name on the public
+registry. Misconfigured pip / uv / npm index priority installs the
+attacker's code. Reference: Birsan 2021.
+
+See [`docs/dep-confusion.md`](./dep-confusion.md) for the standalone doc.
+
+### `.opensoyce-private` file format
+
+```
+# .opensoyce-private — private package names
+
+mycompany-internal-utils       # python: internal helper library
+@mycompany/ai-client           # npm: scoped private SDK
+mycompany-llm-tools            # python: AI utilities
+```
+
+One name per line. Case-sensitive (npm + PyPI both are). Trailing
+`# comment` is captured and surfaced in the chip tooltip. Ecosystem-
+agnostic — a listed name is checked wherever it appears.
+
+### Confidence tiers
+
+| Tier   | When it fires                                              | Chip                       |
+| ------ | ---------------------------------------------------------- | -------------------------- |
+| MEDIUM | Static match: the name is in `.opensoyce-private`.         | ⚠ POSSIBLE DEP CONFUSION   |
+| HIGH   | Same + the public registry returned 200 for that name.     | ⚠ ACTIVE DEP CONFUSION     |
+
+### Auto-discovery and CLI flag
+
+The CLI looks for `.opensoyce-private` next to the lockfile. Override
+with `--private <path>`. Missing file is the silent default — no chip,
+no signal.
+
+### What it is not
+
+- **No score math.** Informational only — never affects the composite
+  score, Risk Profile, or verdict band.
+- **No inference.** OpenSoyce never guesses that a name is private. The
+  list is authoritative.
+- **24h cache** on active public-registry probes per (ecosystem, name).
 
 ## Migration detection (fork-velocity-of-namesake)
 

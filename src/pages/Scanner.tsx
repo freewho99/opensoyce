@@ -24,6 +24,16 @@ interface PossibleTypoSquat {
   suspectedTarget: string;
 }
 
+// Dependency-confusion detection v0 — shape emitted by detectDepConfusion()
+// + escalated in runScan. Informational only; the chip never affects Risk
+// Profile, score, or verdict band. MEDIUM = static match on the user's
+// .opensoyce-private file. HIGH = same + active public-registry confirmation.
+interface DependencyConfusion {
+  confidence: 'MEDIUM' | 'HIGH';
+  reason: string;
+  userComment: string | null;
+}
+
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
 // forward-compat with future inference logic in v2.1+.
@@ -102,6 +112,10 @@ interface Vulnerability {
   // present (with suspectedTarget) when the package name's confusables
   // skeleton collides with a protected name AND the bytes differ.
   possibleTypoSquat?: PossibleTypoSquat | null;
+  // Dependency-confusion detection v0 — populated by runScan when the
+  // package name appears in the user's `.opensoyce-private` file.
+  // Null when the package is not on the list (or the list is absent).
+  dependencyConfusion?: DependencyConfusion | null;
 }
 
 // Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
@@ -125,6 +139,9 @@ interface InventoryPackage {
   // confusables skeleton collides with a curated protected name AND the
   // names differ byte-for-byte (legitimate self-installs return null).
   possibleTypoSquat?: PossibleTypoSquat | null;
+  // Dependency-confusion detection v0 — set when the package name appears
+  // in the user's `.opensoyce-private` file.
+  dependencyConfusion?: DependencyConfusion | null;
 }
 
 interface InventoryTotals {
@@ -145,6 +162,13 @@ interface InventoryTotals {
   // Typo-squat homoglyph detection v0 — count of packages with a non-null
   // possibleTypoSquat. Absent on older server responses; render defensively.
   possibleTypoSquatCount?: number;
+  // Dependency-confusion detection v0 — count of packages with a non-null
+  // dependencyConfusion entry (MEDIUM or HIGH combined). Absent on older
+  // server responses; render defensively.
+  dependencyConfusionCount?: number;
+  // Count of HIGH-confidence (active squat) hits within
+  // dependencyConfusionCount above. Set only when the active probe ran.
+  activeDependencyConfusionCount?: number;
 }
 
 interface Inventory {
@@ -182,6 +206,8 @@ interface SelectedHealthRow {
   hasInstallScript?: boolean;
   // Typo-squat homoglyph detection v0 — copied from the matching inventory record.
   possibleTypoSquat?: PossibleTypoSquat | null;
+  // Dependency-confusion detection v0 — copied from the matching inventory record.
+  dependencyConfusion?: DependencyConfusion | null;
   // Fork-velocity-of-namesake v0 — copied from the analysis result.
   migration?: RepoMigration | null;
 }
@@ -1006,6 +1032,9 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
         <InstallScriptChip name={row.package} hasInstallScript={row.hasInstallScript} />
         {/* Typo-squat homoglyph v0 — same suppression rules as elsewhere. */}
         <TypoSquatChip typoSquat={row.possibleTypoSquat} />
+        {/* Dependency-confusion v0 — fires only for names in the user's
+            `.opensoyce-private` file. MEDIUM static; HIGH after active check. */}
+        <DepConfusionChip dependencyConfusion={row.dependencyConfusion} />
       </div>
 
       {/* Status zone -- separate row so the copy / chips never collide with
@@ -1113,6 +1142,29 @@ function TypoSquatChip({ typoSquat }: { typoSquat: PossibleTypoSquat | null | un
   );
 }
 
+// Dependency-confusion v0. Surfaces when the package name appears in the
+// user's `.opensoyce-private` list. MEDIUM = static match. HIGH = static
+// match plus the public registry returned 200 for that name (active squat).
+// The chip is informational only — no score / band / Risk Profile impact.
+// The user's own trailing `# comment` from the file (when present) is
+// appended to the tooltip in parentheses so the team's annotation travels
+// with the warning.
+function DepConfusionChip({ dependencyConfusion }: { dependencyConfusion: DependencyConfusion | null | undefined }) {
+  if (!dependencyConfusion) return null;
+  const isActive = dependencyConfusion.confidence === 'HIGH';
+  const tooltip = `${dependencyConfusion.reason}${dependencyConfusion.userComment ? ` (${dependencyConfusion.userComment})` : ''}`;
+  return (
+    <span
+      title={tooltip}
+      className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${
+        isActive ? 'bg-red-500 text-white' : 'bg-amber-500 text-black'
+      }`}
+    >
+      {isActive ? '⚠ ACTIVE DEP CONFUSION' : '⚠ POSSIBLE DEP CONFUSION'}
+    </span>
+  );
+}
+
 interface InventoryRowProps {
   pkg: InventoryPackage;
   vulnInfo: { severity: Severity; identity: IdentityChip | null } | null;
@@ -1190,6 +1242,9 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
             score or band. Suppressed for the legitimate-install self-match
             inside detectTypoSquat() so this only fires on attacks. */}
         <TypoSquatChip typoSquat={pkg.possibleTypoSquat} />
+        {/* Dependency-confusion v0 — only fires for names listed in
+            `.opensoyce-private`. MEDIUM static / HIGH on active squat. */}
+        <DepConfusionChip dependencyConfusion={pkg.dependencyConfusion} />
       </div>
       {expanded && multi && (
         <div className="pb-3 pt-1 pl-2 border-t border-soy-bottle/10">
@@ -1269,7 +1324,7 @@ function VulnRow({ v }: { v: Vulnerability }) {
       {/* CVE / GHSA IDs + postinstall chip. The chip lives next to the IDs
           so the "vulnerable AND runs install scripts" combo is unmistakable.
           Suppressed for curated trusted packages (TypeScript, sharp, …). */}
-      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat) && (
+      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat || v.dependencyConfusion) && (
         <div className="flex flex-wrap gap-1.5 mb-3 items-center">
           {(v.ids || []).map((id) => (
             <span
@@ -1284,6 +1339,9 @@ function VulnRow({ v }: { v: Vulnerability }) {
               combo is the most-dangerous case, so the chip lives next to
               the IDs alongside the install-script chip. */}
           <TypoSquatChip typoSquat={v.possibleTypoSquat} />
+          {/* Dependency-confusion v0 — same chip surface. The "vulnerable
+              AND active dep-confusion" combo is the worst-case stack. */}
+          <DepConfusionChip dependencyConfusion={v.dependencyConfusion} />
         </div>
       )}
 
