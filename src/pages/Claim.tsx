@@ -33,7 +33,7 @@ function isValidName(s: string): boolean {
 type SubmitState =
   | { kind: 'idle' }
   | { kind: 'submitting' }
-  | { kind: 'success'; issueUrl: string; issueNumber: number }
+  | { kind: 'success'; issueUrl: string; issueNumber: number; notifyOnBandDrop: boolean }
   | { kind: 'error'; message: string };
 
 function useQueryParams() {
@@ -161,6 +161,7 @@ function ClaimEntry() {
 // ---------------------------------------------------------------------------
 function RebuttalForm({ owner, repo, token }: { owner: string; repo: string; token: string }) {
   const [text, setText] = useState('');
+  const [notifyOnBandDrop, setNotifyOnBandDrop] = useState(false);
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
 
   const trimmed = text.trim();
@@ -171,12 +172,12 @@ function RebuttalForm({ owner, repo, token }: { owner: string; repo: string; tok
   const submit = async () => {
     if (!canSubmit) return;
     setState({ kind: 'submitting' });
-    trackEvent('claim_rebuttal_submit', { owner, repo, length: trimmed.length });
+    trackEvent('claim_rebuttal_submit', { owner, repo, length: trimmed.length, notifyOnBandDrop });
     try {
       const res = await fetch('/api/claim-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, rebuttalBody: trimmed }),
+        body: JSON.stringify({ token, rebuttalBody: trimmed, notifyOnBandDrop }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || !data.ok) {
@@ -194,7 +195,12 @@ function RebuttalForm({ owner, repo, token }: { owner: string; repo: string; tok
         setState({ kind: 'error', message });
         return;
       }
-      setState({ kind: 'success', issueUrl: data.issueUrl, issueNumber: data.issueNumber });
+      setState({
+        kind: 'success',
+        issueUrl: data.issueUrl,
+        issueNumber: data.issueNumber,
+        notifyOnBandDrop: data.notifyOnBandDrop === true,
+      });
     } catch (err) {
       setState({ kind: 'error', message: 'Network error. Try again.' });
     }
@@ -211,11 +217,19 @@ function RebuttalForm({ owner, repo, token }: { owner: string; repo: string; tok
           </div>
 
           <div className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#000] space-y-6">
-            <p className="font-bold leading-relaxed">
-              Your rebuttal for <strong>{owner}/{repo}</strong> is now a public, labeled
-              GitHub issue. Subscribe to the thread to get email updates when the
-              OpenSoyce team responds.
-            </p>
+            {state.notifyOnBandDrop ? (
+              <p className="font-bold leading-relaxed">
+                Your rebuttal is filed AND you've subscribed to band-drop notifications.
+                We'll @-mention you on issue <strong>#{state.issueNumber}</strong> when the
+                verdict band for <strong>{owner}/{repo}</strong> changes.
+              </p>
+            ) : (
+              <p className="font-bold leading-relaxed">
+                Your rebuttal for <strong>{owner}/{repo}</strong> is now a public, labeled
+                GitHub issue. Subscribe to the thread to get email updates when the
+                OpenSoyce team responds.
+              </p>
+            )}
             <a
               href={state.issueUrl}
               target="_blank"
@@ -270,6 +284,26 @@ function RebuttalForm({ owner, repo, token }: { owner: string; repo: string; tok
             </span>
             <span className="opacity-40">Markdown supported</span>
           </div>
+
+          <label className="flex items-start gap-3 mt-6 pt-6 border-t-2 border-soy-label cursor-pointer">
+            <input
+              type="checkbox"
+              checked={notifyOnBandDrop}
+              onChange={(e) => setNotifyOnBandDrop(e.target.checked)}
+              disabled={state.kind === 'submitting'}
+              className="mt-1 w-5 h-5 accent-soy-red flex-shrink-0"
+            />
+            <span className="text-sm leading-relaxed">
+              <strong className="block uppercase tracking-widest text-xs mb-1">
+                Notify me when this repo's verdict band drops.
+              </strong>
+              <span className="opacity-70">
+                I'll be @-mentioned on a GitHub issue if the band moves down
+                (e.g. USE READY &rarr; FORKABLE, FORKABLE &rarr; STABLE).
+                Notifications fire on band changes only, not on score fluctuations.
+              </span>
+            </span>
+          </label>
         </div>
 
         {state.kind === 'error' && (

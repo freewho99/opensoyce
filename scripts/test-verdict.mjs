@@ -292,6 +292,64 @@ test('verdictFor(9.5, maintainerConcentration:null) → USE READY (no cap)', () 
   );
 });
 
+// --- Grading-swarm calibration (Wei + Marco): 1 open critical caps to WATCHLIST
+// Wei + Marco both flagged facebook/react landing at 8.2 USE-READY-band-eligible
+// with 1 open critical + 5 high advisories. Criticals are now treated separately
+// from highs: a single open CRITICAL caps anything 7.0+ down to WATCHLIST. The
+// >=3 serious rule and the 1-high USE-READY→FORKABLE rule are unchanged.
+test('verdictFor(9.0, { critical:1, high:0 }) === WATCHLIST (1 crit caps USE READY → WATCHLIST)', () => {
+  eq(
+    verdictFor(9.0, { advisorySummary: { critical: 1, high: 0 } }),
+    'WATCHLIST',
+    '1 open critical caps to WATCHLIST not FORKABLE',
+  );
+});
+test('verdictFor(8.2, { critical:1, high:5 }) === WATCHLIST (facebook/react case)', () => {
+  eq(
+    verdictFor(8.2, { advisorySummary: { critical: 1, high: 5 } }),
+    'WATCHLIST',
+    'the actual React case Wei + Marco caught',
+  );
+});
+test('verdictFor(7.5, { critical:1, high:0 }) === WATCHLIST (above 7.0 boundary)', () => {
+  eq(
+    verdictFor(7.5, { advisorySummary: { critical: 1, high: 0 } }),
+    'WATCHLIST',
+    '1 crit caps FORKABLE → WATCHLIST when score >= 7.0',
+  );
+});
+test('verdictFor(6.9, { critical:1, high:0 }) === STABLE (cap does NOT apply below 7.0)', () => {
+  eq(
+    verdictFor(6.9, { advisorySummary: { critical: 1, high: 0 } }),
+    'STABLE',
+    'cap never fires below score 7.0; STABLE intact',
+  );
+});
+test('verdictFor(8.5, { critical:0, high:1 }) === FORKABLE (1 high caps USE READY → FORKABLE, unchanged)', () => {
+  eq(
+    verdictFor(8.5, { advisorySummary: { critical: 0, high: 1 } }),
+    'FORKABLE',
+    '1 high alone still caps USE READY → FORKABLE',
+  );
+});
+test('verdictFor(8.5, { critical:0, high:0 }) === USE READY (no advisories → unchanged)', () => {
+  eq(
+    verdictFor(8.5, { advisorySummary: { critical: 0, high: 0 } }),
+    'USE READY',
+    'clean advisories at USE READY threshold leave band intact',
+  );
+});
+test('verdictFor(7.0, { critical:1, high:0 }, vendorSdkMatch:true) === WATCHLIST (vendor does NOT suppress advisory cap)', () => {
+  // The advisory cap is independent of vendor / maintainer signals. A
+  // vulnerable OpenAI SDK is still vulnerable — vendorSdkMatch only
+  // suppresses the maintainer-concentration cap, not the advisory cap.
+  eq(
+    verdictFor(7.0, { advisorySummary: { critical: 1, high: 0 }, vendorSdkMatch: true }),
+    'WATCHLIST',
+    'vendor allowlist does not gate the advisory-summary cap',
+  );
+});
+
 console.log('');
 console.log(`Verdict tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

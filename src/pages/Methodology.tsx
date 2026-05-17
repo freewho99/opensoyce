@@ -81,12 +81,12 @@ export default function Methodology() {
             <div className="bg-black text-white p-12 shadow-[12px_12px_0px_#E63322]">
               <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-8 text-soy-red">SCORE RANGES</h3>
               <div className="space-y-8">
-                 <ScoreRange label="8.5+" status="USE READY" desc="Production grade. Real CVE hygiene, active maintenance, strong docs." color="text-green-500" />
-                 <ScoreRange label="7.0 – 8.4" status="FORKABLE" desc="Mature core infrastructure. Minor gaps in one or two pillars." color="text-blue-500" />
-                 <ScoreRange label="6.0 – 6.9" status="STABLE" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
-                 <ScoreRange label="4.0 – 5.9" status="WATCHLIST" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
-                 <ScoreRange label="2.5 – 3.9" status="RISKY" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." color="text-orange-500" />
-                 <ScoreRange label="BELOW 2.5" status="STALE" desc="Effectively abandoned. No recent commits, no releases, no triage." color="text-soy-red" />
+                 <ScoreRange label="8.5+" status="USE READY" subLabel="Safe to adopt — strong across all pillars" desc="Production grade. Real CVE hygiene, active maintenance, strong docs." color="text-green-500" />
+                 <ScoreRange label="7.0 – 8.4" status="FORKABLE" subLabel="Healthy and trustworthy — fork-worthy as a base" desc="Mature core infrastructure. Minor gaps in one or two pillars." color="text-blue-500" />
+                 <ScoreRange label="6.0 – 6.9" status="STABLE" subLabel="Mature, lower-velocity, still maintained" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
+                 <ScoreRange label="4.0 – 5.9" status="WATCHLIST" subLabel="Real issues; verify before adoption" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
+                 <ScoreRange label="2.5 – 3.9" status="RISKY" subLabel="Multiple bands flag concerns" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." color="text-orange-500" />
+                 <ScoreRange label="BELOW 2.5" status="STALE" subLabel="Abandoned or dormant" desc="Effectively abandoned. No recent commits, no releases, no triage." color="text-soy-red" />
               </div>
             </div>
           </div>
@@ -152,12 +152,12 @@ export default function Methodology() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            <VocabCard title="USE READY" score="≥ 8.5" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
-            <VocabCard title="FORKABLE" score="7.0–8.4" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
-            <VocabCard title="STABLE" score="6.0–6.9" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
-            <VocabCard title="WATCHLIST" score="4.0–5.9" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
-            <VocabCard title="RISKY" score="2.5–3.9" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
-            <VocabCard title="STALE" score="< 2.5" desc="Effectively abandoned. No recent commits, no releases, no triage." />
+            <VocabCard title="USE READY" score="≥ 8.5" subLabel="Safe to adopt — strong across all pillars" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
+            <VocabCard title="FORKABLE" score="7.0–8.4" subLabel="Healthy and trustworthy — fork-worthy as a base" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
+            <VocabCard title="STABLE" score="6.0–6.9" subLabel="Mature, lower-velocity, still maintained" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
+            <VocabCard title="WATCHLIST" score="4.0–5.9" subLabel="Real issues; verify before adoption" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
+            <VocabCard title="RISKY" score="2.5–3.9" subLabel="Multiple bands flag concerns" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
+            <VocabCard title="STALE" score="< 2.5" subLabel="Abandoned or dormant" desc="Effectively abandoned. No recent commits, no releases, no triage." />
             <VocabCard title="GRAVEYARD" score="Deprecated" desc="Shaped the ecosystem. Now a museum piece. Some have forkable infrastructure." />
           </div>
 
@@ -319,25 +319,31 @@ export default function Methodology() {
   );
 }
 
-function ScoreRange({ label, status, desc, color }: { label: string, status: string, desc: string, color: string }) {
+function ScoreRange({ label, status, subLabel, desc, color }: { label: string, status: string, subLabel?: string, desc: string, color: string }) {
   return (
     <div className="flex flex-col md:flex-row md:items-start gap-4">
       <div className={`text-2xl font-black italic min-w-[120px] ${color}`}>{label}</div>
       <div>
         <div className="text-sm font-black uppercase tracking-widest mb-1">{status}</div>
+        {subLabel && (
+          <p className="text-[11px] italic font-medium opacity-60 mb-1 leading-snug">{subLabel}</p>
+        )}
         <p className="text-[10px] font-bold uppercase tracking-widest opacity-40 leading-relaxed">{desc}</p>
       </div>
     </div>
   );
 }
 
-function VocabCard({ title, score, desc }: { title: string, score: string, desc: string }) {
+function VocabCard({ title, score, subLabel, desc }: { title: string, score: string, subLabel?: string, desc: string }) {
   return (
     <div className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000]">
       <div className="mb-4">
         <h3 className="text-2xl font-black uppercase italic tracking-tight mb-1">{title}</h3>
         <div className="text-soy-red font-black text-xs uppercase tracking-widest">{score}</div>
       </div>
+      {subLabel && (
+        <p className="text-xs font-medium italic opacity-60 mb-3 leading-snug">{subLabel}</p>
+      )}
       <p className="text-sm font-medium opacity-80 leading-relaxed italic">"{desc}"</p>
     </div>
   );

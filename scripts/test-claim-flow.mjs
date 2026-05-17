@@ -346,6 +346,98 @@ await test('16. claim-submit: happy path -> 200 + issueUrl + correct GitHub payl
   ok(issue.body.includes(rebuttal), 'body should embed the rebuttal text');
   ok(issue.body.includes('verified collaborator'), 'body should state collaborator verification');
   ok(issue.body.includes('does not retain the GitHub access token'), 'body should note non-retention');
+  // Default (no opt-in flag): no band-drop marker, no extra label.
+  ok(!issue.body.includes('opensoyce-subscriber'), 'default body should NOT include subscriber marker');
+  ok(!issue.labels.includes('band-drop-subscribed'), 'default labels should NOT include band-drop-subscribed');
+});
+
+await test('16b. claim-submit: notifyOnBandDrop=true -> marker comment + band-drop-subscribed label', async () => {
+  const recorded = { issues: [] };
+  setSubmitDeps({
+    signAppJwt: () => 'stub.jwt.token',
+    findInstallationId: async () => 99999,
+    getInstallationToken: async () => ({ token: 'ghs_stub' }),
+    createIssue: async (_token, args) => {
+      recorded.issues.push(args);
+      return { html_url: 'https://github.com/freewho99/opensoyce/issues/43', number: 43 };
+    },
+  });
+  const token = signClaimToken({ owner: 'foo', repo: 'bar', login: 'alice' }, KEY);
+  const req = makePostReq({ body: {
+    token,
+    rebuttalBody: 'x'.repeat(40),
+    notifyOnBandDrop: true,
+  }});
+  const res = makeRes();
+  await claimSubmitHandler(req, res);
+  eq(res._out.statusCode, 200);
+  eq(res._out.body?.ok, true);
+  eq(res._out.body?.notifyOnBandDrop, true);
+  const issue = recorded.issues[0];
+  ok(issue.body.includes('<!-- opensoyce-subscriber: login=alice repo=foo/bar watches=band-drop -->'),
+    'body should include the machine-readable subscriber marker');
+  ok(issue.body.includes('Verdict-band notification subscription'), 'body should include human-readable subscription footer');
+  ok(issue.body.includes('@alice requested'), 'body should @-mention the subscriber');
+  ok(issue.labels.includes('claim-rebuttal'), 'should still carry claim-rebuttal label');
+  ok(issue.labels.includes('band-drop-subscribed'), 'should add band-drop-subscribed label');
+});
+
+await test('16c. claim-submit: notifyOnBandDrop=false -> identical to baseline (no marker, no label)', async () => {
+  const recorded = { issues: [] };
+  setSubmitDeps({
+    signAppJwt: () => 'stub.jwt.token',
+    findInstallationId: async () => 99999,
+    getInstallationToken: async () => ({ token: 'ghs_stub' }),
+    createIssue: async (_token, args) => {
+      recorded.issues.push(args);
+      return { html_url: 'https://github.com/freewho99/opensoyce/issues/44', number: 44 };
+    },
+  });
+  const token = signClaimToken({ owner: 'foo', repo: 'bar', login: 'alice' }, KEY);
+  const req = makePostReq({ body: {
+    token,
+    rebuttalBody: 'x'.repeat(40),
+    notifyOnBandDrop: false,
+  }});
+  const res = makeRes();
+  await claimSubmitHandler(req, res);
+  eq(res._out.statusCode, 200);
+  eq(res._out.body?.notifyOnBandDrop, false);
+  const issue = recorded.issues[0];
+  ok(!issue.body.includes('opensoyce-subscriber'), 'body should NOT include subscriber marker');
+  ok(!issue.body.includes('Verdict-band notification subscription'), 'body should NOT include subscription footer');
+  ok(!issue.labels.includes('band-drop-subscribed'), 'labels should NOT include band-drop-subscribed');
+  eq(issue.labels.length, 1);
+});
+
+await test('16d. claim-submit: non-boolean notifyOnBandDrop (e.g. "yes") -> defaults to false', async () => {
+  const recorded = { issues: [] };
+  setSubmitDeps({
+    signAppJwt: () => 'stub.jwt.token',
+    findInstallationId: async () => 99999,
+    getInstallationToken: async () => ({ token: 'ghs_stub' }),
+    createIssue: async (_token, args) => {
+      recorded.issues.push(args);
+      return { html_url: 'https://github.com/freewho99/opensoyce/issues/45', number: 45 };
+    },
+  });
+  const token = signClaimToken({ owner: 'foo', repo: 'bar', login: 'alice' }, KEY);
+  // Anything that isn't literally `true` must fall back to false. Try each.
+  for (const bad of ['yes', 'true', 1, {}, null]) {
+    recorded.issues.length = 0;
+    const req = makePostReq({ body: {
+      token,
+      rebuttalBody: 'x'.repeat(40),
+      notifyOnBandDrop: bad,
+    }});
+    const res = makeRes();
+    await claimSubmitHandler(req, res);
+    eq(res._out.statusCode, 200);
+    eq(res._out.body?.notifyOnBandDrop, false, `non-boolean ${JSON.stringify(bad)} should default to false`);
+    const issue = recorded.issues[0];
+    ok(!issue.body.includes('opensoyce-subscriber'), `body should NOT include marker for ${JSON.stringify(bad)}`);
+    ok(!issue.labels.includes('band-drop-subscribed'), `no band-drop label for ${JSON.stringify(bad)}`);
+  }
 });
 
 await test('17. claim-submit: createIssue throws -> 502 friendly error', async () => {

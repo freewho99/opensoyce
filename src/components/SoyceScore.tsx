@@ -42,6 +42,25 @@ export function verdictFor(
   return sharedVerdictFor(score, opts) as SoyceVerdict;
 }
 
+// Verdict-band sub-labels (P1a — Marco grading-swarm finding). The band name
+// alone misreads: Marco reported "FORKABLE" as a hostile public verdict that
+// reads like "abandon ship, fork your own." The band name is load-bearing in
+// verdict.js / data shapes / embedded badges so we don't rename it — we add a
+// short clarification under the band pill so readers understand FORKABLE means
+// "healthy and trustworthy, fork-worthy as a base," not "abandoned, must be
+// forked." Rendered only in the SoyceScore card's standalone display (size md
+// and lg). Compact chips on Scanner vuln rows (size sm) skip the sub-label to
+// keep visual weight low on dense lists.
+const VERDICT_SUB_LABEL: Record<SoyceVerdict, string> = {
+  'USE READY':     'Safe to adopt — strong across all pillars',
+  'FORKABLE':      'Healthy and trustworthy — fork-worthy as a base',
+  'HIGH MOMENTUM': 'Rising signals — editorial tier',
+  'STABLE':        'Mature, lower-velocity, still maintained',
+  'WATCHLIST':     'Real issues; verify before adoption',
+  'RISKY':         'Multiple bands flag concerns',
+  'STALE':         'Abandoned or dormant',
+};
+
 interface SoyceScoreProps {
   value: number;
   size?: 'sm' | 'md' | 'lg';
@@ -104,6 +123,10 @@ export default function SoyceScore({
     && !!maintainerConcentration
     && verdict !== verdictWithoutMaintainerCap;
   const s = SIZE_CLASSES[size];
+  // Sub-label only on the standalone card (md/lg) — compact chips on dense
+  // vuln-row lists already carry enough visual weight.
+  const showSubLabel = showVerdict && size !== 'sm';
+  const subLabel = VERDICT_SUB_LABEL[verdict] || '';
 
   const inner = (
     <div className={`inline-flex flex-col items-center leading-none ${className}`}>
@@ -117,6 +140,13 @@ export default function SoyceScore({
           </span>
         )}
       </div>
+      {showSubLabel && subLabel && (
+        <span
+          className="mt-1.5 text-[10px] md:text-[11px] italic font-medium text-soy-bottle opacity-60 leading-tight text-center max-w-[20rem] px-1"
+        >
+          {subLabel}
+        </span>
+      )}
       {showAdvisoryChip && (
         <span
           className={`${s.chip} mt-1.5 font-black uppercase tracking-[0.15em] bg-black text-white px-2 py-0.5 border border-black`}

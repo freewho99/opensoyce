@@ -372,6 +372,10 @@ export default function Scanner() {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<ScanResponse | null>(null);
   const [errorState, setErrorState] = useState<ScanErrorState | null>(null);
+  // Chip glossary modal (P1a — Wei + Marco grading-swarm finding). Tooltips on
+  // chips exist via `title` attrs but aren't discoverable; a single ? trigger
+  // in the page header opens an inventory of every chip + its trigger logic.
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
@@ -461,8 +465,20 @@ export default function Scanner() {
     <div className="max-w-7xl mx-auto px-4 py-12">
       {/* Header */}
       <div className="mb-12">
-        <div className="inline-block bg-soy-red text-white text-[10px] font-black px-3 py-1 mb-4 tracking-[0.4em] border-2 border-black">
-          SCANNER v2
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="inline-block bg-soy-red text-white text-[10px] font-black px-3 py-1 tracking-[0.4em] border-2 border-black">
+            SCANNER v2
+          </div>
+          <button
+            type="button"
+            onClick={() => setGlossaryOpen(true)}
+            title="Open chip glossary — what every scanner chip means"
+            aria-label="Open chip glossary"
+            className="shrink-0 inline-flex items-center gap-1.5 border-2 border-soy-bottle bg-white text-soy-bottle hover:bg-soy-bottle hover:text-white transition-colors px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em]"
+          >
+            <span className="font-black">?</span>
+            <span>CHIP GLOSSARY</span>
+          </button>
         </div>
         <h1 className="text-4xl md:text-5xl font-bold uppercase italic tracking-tighter mb-4">
           Find Known Vulnerabilities
@@ -472,6 +488,7 @@ export default function Scanner() {
           to find known vulnerabilities hiding in your resolved dependency tree.
         </p>
       </div>
+      {glossaryOpen && <ChipGlossaryModal onClose={() => setGlossaryOpen(false)} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Form column */}
@@ -2028,6 +2045,212 @@ function RiskProfilePanel({ result }: { result: ScanResponse }) {
               <span>{coverage.selectedSkippedBudget}</span>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Chip glossary modal (P1a — grading-swarm finding from Wei + Marco). Lists
+// every chip the Scanner can render plus the signal that triggers it. Tooltips
+// on individual chips remain unchanged; this is the discoverable inventory.
+// Brutalist style matches the rest of Scanner: thick borders, dark backdrop,
+// inline panel. No new dependencies — fixed-position overlay + backdrop click.
+function ChipGlossaryModal({ onClose }: { onClose: () => void }) {
+  // Keep the entry list co-located with the rendering so adding a new chip
+  // means touching one place. Order: severity → identity/security → repo
+  // health bands → maintainer/identity → ecosystem → model weights, matching
+  // the visual scan order on a typical results row.
+  const sections: Array<{
+    title: string;
+    entries: Array<{ chip: string; tone?: 'red' | 'amber' | 'green' | 'neutral'; desc: string }>;
+  }> = [
+    {
+      title: 'VULNERABILITY / SECURITY',
+      entries: [
+        {
+          chip: 'CRITICAL / HIGH / MEDIUM / LOW',
+          tone: 'red',
+          desc: 'OSV-reported severity for known advisories on this exact package version. The severity pill mirrors what OSV says — we do not invent severities or override them.',
+        },
+        {
+          chip: '⚠ N OPEN HIGH/CRIT',
+          tone: 'red',
+          desc: 'Verdict-band cap. The repo\'s composite score would be USE READY but it has N open CRITICAL/HIGH advisories on its OWN code. The band is capped at FORKABLE / WATCHLIST. Source: P0-AI-1 logic in src/shared/verdict.js.',
+        },
+        {
+          chip: '⚠ UNVERIFIED IDENTITY',
+          tone: 'amber',
+          desc: 'The npm package\'s "repository" URL points at a GitHub repo whose package.json#name (or pyproject.toml [project].name) does NOT match this package\'s name. Possible borrowed-trust attack — a typo-squat squatting a healthy repo\'s repository field to inherit its score.',
+        },
+        {
+          chip: '⚠ POSSIBLE TYPO-SQUAT',
+          tone: 'amber',
+          desc: 'Package name reduces to the same Unicode confusables skeleton as a curated protected name (e.g. Cyrillic а in lаngchain). No false-positive on legitimate installs — self-match is byte-exact.',
+        },
+        {
+          chip: '⚠ POSSIBLE DEP CONFUSION',
+          tone: 'amber',
+          desc: 'Package name appears in the user\'s .opensoyce-private declaration. Static signal — the name exists in your private namespace AND could exist on a public registry, so an attacker could squat it.',
+        },
+        {
+          chip: '⚠ ACTIVE DEP CONFUSION',
+          tone: 'red',
+          desc: 'Escalated form of the above: the public registry actually returned 200 for that private name RIGHT NOW. An attacker may already be squatting — investigate immediately.',
+        },
+        {
+          chip: '⚠ INSTALL SCRIPT',
+          tone: 'amber',
+          desc: 'Package runs preinstall / install / postinstall hooks on `npm install` (the event-stream / ua-parser-js attack vector). Informational only — many legitimate packages do this. Trusted packages (typescript, esbuild, sharp, …) are suppressed via src/data/trustedInstallScripts.js.',
+        },
+      ],
+    },
+    {
+      title: 'REPO HEALTH BANDS (Soyce verdict)',
+      entries: [
+        { chip: 'USE READY  ≥ 8.5', tone: 'green', desc: 'Safe to adopt — strong across all pillars (maintenance, community, security, docs, activity).' },
+        { chip: 'FORKABLE   ≥ 7.0', tone: 'green', desc: 'Healthy and trustworthy — fork-worthy as a base. NOT a verdict that the project is abandoned: most popular OSS projects land here. The label means the codebase is solid enough to build on.' },
+        { chip: 'STABLE     ≥ 6.0', tone: 'neutral', desc: 'Mature, lower-velocity, still maintained — releases + triage without daily commits.' },
+        { chip: 'WATCHLIST  ≥ 4.0', tone: 'amber', desc: 'Real issues; verify per-pillar breakdown before adoption.' },
+        { chip: 'RISKY      ≥ 2.5', tone: 'red', desc: 'Multiple bands flag concerns — maintenance debt, license gap, unaddressed advisories.' },
+        { chip: 'STALE      < 2.5', tone: 'red', desc: 'Abandoned or dormant — no recent commits, releases, or triage.' },
+      ],
+    },
+    {
+      title: 'MAINTAINER / IDENTITY',
+      entries: [
+        {
+          chip: '⚠ SINGLE-MAINTAINER',
+          tone: 'amber',
+          desc: 'Verdict-band cap. Top-1 commit share > 85% AND ≤ 2 non-bot contributors AND > 30 days since last commit. Caps USE READY → FORKABLE only. Suppressed for vendor-official SDKs via src/data/vendorSdks.ts.',
+        },
+        {
+          chip: 'REPO RESOLVED',
+          tone: 'green',
+          desc: 'We mapped this npm / PyPI package to a concrete GitHub repo via the registry "repository" field (HIGH confidence).',
+        },
+        {
+          chip: 'REPO UNRESOLVED',
+          tone: 'neutral',
+          desc: 'We could not map the package to a source repo — repository field missing, malformed, or pointing somewhere we can\'t verify.',
+        },
+      ],
+    },
+    {
+      title: 'ECOSYSTEM / SUPPLY CHAIN',
+      entries: [
+        {
+          chip: '⚠ CROSS-ECOSYSTEM BRIDGE',
+          tone: 'amber',
+          desc: 'This package has a curated sibling in the OTHER ecosystem (npm ↔ PyPI). If you only scanned one lockfile, you missed half the supply-chain surface. Click the sibling to investigate.',
+        },
+        {
+          chip: '⚠ MIGRATED',
+          tone: 'amber',
+          desc: 'Project has migrated to a successor repo. The score shown reflects the OLD repo (which is now dormant). Click for the successor — the active codebase is elsewhere.',
+        },
+      ],
+    },
+    {
+      title: 'MODEL WEIGHTS (POSTURE, not RCE detection)',
+      entries: [
+        {
+          chip: '⚠ USE SAFETENSORS',
+          tone: 'amber',
+          desc: 'Package can load pickle-format model weights, and pickle deserialization executes arbitrary code at load time. Prefer safetensors / ONNX. NOTE: we don\'t scan the weight files themselves — we flag the loader.',
+        },
+        {
+          chip: '⚠ TORCH.LOAD: USE SAFETENSORS',
+          tone: 'amber',
+          desc: 'Same RCE-on-load risk, specific to torch.load(). Use weights_only=True (PyTorch ≥ 2.0) or convert to safetensors.',
+        },
+        {
+          chip: '✓ SAFE MODEL FORMAT',
+          tone: 'green',
+          desc: 'Package IS safetensors / onnxruntime — the safer choice. No code execution on weight load.',
+        },
+      ],
+    },
+  ];
+
+  const toneClass = (tone?: 'red' | 'amber' | 'green' | 'neutral') => {
+    switch (tone) {
+      case 'red': return 'bg-soy-red text-white border-soy-red';
+      case 'amber': return 'bg-amber-400 text-black border-black';
+      case 'green': return 'bg-emerald-500 text-black border-black';
+      default: return 'bg-white text-black border-black';
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Chip glossary"
+      className="fixed inset-0 z-[100] flex items-start justify-center p-4 md:p-8 overflow-y-auto"
+    >
+      {/* Backdrop — click to dismiss */}
+      <button
+        type="button"
+        aria-label="Close glossary"
+        onClick={onClose}
+        className="fixed inset-0 bg-black/70 cursor-default"
+      />
+      {/* Panel */}
+      <div className="relative bg-soy-label border-4 border-black shadow-[12px_12px_0px_#E63322] max-w-4xl w-full my-4">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-black text-white border-b-4 border-soy-red px-6 py-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-soy-red text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.3em] shrink-0">
+              GLOSSARY
+            </div>
+            <h2 className="text-xl md:text-2xl font-black uppercase italic tracking-tight truncate">
+              Chip Glossary
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="shrink-0 border-2 border-white px-3 py-1 text-[11px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-colors"
+          >
+            CLOSE
+          </button>
+        </div>
+
+        <div className="px-6 py-6 space-y-8">
+          <p className="text-xs font-bold uppercase tracking-widest opacity-60 leading-relaxed">
+            Every chip rendered by the scanner, plus the signal that triggers it. Informational chips never change the composite score, Risk Profile, or verdict band unless explicitly noted as a band-cap.
+          </p>
+
+          {sections.map(section => (
+            <div key={section.title}>
+              <h3 className="text-[11px] md:text-xs font-black uppercase tracking-[0.3em] text-soy-red mb-3 border-b-2 border-soy-bottle/20 pb-2">
+                {section.title}
+              </h3>
+              <ul className="space-y-3">
+                {section.entries.map(entry => (
+                  <li key={entry.chip} className="flex flex-col md:flex-row md:items-start gap-3">
+                    <span
+                      className={`shrink-0 inline-block self-start border-2 px-2 py-1 text-[10px] font-black uppercase tracking-[0.15em] md:min-w-[16rem] ${toneClass(entry.tone)}`}
+                    >
+                      {entry.chip}
+                    </span>
+                    <p className="text-xs md:text-sm font-medium opacity-80 leading-relaxed">
+                      {entry.desc}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+
+          <p className="text-[10px] font-bold uppercase tracking-widest opacity-50 border-t-2 border-soy-bottle/20 pt-4">
+            Want the full math? See the{' '}
+            <a href="/methodology" className="underline text-soy-red hover:opacity-80">
+              methodology page
+            </a>{' '}
+            — every signal, every weight, every known limitation, named out loud.
+          </p>
         </div>
       </div>
     </div>

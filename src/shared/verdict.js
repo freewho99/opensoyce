@@ -72,13 +72,26 @@
 export function verdictFor(score, opts = {}) {
   // Hidden-vulns cap: applies only when an advisorySummary is supplied.
   // Callers that only know the score keep the legacy behavior.
+  //
+  // Grading-swarm calibration (Wei + Marco): the previous `seriousOpen >= 3`
+  // rule under-penalized a single open CRITICAL. facebook/react landing at
+  // 8.2 USE READY-band-eligible with 1 open critical + 5 high advisories was
+  // the canonical miss. Criticals are qualitatively different from highs
+  // (RCE / auth bypass / data exfil on the repo's own code), so a single
+  // open critical now caps anything 7.0+ down to WATCHLIST. The legacy
+  // multi-high accumulation rule (>=3 serious) stays unchanged, as does
+  // the 1-high USE-READY→FORKABLE rule.
   if (opts && opts.advisorySummary) {
     const a = opts.advisorySummary;
-    const seriousOpen = (a.critical || 0) + (a.high || 0);
+    const criticalOpen = a.critical || 0;
+    const highOpen = a.high || 0;
+    const seriousOpen = criticalOpen + highOpen;
+    // >=1 open CRITICAL → cap at WATCHLIST. A single critical is enough.
+    if (criticalOpen >= 1 && score >= 7.0) return 'WATCHLIST';
     // >=3 open serious → cap at WATCHLIST regardless of how good the rest is.
     if (seriousOpen >= 3 && score >= 7.0) return 'WATCHLIST';
-    // >=1 open serious → no USE READY; cap at FORKABLE.
-    if (seriousOpen >= 1 && score >= 8.5) return 'FORKABLE';
+    // >=1 open high → no USE READY; cap at FORKABLE.
+    if (highOpen >= 1 && score >= 8.5) return 'FORKABLE';
   }
   // Maintainer-concentration cap (AI signals v0.1). Only fires on uncapped
   // USE READY (score >= 8.5); vendor-SDK allowlist suppresses entirely.

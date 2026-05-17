@@ -57,6 +57,36 @@ The issue is opened by the **OpenSoyce GitHub App**, not by the maintainer's
 own account — so the rebuttal does not consume their personal GitHub API
 budget and the App carries the audit identity.
 
+## Band-drop notifications (v0)
+
+The rebuttal form has an opt-in checkbox: **"Notify me when this repo's
+verdict band drops."** Default is unchecked (opt-in, not opt-out).
+
+When opted in:
+
+- The issue body gets a structured footer with an `@{login}` mention and a
+  machine-readable HTML comment marker:
+  `<!-- opensoyce-subscriber: login={login} repo={owner}/{repo} watches=band-drop -->`
+- The issue is labeled `band-drop-subscribed` in addition to `claim-rebuttal`.
+- The success screen confirms the subscription.
+
+**The opt-in surface is real and the receipt is durable.** What's NOT
+shipping in v0 is the notifier daemon itself — the cron job that watches
+bands and re-opens / @-mentions on drop is scheduled for **v0.1**. Until
+then, maintainers can self-poll by watching the issue's repo state or
+checking their Soyce Score on `/lookup`.
+
+**"Band drop" definition.** Bands form an ordered ladder:
+USE READY &rarr; FORKABLE &rarr; STABLE &rarr; WATCHLIST &rarr; RISKY &rarr; STALE.
+Only band-tier transitions DOWN that ladder trigger notifications. Score
+fluctuations within a band do not trigger. Bands moving UP do not trigger.
+
+**v0.1 trigger model (planned, not running).** A cron job re-scans every
+claimed-and-subscribed repo every ~6 hours, compares the new band against
+the previous scan's band, and on a drop posts a comment on the existing
+rebuttal issue with the `@{login}` mention. The HTML comment marker lets
+that future job enumerate subscribers without a separate database.
+
 ## Subscribing as the rebuttal author
 
 The submitter is *not* automatically subscribed to the new issue (the App,

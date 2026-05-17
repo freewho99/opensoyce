@@ -16,6 +16,7 @@ import { verifyClaimToken } from '../src/shared/claimTokens.js';
 const ISSUE_OWNER = 'freewho99';
 const ISSUE_REPO = 'opensoyce';
 const ISSUE_LABEL = 'claim-rebuttal';
+const BAND_DROP_LABEL = 'band-drop-subscribed';
 
 const MIN_BODY = 30;
 const MAX_BODY = 10_000;
@@ -101,8 +102,8 @@ export function buildIssueTitle({ owner, repo, login }) {
   return `Score rebuttal: ${owner}/${repo} — @${login}`;
 }
 
-export function buildIssueBody({ owner, repo, login, rebuttalBody, timestamp }) {
-  return `**Repo:** [${owner}/${repo}](https://github.com/${owner}/${repo})
+export function buildIssueBody({ owner, repo, login, rebuttalBody, timestamp, notifyOnBandDrop }) {
+  const base = `**Repo:** [${owner}/${repo}](https://github.com/${owner}/${repo})
 **Submitted by:** @${login} (verified collaborator at ${timestamp})
 **Current Soyce Score:** see https://www.opensoyce.com/lookup?q=${owner}/${repo}
 
@@ -115,6 +116,17 @@ ${rebuttalBody}
 ---
 
 *Submitted via opensoyce.com/claim. The submitter was verified as a collaborator on the repo at submission time. OpenSoyce does not retain the GitHub access token used for verification.*`;
+
+  if (!notifyOnBandDrop) return base;
+
+  return `${base}
+
+---
+
+**Verdict-band notification subscription:** @${login} requested
+notifications when the verdict band for ${owner}/${repo} drops.
+
+<!-- opensoyce-subscriber: login=${login} repo=${owner}/${repo} watches=band-drop -->`;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +170,9 @@ export default async function handler(req, res) {
 
   const token = body && typeof body.token === 'string' ? body.token : '';
   const rebuttalBody = body && typeof body.rebuttalBody === 'string' ? body.rebuttalBody : '';
+  // Defensive: only accept a literal boolean true; anything else (incl. "yes",
+  // 1, null, undefined, "true") defaults to false. Opt-in must be explicit.
+  const notifyOnBandDrop = body && body.notifyOnBandDrop === true;
 
   if (!token) return res.status(400).json({ error: 'MISSING_TOKEN' });
 
@@ -203,7 +218,8 @@ export default async function handler(req, res) {
 
   const timestamp = new Date().toISOString();
   const title = buildIssueTitle({ owner, repo, login });
-  const issueBody = buildIssueBody({ owner, repo, login, rebuttalBody: trimmed, timestamp });
+  const issueBody = buildIssueBody({ owner, repo, login, rebuttalBody: trimmed, timestamp, notifyOnBandDrop });
+  const labels = notifyOnBandDrop ? [ISSUE_LABEL, BAND_DROP_LABEL] : [ISSUE_LABEL];
 
   let issue;
   try {
@@ -212,7 +228,7 @@ export default async function handler(req, res) {
       repo: ISSUE_REPO,
       title,
       body: issueBody,
-      labels: [ISSUE_LABEL],
+      labels,
     });
   } catch (err) {
     console.error('claim-submit: createIssue failed', err && err.message);
@@ -228,5 +244,6 @@ export default async function handler(req, res) {
     ok: true,
     issueUrl: issue.html_url,
     issueNumber: issue.number,
+    notifyOnBandDrop,
   });
 }
