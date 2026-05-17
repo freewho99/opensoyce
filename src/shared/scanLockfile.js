@@ -5,6 +5,8 @@
  */
 
 import { detectTypoSquat } from '../data/protectedPackageNames.js';
+import { getCrossEcosystemBridge } from '../data/crossEcosystemBridges.js';
+import { getModelWeightLoader } from '../data/modelWeightLoaders.js';
 
 const OSV_BATCH_URL = 'https://api.osv.dev/v1/querybatch';
 const OSV_VULN_URL = 'https://api.osv.dev/v1/vulns/';
@@ -710,6 +712,8 @@ function emptyInventory() {
       installScriptCount: 0,
       possibleTypoSquatCount: 0,
       dependencyConfusionCount: 0,
+      crossEcosystemBridgeCount: 0,
+      modelWeightLoaderCount: 0,
     },
   };
 }
@@ -811,6 +815,8 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
   let installScriptCount = 0;
   let possibleTypoSquatCount = 0;
   let dependencyConfusionCount = 0;
+  let crossEcosystemBridgeCount = 0;
+  let modelWeightLoaderCount = 0;
   const privateList = (opts && opts.privateList) || null;
   const ecosystem = ecosystemForFormat(format);
 
@@ -841,6 +847,24 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
             : null,
         }
       : null;
+    // Cross-ecosystem bridge v0. Curated map only — when the scanned package
+    // has a well-known sibling in the OTHER ecosystem (npm ↔ PyPI), surface
+    // an informational chip pointing at it. The chip's job is "did you scan
+    // the other side too?" — never affects score, band, or Risk Profile.
+    // Only fires for ecosystems we recognize (npm or PyPI); yarn-v1 routes
+    // through buildYarnV1Inventory which has its own copy.
+    const crossEcosystemBridge = (ecosystem === 'npm' || ecosystem === 'PyPI')
+      ? getCrossEcosystemBridge(name, ecosystem)
+      : null;
+    // Model-weight loader posture v0. Curated allowlist of packages that load
+    // AI model weights (huggingface_hub, transformers, torch, …). When one is
+    // present in the inventory, surface a posture chip recommending
+    // safetensors over pickle. POSTURE recommendation, not an RCE detector —
+    // we never inspect actual model files. Ecosystem-aware: huggingface_hub
+    // is PyPI; @huggingface/transformers is npm.
+    const modelWeightLoader = (ecosystem === 'npm' || ecosystem === 'PyPI')
+      ? getModelWeightLoader(name, ecosystem)
+      : null;
 
     packages.push({
       name,
@@ -852,6 +876,8 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
       hasInstallScript,
       possibleTypoSquat,
       dependencyConfusion,
+      crossEcosystemBridge,
+      modelWeightLoader,
     });
 
     if (direct) directCount += 1; else transitiveCount += 1;
@@ -865,6 +891,8 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     if (hasInstallScript) installScriptCount += 1;
     if (possibleTypoSquat) possibleTypoSquatCount += 1;
     if (dependencyConfusion) dependencyConfusionCount += 1;
+    if (crossEcosystemBridge) crossEcosystemBridgeCount += 1;
+    if (modelWeightLoader) modelWeightLoaderCount += 1;
   }
 
   /** @type {any} */
@@ -883,6 +911,8 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     installScriptCount,
     possibleTypoSquatCount,
     dependencyConfusionCount,
+    crossEcosystemBridgeCount,
+    modelWeightLoaderCount,
   };
   void ecosystem; // computed for parity with other downstream consumers
   if (opts.directUnknown) totals.directUnknown = true;
@@ -1480,6 +1510,8 @@ function buildYarnV1Inventory(text, opts = {}) {
   let missingRepositoryCount = 0;
   let possibleTypoSquatCount = 0;
   let dependencyConfusionCount = 0;
+  let crossEcosystemBridgeCount = 0;
+  let modelWeightLoaderCount = 0;
   for (const name of names) {
     const acc = byName.get(name);
     const versions = [...acc.versions].sort(compareVersionsLoose);
@@ -1497,6 +1529,11 @@ function buildYarnV1Inventory(text, opts = {}) {
             : null,
         }
       : null;
+    // Cross-ecosystem bridge v0 — yarn-v1 is npm-ecosystem. Same curated map.
+    const crossEcosystemBridge = getCrossEcosystemBridge(name, 'npm');
+    // Model-weight loader posture v0 — yarn-v1 is the npm ecosystem, so the
+    // chip fires the same way as v2/v3/pnpm.
+    const modelWeightLoader = getModelWeightLoader(name, 'npm');
     inv.packages.push({
       name,
       versions,
@@ -1509,12 +1546,16 @@ function buildYarnV1Inventory(text, opts = {}) {
       hasInstallScript: false,
       possibleTypoSquat,
       dependencyConfusion,
+      crossEcosystemBridge,
+      modelWeightLoader,
     });
     if (versions.length > 1) duplicateCount += 1;
     if (!acc.hasLicense) missingLicenseCount += 1;
     if (!acc.hasRepository) missingRepositoryCount += 1;
     if (possibleTypoSquat) possibleTypoSquatCount += 1;
     if (dependencyConfusion) dependencyConfusionCount += 1;
+    if (crossEcosystemBridge) crossEcosystemBridgeCount += 1;
+    if (modelWeightLoader) modelWeightLoaderCount += 1;
   }
 
   inv.totals.totalPackages = inv.packages.length;
@@ -1530,5 +1571,7 @@ function buildYarnV1Inventory(text, opts = {}) {
   inv.totals.missingRepositoryCount = missingRepositoryCount;
   inv.totals.possibleTypoSquatCount = possibleTypoSquatCount;
   inv.totals.dependencyConfusionCount = dependencyConfusionCount;
+  inv.totals.crossEcosystemBridgeCount = crossEcosystemBridgeCount;
+  inv.totals.modelWeightLoaderCount = modelWeightLoaderCount;
   return inv;
 }

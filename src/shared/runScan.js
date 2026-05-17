@@ -460,11 +460,20 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     // failed) so the chip stays hidden in that degraded mode.
     const typoSquatIndex = new Map();
     const depConfusionIndex = new Map();
+    // Cross-ecosystem bridge v0 — same propagation shape as the chips
+    // above. Inventory is the source of truth; vuln rows look up by name.
+    const crossEcosystemBridgeIndex = new Map();
+    // Model-weight loader posture v0 — same propagation shape as the chips
+    // above. Inventory is the source of truth; vuln rows look up by name so
+    // the UI never has to re-walk the lockfile.
+    const modelWeightLoaderIndex = new Map();
     for (const p of inventory.packages) {
       if (p && p.name) {
         installScriptIndex.set(p.name, p.hasInstallScript === true);
         typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
         depConfusionIndex.set(p.name, p.dependencyConfusion || null);
+        crossEcosystemBridgeIndex.set(p.name, p.crossEcosystemBridge || null);
+        modelWeightLoaderIndex.set(p.name, p.modelWeightLoader || null);
       }
     }
     vulnerabilities = vulnerabilities.map(v => ({
@@ -472,6 +481,8 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
       hasInstallScript: installScriptIndex.get(v.package) === true,
       possibleTypoSquat: typoSquatIndex.get(v.package) || null,
       dependencyConfusion: depConfusionIndex.get(v.package) || null,
+      crossEcosystemBridge: crossEcosystemBridgeIndex.get(v.package) || null,
+      modelWeightLoader: modelWeightLoaderIndex.get(v.package) || null,
     }));
   }
 
@@ -504,11 +515,15 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     const installScriptIndex = new Map();
     const typoSquatIndex = new Map();
     const depConfusionIndex = new Map();
+    const crossEcosystemBridgeIndex = new Map();
+    const modelWeightLoaderIndex = new Map();
     for (const p of inventory.packages) {
       if (p && p.name) {
         installScriptIndex.set(p.name, p.hasInstallScript === true);
         typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
         depConfusionIndex.set(p.name, p.dependencyConfusion || null);
+        crossEcosystemBridgeIndex.set(p.name, p.crossEcosystemBridge || null);
+        modelWeightLoaderIndex.set(p.name, p.modelWeightLoader || null);
       }
     }
     selectedHealth = {
@@ -518,6 +533,8 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
         hasInstallScript: installScriptIndex.get(r.package) === true,
         possibleTypoSquat: typoSquatIndex.get(r.package) || null,
         dependencyConfusion: depConfusionIndex.get(r.package) || null,
+        crossEcosystemBridge: crossEcosystemBridgeIndex.get(r.package) || null,
+        modelWeightLoader: modelWeightLoaderIndex.get(r.package) || null,
       })),
     };
   }

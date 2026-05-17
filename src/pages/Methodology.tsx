@@ -208,15 +208,21 @@ export default function Methodology() {
             />
             <LimitationCard
               tag="CROSS-ECOSYSTEM"
-              title="Cross-ecosystem bridge attacks"
-              body="The npm `langchain` package transitively installs a Python `langchain` via Python bindings; our scanner sees only the npm side. PyPI dependency confusion against the Python side is invisible to a single-ecosystem scan today."
-              status="OPEN"
+              title="Cross-ecosystem bridge attacks (curated map v0)"
+              body="When an npm package transitively installs a Python package via Python bindings (or vice-versa), a single-ecosystem scan misses the OTHER half — PyPI dependency confusion against `langchain` can't be caught from `package-lock.json` alone. v0 ships a curated, bidirectional npm ↔ PyPI sibling map (~40 entries focused on the AI/ML ecosystem: LangChain, LlamaIndex, transformers, the major LLM provider SDKs, vector DBs, observability tooling, plus a few high-traffic cloud SDKs). When a scanned package matches an entry, inventory / vuln / selected-health rows get a sky-blue `⚠ CROSS-ECOSYSTEM BRIDGE` chip pointing at the sibling in the other ecosystem. Asymmetric names are explicit table entries — e.g. npm `@anthropic-ai/sdk` ↔ PyPI `anthropic`. The chip is informational only: it does NOT contribute to the composite score, does NOT band-cap the verdict, and does NOT raise any Risk Profile dimension — its job is 'did you scan the other side too?', not 'this is dangerous'. The user remains responsible for actually scanning both lockfiles when both ecosystems are in play. The deeper algorithmic version (static analysis of `postinstall` scripts for `pip install` invocations) is deferred to v0.1+."
+              status="SHIPPED · v0"
             />
             <LimitationCard
               tag="WEIGHTS"
-              title="huggingface_hub and model weights"
-              body="OpenSoyce scores the maintainer + code health of repos. It does NOT analyze model weight pulls (e.g. pickle RCE risk in `from_pretrained` arbitrary downloads). That's a different threat class and is out of scope for v0."
+              title="huggingface_hub and model weights (model-file scanning)"
+              body="OpenSoyce scores the maintainer + code health of repos. It does NOT analyze actual model weight files (pickle opcode scanning of .pt / .bin / .pkl payloads downloaded by `from_pretrained()` — different input format, different threat class). The pickle-opcode RCE scanner is a planned v1+ product. v0 ships a separate posture chip (see MODEL WEIGHTS card below) that fires on package presence."
               status="OUT OF SCOPE · v0"
+            />
+            <LimitationCard
+              tag="MODEL WEIGHTS"
+              title="Model-weight loader posture (informational only)"
+              body="AI projects load model weights via `huggingface_hub.from_pretrained()` and `torch.load()`, which historically default to pickle format. Pickle is a code-execution format — loading untrusted weights can run arbitrary code at load time (real attack class: malicious safetensors-impersonating pickle on Hugging Face Hub, malicious .pt files in public model repos, the 2024 PyTorch pickle CVEs). The safer alternatives are safetensors (binary, no code execution) and `torch.load(..., weights_only=True)`. When an inventory contains a curated model-loading package (huggingface_hub, transformers, diffusers, torch, tensorflow, pickle, cloudpickle, @huggingface/transformers, @xenova/transformers — list in src/data/modelWeightLoaders.js), inventory + vuln + selected-health rows surface a ⚠ USE SAFETENSORS chip (AMBER). Packages that ARE the safer choice (safetensors, onnxruntime-node) surface a ✓ SAFE MODEL FORMAT chip (GREEN). Three risk tiers: `load_pickle`, `torch_load`, `safe`. Scope honesty: chip fires on package presence ONLY — we do NOT inspect model files, do NOT scan pickle opcodes, do NOT verify which format the project actually loads at runtime. Pickle opcode analysis is a separate scanner (different input format, different tools, different output shape) planned for v1+. The chip is purely informational — does NOT contribute to the composite score, does NOT cap the verdict band, does NOT raise any Risk Profile dimension. Ecosystem-aware: huggingface_hub fires only on PyPI scans; @huggingface/transformers fires only on npm scans."
+              status="SHIPPED · v0 (POSTURE ONLY)"
             />
             <LimitationCard
               tag="PYPI"

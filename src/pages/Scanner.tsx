@@ -34,6 +34,29 @@ interface DependencyConfusion {
   userComment: string | null;
 }
 
+// Model-weight loader posture v0 — shape emitted by getModelWeightLoader()
+// in src/data/modelWeightLoaders.js. Posture recommendation only; never
+// affects Risk Profile, score, or verdict band. 'safe' tier renders a
+// green affirmation chip; 'load_pickle' / 'torch_load' render amber.
+interface ModelWeightLoader {
+  name: string;
+  ecosystem: 'npm' | 'PyPI';
+  risk: 'load_pickle' | 'torch_load' | 'safe';
+  safer: string | null;
+  reason: string;
+}
+
+// Cross-ecosystem bridge v0 — shape emitted by getCrossEcosystemBridge() in
+// src/data/crossEcosystemBridges.js. Informational only — surfaces when a
+// scanned package has a well-known sibling in the OTHER ecosystem (npm ↔
+// PyPI). Never affects Risk Profile, composite score, or verdict band.
+interface CrossEcosystemBridge {
+  matched: string;
+  sibling: string;
+  siblingEcosystem: 'npm' | 'PyPI';
+  reason: string;
+}
+
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
 // forward-compat with future inference logic in v2.1+.
@@ -116,6 +139,14 @@ interface Vulnerability {
   // package name appears in the user's `.opensoyce-private` file.
   // Null when the package is not on the list (or the list is absent).
   dependencyConfusion?: DependencyConfusion | null;
+  // Cross-ecosystem bridge v0 — populated by runScan when the package has a
+  // well-known sibling in the other ecosystem (npm ↔ PyPI). Informational
+  // only; chip points the user at the sibling so they remember to scan both.
+  crossEcosystemBridge?: CrossEcosystemBridge | null;
+  // Model-weight loader posture v0 — populated by runScan from the matching
+  // inventory record. Posture recommendation only; does not affect scoring,
+  // band, or Risk Profile.
+  modelWeightLoader?: ModelWeightLoader | null;
 }
 
 // Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
@@ -142,6 +173,12 @@ interface InventoryPackage {
   // Dependency-confusion detection v0 — set when the package name appears
   // in the user's `.opensoyce-private` file.
   dependencyConfusion?: DependencyConfusion | null;
+  // Cross-ecosystem bridge v0 — set when the package name appears in the
+  // curated CROSS_ECOSYSTEM_BRIDGES list. Informational chip only.
+  crossEcosystemBridge?: CrossEcosystemBridge | null;
+  // Model-weight loader posture v0 — set when the package name appears in
+  // the curated MODEL_WEIGHT_LOADERS list AND the ecosystem matches.
+  modelWeightLoader?: ModelWeightLoader | null;
 }
 
 interface InventoryTotals {
@@ -169,6 +206,12 @@ interface InventoryTotals {
   // Count of HIGH-confidence (active squat) hits within
   // dependencyConfusionCount above. Set only when the active probe ran.
   activeDependencyConfusionCount?: number;
+  // Cross-ecosystem bridge v0 — count of packages with a non-null
+  // crossEcosystemBridge entry. Absent on older server responses.
+  crossEcosystemBridgeCount?: number;
+  // Model-weight loader posture v0 — count of packages with a non-null
+  // modelWeightLoader entry. Absent on older server responses.
+  modelWeightLoaderCount?: number;
 }
 
 interface Inventory {
@@ -208,6 +251,10 @@ interface SelectedHealthRow {
   possibleTypoSquat?: PossibleTypoSquat | null;
   // Dependency-confusion detection v0 — copied from the matching inventory record.
   dependencyConfusion?: DependencyConfusion | null;
+  // Cross-ecosystem bridge v0 — copied from the matching inventory record.
+  crossEcosystemBridge?: CrossEcosystemBridge | null;
+  // Model-weight loader posture v0 — copied from the matching inventory record.
+  modelWeightLoader?: ModelWeightLoader | null;
   // Fork-velocity-of-namesake v0 — copied from the analysis result.
   migration?: RepoMigration | null;
 }
@@ -1035,6 +1082,14 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
         {/* Dependency-confusion v0 — fires only for names in the user's
             `.opensoyce-private` file. MEDIUM static; HIGH after active check. */}
         <DepConfusionChip dependencyConfusion={row.dependencyConfusion} />
+        {/* Cross-ecosystem bridge v0 — informational chip; sky blue (not
+            amber/red) because it's a "scan the other ecosystem too" reminder,
+            not a severity warning. */}
+        <CrossEcosystemBridgeChip bridge={row.crossEcosystemBridge} />
+        {/* Model-weight loader posture v0 — informational chip; AMBER for
+            pickle-loading packages, GREEN for safer formats (safetensors,
+            ONNX). Never affects score, band, or Risk Profile. */}
+        <ModelWeightChip loader={row.modelWeightLoader} />
       </div>
 
       {/* Status zone -- separate row so the copy / chips never collide with
@@ -1165,6 +1220,57 @@ function DepConfusionChip({ dependencyConfusion }: { dependencyConfusion: Depend
   );
 }
 
+// Model-weight loader posture v0 — informational chip surfaced when the
+// inventory contains a known model-loading package (huggingface_hub,
+// transformers, torch, …). The chip is a POSTURE recommendation, not an
+// RCE detector — we do NOT inspect actual model files. Three tiers:
+//   load_pickle / torch_load → AMBER chip recommending safetensors
+//   safe                     → GREEN affirmation chip
+// Never affects Risk Profile, composite score, or verdict band.
+function ModelWeightChip({ loader }: { loader: ModelWeightLoader | null | undefined }) {
+  if (!loader) return null;
+  const isSafe = loader.risk === 'safe';
+  const isTorch = loader.risk === 'torch_load';
+  const saferText = loader.safer ? ` Prefer ${loader.safer}.` : '';
+  const tooltip = isSafe
+    ? `${loader.reason} (using safer model-weight format).`
+    : `${loader.reason}.${saferText} Posture recommendation — OpenSoyce does not scan model files.`;
+  const label = isSafe
+    ? '✓ SAFE MODEL FORMAT'
+    : isTorch
+      ? '⚠ TORCH.LOAD: USE SAFETENSORS'
+      : '⚠ USE SAFETENSORS';
+  return (
+    <span
+      title={tooltip}
+      className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${
+        isSafe ? 'bg-emerald-500 text-black' : 'bg-amber-300 text-black'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+// Cross-ecosystem bridge v0 — informational chip surfaced when the inventory
+// contains a package that has a well-known sibling in the OTHER ecosystem
+// (npm ↔ PyPI). The chip's job is "did you scan the other side too?" — it
+// is NOT a security-severity warning. Distinct sky/cyan color so users can
+// visually distinguish it from the amber/red squat-class chips. Never
+// affects Risk Profile, composite score, or verdict band.
+function CrossEcosystemBridgeChip({ bridge }: { bridge: CrossEcosystemBridge | null | undefined }) {
+  if (!bridge) return null;
+  const tooltip = `This package has a sibling in ${bridge.siblingEcosystem}: ${bridge.sibling}. ${bridge.reason}. Verify both ecosystems are scanned when assessing supply-chain risk.`;
+  return (
+    <span
+      title={tooltip}
+      className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-sky-500 text-black"
+    >
+      ⚠ CROSS-ECOSYSTEM BRIDGE
+    </span>
+  );
+}
+
 interface InventoryRowProps {
   pkg: InventoryPackage;
   vulnInfo: { severity: Severity; identity: IdentityChip | null } | null;
@@ -1245,6 +1351,14 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
         {/* Dependency-confusion v0 — only fires for names listed in
             `.opensoyce-private`. MEDIUM static / HIGH on active squat. */}
         <DepConfusionChip dependencyConfusion={pkg.dependencyConfusion} />
+        {/* Cross-ecosystem bridge v0 — informational only. The chip points
+            at the sibling package in the other ecosystem (npm ↔ PyPI) so
+            users remember to scan both lockfiles when both are in play. */}
+        <CrossEcosystemBridgeChip bridge={pkg.crossEcosystemBridge} />
+        {/* Model-weight loader posture v0 — fires for curated AI model
+            loaders (huggingface_hub, transformers, torch, safetensors, …).
+            Posture recommendation, not an RCE detector. */}
+        <ModelWeightChip loader={pkg.modelWeightLoader} />
       </div>
       {expanded && multi && (
         <div className="pb-3 pt-1 pl-2 border-t border-soy-bottle/10">
@@ -1324,7 +1438,7 @@ function VulnRow({ v }: { v: Vulnerability }) {
       {/* CVE / GHSA IDs + postinstall chip. The chip lives next to the IDs
           so the "vulnerable AND runs install scripts" combo is unmistakable.
           Suppressed for curated trusted packages (TypeScript, sharp, …). */}
-      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat || v.dependencyConfusion) && (
+      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat || v.dependencyConfusion || v.crossEcosystemBridge || v.modelWeightLoader) && (
         <div className="flex flex-wrap gap-1.5 mb-3 items-center">
           {(v.ids || []).map((id) => (
             <span
@@ -1342,6 +1456,12 @@ function VulnRow({ v }: { v: Vulnerability }) {
           {/* Dependency-confusion v0 — same chip surface. The "vulnerable
               AND active dep-confusion" combo is the worst-case stack. */}
           <DepConfusionChip dependencyConfusion={v.dependencyConfusion} />
+          {/* Cross-ecosystem bridge v0 — informational. Points at the
+              sibling in the other ecosystem so users scan both sides. */}
+          <CrossEcosystemBridgeChip bridge={v.crossEcosystemBridge} />
+          {/* Model-weight loader posture v0 — chip surface alongside the
+              other informational chips. Posture recommendation only. */}
+          <ModelWeightChip loader={v.modelWeightLoader} />
         </div>
       )}
 

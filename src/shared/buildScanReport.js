@@ -469,6 +469,8 @@ export function buildJsonReport({
         hasInstallScript: !!p?.hasInstallScript,
         possibleTypoSquat: p?.possibleTypoSquat || null,
         dependencyConfusion: p?.dependencyConfusion || null,
+        crossEcosystemBridge: p?.crossEcosystemBridge || null,
+        modelWeightLoader: p?.modelWeightLoader || null,
       }))
       : [];
     out.inventory = {

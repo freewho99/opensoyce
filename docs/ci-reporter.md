@@ -260,6 +260,108 @@ False-positive bounds:
   skeleton, so a scoped attack only collides with the scoped target,
   not with the bare unscoped name.
 
+## Model-weight loader posture
+
+AI projects load model weights via Hugging Face's `from_pretrained()`
+and PyTorch's `torch.load()`, which historically default to pickle
+format. Pickle is a code-execution format — loading untrusted pickle
+weights can run arbitrary code at load time. The safer alternative is
+the `safetensors` binary format (no code execution) or, for PyTorch,
+`torch.load(..., weights_only=True)`.
+
+When an inventory contains a curated model-loading package, OpenSoyce
+surfaces a posture chip on the inventory + vuln rows recommending
+safetensors. The chip is a **POSTURE recommendation, not an RCE
+scanner**. We do NOT inspect actual model files in v0; pickle opcode
+analysis is a separate scanner with different inputs, tools, and
+output shape, planned for v1+ as a distinct product.
+
+The curated list (`src/data/modelWeightLoaders.js`) covers:
+
+- PyPI: `huggingface_hub`, `transformers`, `diffusers`, `torch`,
+  `tensorflow`, `pickle`, `cloudpickle`, `safetensors`
+- npm: `@huggingface/transformers`, `@xenova/transformers`,
+  `onnxruntime-node`
+
+Three risk tiers drive chip copy + color:
+
+- **`load_pickle`** — AMBER chip "⚠ USE SAFETENSORS". Pickle-loading
+  packages (huggingface_hub, transformers, diffusers, tensorflow,
+  pickle, cloudpickle, npm transformers).
+- **`torch_load`** — AMBER chip "⚠ TORCH.LOAD: USE SAFETENSORS".
+  Specific to `torch`; the safer mitigation is either safetensors OR
+  `weights_only=True`.
+- **`safe`** — GREEN chip "✓ SAFE MODEL FORMAT". Affirms the package
+  is the safer choice (`safetensors` PyPI, `onnxruntime-node` npm).
+
+The chip is informational only:
+
+- it does NOT contribute to the composite Soyce score
+- it does NOT cap the verdict band
+- it does NOT raise any Risk Profile dimension
+- it does NOT scan model files (the chip fires on package presence
+  alone — a project could have `safetensors` installed and still load
+  pickle weights at runtime, or vice versa)
+
+The chip is ecosystem-aware: `huggingface_hub` only fires on PyPI
+scans; `@huggingface/transformers` only fires on npm scans. A mismatch
+silently returns null.
+
+## Cross-ecosystem bridges
+
+A single-ecosystem scan has a real blind spot: when an npm package
+transitively pulls in a Python package (or vice-versa), the OTHER half
+is invisible. PyPI dependency confusion against `langchain` cannot be
+caught by scanning only `package-lock.json` — even though the npm
+`langchain` package and the PyPI `langchain` package are sibling
+implementations of the same framework and many real deployments ship
+both.
+
+v0 ships the **curated-map approach**: a hand-maintained, bidirectional
+list of well-known npm ↔ PyPI sibling packages
+(`src/data/crossEcosystemBridges.js`). When a scanned package matches
+an entry, the inventory / vuln / selected-health rows get a
+`⚠ CROSS-ECOSYSTEM BRIDGE` chip pointing at the sibling in the other
+ecosystem. The chip's job is "did you scan the other side too?" — it
+is **NOT** a security-severity warning. Distinct sky-blue color so it
+doesn't visually pile onto the amber/red squat-class chips.
+
+The list focuses on the AI/ML ecosystem where the swarm caught the
+gap: LangChain, LlamaIndex, transformers, OpenAI / Anthropic /
+Mistral / Cohere / Groq / Replicate SDKs, vector DBs (Pinecone,
+Qdrant, Weaviate, Chroma), observability (Langfuse, LangSmith,
+Sentry, PostHog, OpenTelemetry), tokenization (tiktoken, gpt-tokenizer),
+and a few high-traffic cloud / data SDKs (AWS, Google Cloud, Stripe,
+Twilio, Redis).
+
+Asymmetric names are explicit table entries — the lookup never
+assumes the strings match across ecosystems. Examples:
+
+- npm `@anthropic-ai/sdk` ↔ PyPI `anthropic`
+- npm `@huggingface/transformers` ↔ PyPI `transformers`
+- npm `cohere-ai` ↔ PyPI `cohere`
+- npm `@sentry/node` ↔ PyPI `sentry-sdk`
+- npm `groq-sdk` ↔ PyPI `groq`
+- npm `@aws-sdk/client-s3` ↔ PyPI `boto3`
+
+The chip is informational only:
+
+- it does NOT contribute to the composite Soyce score
+- it does NOT cap the verdict band
+- it does NOT raise any Risk Profile dimension
+- it does NOT infer anything — only curated names match
+
+The deeper algorithmic version (static analysis of `postinstall`
+scripts for `pip install` invocations, parsing setup.py for npm
+dispatch, etc.) is deferred to v0.1+. The user is responsible for
+scanning both lockfiles when both ecosystems are in play; the chip is
+the prompt to do so.
+
+Lookups are case-insensitive on input. PyPI lookups also apply PEP 503
+normalization (runs of `[-_.]` collapse to `-`) so callers passing
+`Langchain_Core` / `langchain.core` / `langchain-core` all resolve to
+the same entry.
+
 ## Dependency confusion detection
 
 The attack class: your team uses a private package
