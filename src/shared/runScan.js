@@ -162,6 +162,9 @@ async function attachRepoHealthToVulnerabilities(vulns, getAnalysis, mapWithConc
       advisorySummary,
       maintainerConcentration,
       vendorSdk,
+      // Fork-velocity-of-namesake v0 — informational; never affects score
+      // or verdict. Null when no migration detected (the common case).
+      migration: data.migration || null,
     };
     v.repoHealthError = null;
   });
@@ -257,6 +260,8 @@ async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalys
     row.advisorySummary = advisorySummary;
     row.maintainerConcentration = maintainerConcentration;
     row.vendorSdk = vendorSdk;
+    // Fork-velocity-of-namesake v0 — same shape on v3b selected health rows.
+    row.migration = v.analysis.migration || null;
     row.status = 'SCORED';
     return row;
   });

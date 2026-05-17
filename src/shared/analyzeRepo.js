@@ -24,6 +24,8 @@ import { calculateSoyceScore } from './scoreCalculator.js';
 import { findSecurityPolicy } from './securityPolicyResolver.js';
 import { computeMaintainerConcentration } from './maintainerConcentration.js';
 import { getVendorSdk } from '../data/vendorSdks.js';
+import { verdictFor } from './verdict.js';
+import { detectMigration, makeFetchForks } from './detectMigration.js';
 
 const GH = 'https://api.github.com';
 
@@ -78,10 +80,36 @@ export async function analyzeRepo(owner, repo, headers) {
   const maintainerConcentration = computeMaintainerConcentration(contributors, commits);
   const vendorSdk = getVendorSdk(repoData.owner.login, repoData.name);
 
+  // Fork-velocity-of-namesake v0 — surface known/algorithmic migrations.
+  // Failure-isolated: any error returns `null`, never breaks the analysis.
+  // The verdict band we feed in is computed with the same signals the
+  // public callers see, so detectMigration's low-band gate matches what
+  // the user is told. No score / band mutation here — purely additive.
+  let migration = null;
+  try {
+    const verdict = verdictFor(scoreResult.total, {
+      earlyBreakout: false,
+      advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
+      maintainerConcentration,
+      vendorSdkMatch: !!vendorSdk,
+    });
+    migration = await detectMigration({
+      owner: repoData.owner.login,
+      repo: repoData.name,
+      verdict,
+      pushedAt: repoData.pushed_at || null,
+      stargazersCount: typeof repoData.stargazers_count === 'number' ? repoData.stargazers_count : 0,
+      deps: { fetchForks: makeFetchForks(headers) },
+    });
+  } catch {
+    migration = null;
+  }
+
   return {
     ...scoreResult,
     maintainerConcentration,
     vendorSdk,
+    migration,
     repo: {
       id: repoData.id,
       name: repoData.name,

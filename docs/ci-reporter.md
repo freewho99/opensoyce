@@ -195,6 +195,47 @@ v0 scope and known caveats:
   the same form. We default to false and surface no chip; this gap is
   deferred to a future release that can re-analyze the ecosystem honestly.
 
+## Migration detection (fork-velocity-of-namesake)
+
+`xenova/transformers` is RISKY for the right reason on the wrong repo: the
+project moved to `huggingface/transformers.js` and the old namespace went
+dormant. The score for the OLD repo is correct (it really is unmaintained),
+but the package on npm is now backed by the new namespace — so the user
+needs to know they're looking at the predecessor.
+
+What we surface:
+
+- The `migration` field on the `/api/analyze` response (top level) and on
+  every vuln row's `repoHealth.migration` block (plus v3b selected-health
+  rows). The Lookup page renders a yellow banner ABOVE the score card; the
+  Scanner renders a small `⚠ MIGRATED` chip on each row.
+- Two confidence tiers: **HIGH / curated** (the well-known migrations in
+  `src/data/repoMigrations.js`) and **MEDIUM / fork-chain** (algorithmic —
+  see below).
+- Entries with `to: null` are valid — they mean "deprecated, no canonical
+  successor." The banner copy reads "was deprecated" instead of "migrated
+  to X" for those entries.
+
+The algorithmic check (`src/shared/detectMigration.js`) only fires when:
+
+1. The curated table didn't have an entry, AND
+2. The verdict band is one of WATCHLIST / RISKY / STALE (no API call burned
+   on a healthy repo), AND
+3. The repo's `pushed_at` is older than 180 days (truly dormant), AND
+4. A top-3 fork (by stars) was pushed within the last 90 days AND has at
+   least 10% of the original's stargazer count.
+
+The first fork matching both criteria wins. Confidence is MEDIUM; the
+successor is presented as "possible migration (detected)" rather than the
+curated "known migration." Total extra cost: at most one GitHub API call
+per low-band scan, 24h-cached.
+
+**This is informational only.** The composite score, Risk Profile, and
+verdict band are unchanged. The banner attributes the score to the OLD
+repo; the user clicks through to the successor to re-score there. A fork
+that took off without an actual maintainer handoff could be mis-flagged —
+the MEDIUM confidence is honest about that.
+
 ## Dogfooded on OpenSoyce
 
 **Dogfooded:** 2026-05-14

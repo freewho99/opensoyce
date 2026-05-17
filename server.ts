@@ -10,6 +10,8 @@ import { resolveDepIdentity } from "./src/shared/resolveDepIdentity.js";
 import { runScan, mapWithConcurrency } from "./src/shared/runScan.js";
 import { computeMaintainerConcentration } from "./src/shared/maintainerConcentration.js";
 import { getVendorSdk } from "./src/data/vendorSdks.js";
+import { detectMigration, makeFetchForks } from "./src/shared/detectMigration.js";
+import { verdictFor } from "./src/shared/verdict.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,10 +102,41 @@ async function startServer() {
     // dev (Express) matches the deployed shape.
     const maintainerConcentration = computeMaintainerConcentration(contributors || [], commits || []);
     const vendorSdk = getVendorSdk(repoData.owner.login, repoData.name);
+    // Fork-velocity-of-namesake v0 — Express runtime parity with the Vercel
+    // function (analyzeRepo.js). Failure-isolated; null in the common case.
+    // The makeFetchForks helper uses the same `fetch` GitHub API the Vercel
+    // path uses — Express normally hits GitHub via gh.* methods (which have
+    // their own auth headers), but the migration probe is a single extra
+    // call so we keep it standalone and reuse the token from env.
+    let migration = null;
+    try {
+      const verdict = verdictFor(scoreResult.total, {
+        earlyBreakout: false,
+        advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
+        maintainerConcentration,
+        vendorSdkMatch: !!vendorSdk,
+      });
+      const ghHeaders: Record<string, string> = {
+        'User-Agent': 'opensoyce',
+        'Accept': 'application/vnd.github+json',
+      };
+      if (process.env.GITHUB_TOKEN) ghHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+      migration = await detectMigration({
+        owner: repoData.owner.login,
+        repo: repoData.name,
+        verdict,
+        pushedAt: repoData.pushed_at || null,
+        stargazersCount: typeof repoData.stargazers_count === 'number' ? repoData.stargazers_count : 0,
+        deps: { fetchForks: makeFetchForks(ghHeaders) },
+      });
+    } catch {
+      migration = null;
+    }
     const data = {
       ...scoreResult,
       maintainerConcentration,
       vendorSdk,
+      migration,
       repo: {
         name: repoData.name,
         description: repoData.description,

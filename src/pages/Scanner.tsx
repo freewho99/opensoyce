@@ -32,6 +32,17 @@ type RepoVerdict =
   | 'RISKY'
   | 'STALE';
 
+// Fork-velocity-of-namesake v0. Informational — never affects score / verdict.
+interface RepoMigration {
+  successor: { owner: string; repo: string } | null;
+  migratedAt: string | null;
+  reason: string;
+  confidence: 'HIGH' | 'MEDIUM';
+  source: 'curated' | 'fork-chain';
+  successorStars?: number;
+  successorPushedAt?: string;
+}
+
 interface RepoHealth {
   soyceScore: number;
   verdict: RepoVerdict;
@@ -40,6 +51,9 @@ interface RepoHealth {
     security: number;
     activity: number;
   };
+  // Fork-velocity-of-namesake v0 — null in the common case. When set, the
+  // scanner row renders a small ⚠ MIGRATED chip linking to the successor.
+  migration?: RepoMigration | null;
 }
 
 type RepoHealthError = 'IDENTITY_NONE' | 'ANALYSIS_FAILED';
@@ -146,6 +160,8 @@ interface SelectedHealthRow {
   status: SelectedHealthStatus;
   // Postinstall analysis v0 — copied from the matching inventory record.
   hasInstallScript?: boolean;
+  // Fork-velocity-of-namesake v0 — copied from the analysis result.
+  migration?: RepoMigration | null;
 }
 
 interface SelectedHealth {
@@ -996,6 +1012,9 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
                 Maint {row.signals.maintenance.toFixed(1)} / Sec {row.signals.security.toFixed(1)} / Act {row.signals.activity.toFixed(1)}
               </span>
             )}
+            {/* Fork-velocity-of-namesake v0 — same chip surface as the
+                per-vuln row block above. */}
+            <MigrationChip migration={row.migration ?? null} />
           </>
         )}
         {row.status === 'IDENTITY_UNRESOLVED' && (
@@ -1471,7 +1490,7 @@ function RepoHealthBlock({ v }: { v: Vulnerability }) {
   }
 
   if (!v.repoHealth) return null;
-  const { soyceScore, verdict, signals } = v.repoHealth;
+  const { soyceScore, verdict, signals, migration } = v.repoHealth;
   const chip = VERDICT_CHIP[verdict] || 'bg-soy-label text-black';
 
   return (
@@ -1512,12 +1531,49 @@ function RepoHealthBlock({ v }: { v: Vulnerability }) {
           <span className="font-mono text-xs md:text-sm font-bold tracking-tight">
             Soyce {soyceScore.toFixed(1)}
           </span>
+          {/* Fork-velocity-of-namesake v0 — small ⚠ MIGRATED chip. Tooltip
+              carries the full reason; click target links to the successor
+              when one is known (deprecated entries link to lookup root). */}
+          <MigrationChip migration={migration ?? null} />
         </div>
         <div className="font-mono italic text-[11px] tracking-tight opacity-70">
           Maint {signals.maintenance.toFixed(1)} / Sec {signals.security.toFixed(1)} / Activity {signals.activity.toFixed(1)}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Fork-velocity-of-namesake v0 — small chip surfaced on vuln + selected-health
+ * rows when the scored repo has been migrated. Click target links to the
+ * successor (or to the lookup root when the entry was deprecated). Tooltip
+ * carries the full reason + confidence. Hidden when migration is null (the
+ * common case).
+ */
+function MigrationChip({ migration }: { migration: RepoMigration | null | undefined }) {
+  if (!migration) return null;
+  const succ = migration.successor;
+  const tooltip = succ
+    ? `Migrated to ${succ.owner}/${succ.repo}${migration.migratedAt ? ` on ${migration.migratedAt}` : ''} — ${migration.reason} (Confidence: ${migration.confidence})`
+    : `Deprecated${migration.migratedAt ? ` on ${migration.migratedAt}` : ''} — ${migration.reason} (Confidence: ${migration.confidence})`;
+  const href = succ
+    ? `/lookup?q=${succ.owner}/${succ.repo}`
+    : null;
+  const inner = (
+    <span
+      title={tooltip}
+      className="inline-flex items-center self-start px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-300 text-black"
+    >
+      ⚠ MIGRATED
+    </span>
+  );
+  return href ? (
+    <Link to={href} className="no-underline">
+      {inner}
+    </Link>
+  ) : (
+    inner
   );
 }
 

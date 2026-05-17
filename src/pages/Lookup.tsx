@@ -102,6 +102,7 @@ export default function Lookup() {
         maintenanceBreakdown: data.meta.maintenanceBreakdown ?? null,
         maintainerConcentration: data.maintainerConcentration ?? null,
         vendorSdk: data.vendorSdk ?? null,
+        migration: data.migration ?? null,
       });
       
       showToast('Analysis complete!');
@@ -236,6 +237,58 @@ export default function Lookup() {
                 className="flex flex-col lg:flex-row gap-8 items-start"
               >
                 <div className="flex-1 w-full">
+                  {/* Fork-velocity-of-namesake v0 — migration banner. Renders
+                      ABOVE the score card when the queried repo has been
+                      migrated (curated list or fork-chain detection). The
+                      score below is intentionally unchanged; this banner
+                      only clarifies which repo is being scored. */}
+                  {result.migration && (
+                    <div className="border-4 border-amber-500 bg-amber-50 p-4 mb-6">
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl">⚠️</span>
+                        <div className="flex-1">
+                          <div className="text-sm font-black uppercase tracking-widest text-amber-900">
+                            {result.migration.source === 'curated'
+                              ? 'KNOWN MIGRATION'
+                              : 'POSSIBLE MIGRATION (DETECTED)'}
+                          </div>
+                          <p className="text-sm mt-1 text-amber-950">
+                            This project{' '}
+                            {result.migration.successor ? (
+                              <>
+                                migrated to{' '}
+                                <Link
+                                  to={`/lookup?q=${result.migration.successor.owner}/${result.migration.successor.repo}`}
+                                  className="font-bold underline"
+                                  onClick={() =>
+                                    trackEvent('migration_successor_click', {
+                                      repo: `${result.owner}/${result.name}`,
+                                      successor: `${result.migration!.successor!.owner}/${result.migration!.successor!.repo}`,
+                                      source: result.migration!.source,
+                                    })
+                                  }
+                                >
+                                  {result.migration.successor.owner}/{result.migration.successor.repo}
+                                </Link>
+                              </>
+                            ) : (
+                              <>was deprecated</>
+                            )}
+                            {result.migration.migratedAt
+                              ? ` on ${result.migration.migratedAt}`
+                              : ''}
+                            . The score below reflects the OLD repo (now archived or dormant) — it is NOT changed by this banner.
+                          </p>
+                          <p className="text-xs mt-1 text-amber-950 opacity-70">
+                            {result.migration.reason}
+                          </p>
+                          <p className="text-[10px] mt-2 font-black uppercase tracking-widest text-amber-900 opacity-70">
+                            Confidence: {result.migration.confidence} · Source: {result.migration.source}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="bg-white border-4 border-soy-bottle p-8 mb-6 shadow-[8px_8px_0px_#000]">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                       <div>

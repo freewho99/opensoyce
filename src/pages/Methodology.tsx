@@ -243,6 +243,12 @@ export default function Methodology() {
               status="SHIPPED · v0"
             />
             <LimitationCard
+              tag="MIGRATION"
+              title="Fork-velocity-of-namesake (migration detection)"
+              body="When a queried repo's verdict is low (WATCHLIST / RISKY / STALE) AND it's dormant (>180 days since last commit) AND a top-3 fork has recent activity (≤90 days) plus at least 10% of the original's stars, OpenSoyce surfaces a 'possible migration' banner. The score is NOT changed by this signal — only the informational banner moves. Confidence is HIGH for curated entries (src/data/repoMigrations.js, e.g. xenova/transformers → huggingface/transformers.js) and MEDIUM for algorithmic fork-chain detection. False-positive risk: a popular fork that took off without an actual upstream-maintainer handoff could be mis-flagged as a successor. Failure-isolated: any GitHub error returns null and the banner simply doesn't render."
+              status="SHIPPED · v0"
+            />
+            <LimitationCard
               tag="INSTALL SCRIPTS"
               title="Postinstall script detection (informational only)"
               body="npm preinstall / install / postinstall hooks run arbitrary code on `npm install` — the attack vector behind event-stream, ua-parser-js, colors.js, and faker.js. Inventory + vuln rows surface a ⚠ INSTALL SCRIPT chip when the lockfile flags `hasInstallScript: true` (npm v1/v2/v3) or `requiresBuild: true` (pnpm). A curated allowlist (src/data/trustedInstallScripts.js) suppresses the chip for ~30 packages where install scripts are expected and legitimate (TypeScript, esbuild, sharp, husky, electron, puppeteer, …). The chip is informational only — it does NOT contribute to the Risk Profile, does NOT band-cap the verdict, and does NOT change the composite score. Coverage gaps: yarn-v1 lockfiles don't expose the flag, and Python lockfiles (uv.lock, poetry.lock) have no equivalent — both are documented in docs/ci-reporter.md and reported as hasInstallScript: false."
