@@ -202,9 +202,9 @@ export default function Methodology() {
             />
             <LimitationCard
               tag="TYPO-SQUAT"
-              title="Typo-squat detection on AI namespaces"
-              body="We mitigate borrowed-trust attacks (an attacker pointing a typo-squat's `repository` field at a healthy repo) via the package.json cross-check, but we do NOT detect homoglyph typo-squats (e.g. `l&#1072;ngchain` with Cyrillic &#1072;). That's a known research direction."
-              status="PARTIAL · 8c0d6ab"
+              title="Typo-squat homoglyph detection (informational only)"
+              body="Each scanned package name is reduced to a Unicode-TR39 confusables skeleton (Cyrillic/Greek/fullwidth lookalikes of common ASCII letters, plus the digit/letter confusables 0→o, 1→l, etc.) and compared against a curated ~100-entry protected-names list (src/data/protectedPackageNames.js: top npm installs + AI/ML/security-critical names). When a scanned name's skeleton collides with a protected name AND the byte sequences differ, the inventory / vuln / selected-health rows get a ⚠ POSSIBLE TYPO-SQUAT chip pointing at the suspected target (e.g. `l&#1072;ngchain` → langchain). Self-match is byte-exact: a legitimate `langchain` install never fires the chip. The chip is informational only — it does NOT contribute to the composite score, does NOT cap the verdict band, and does NOT raise any Risk Profile dimension. Bounds: we ship ~200 high-value confusables (not the full ~6000-entry TR39 table) and a hand-curated protected-names list (not exhaustive); a homoglyph attack against an off-list name will pass through silently. Borrowed-trust attacks against the resolver are separately mitigated by the package.json cross-check (8c0d6ab)."
+              status="SHIPPED · v0"
             />
             <LimitationCard
               tag="CROSS-ECOSYSTEM"

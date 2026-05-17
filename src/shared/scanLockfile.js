@@ -4,6 +4,8 @@
  * OSV /v1/querybatch returns vuln ids only; full details require /v1/vulns/{id}.
  */
 
+import { detectTypoSquat } from '../data/protectedPackageNames.js';
+
 const OSV_BATCH_URL = 'https://api.osv.dev/v1/querybatch';
 const OSV_VULN_URL = 'https://api.osv.dev/v1/vulns/';
 const BATCH_SIZE = 1000;
@@ -700,6 +702,7 @@ function emptyInventory() {
       missingLicenseCount: 0,
       missingRepositoryCount: 0,
       installScriptCount: 0,
+      possibleTypoSquatCount: 0,
     },
   };
 }
@@ -799,6 +802,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
   let missingLicenseCount = 0;
   let missingRepositoryCount = 0;
   let installScriptCount = 0;
+  let possibleTypoSquatCount = 0;
 
   const names = [...byName.keys()].sort((a, b) => a.localeCompare(b));
   for (const name of names) {
@@ -807,6 +811,11 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     const scope = mergeScopes(acc.scopes);
     const direct = acc.direct;
     const hasInstallScript = acc.hasInstallScript === true;
+    // Typo-squat homoglyph detection v0. Pure per-name check; the helper
+    // performs byte-exact self-match suppression so a legitimate `langchain`
+    // install resolves to null. Informational only — never affects score,
+    // verdict band, or Risk Profile dimensions.
+    const possibleTypoSquat = detectTypoSquat(name);
 
     packages.push({
       name,
@@ -816,6 +825,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
       hasLicense: acc.hasLicense,
       hasRepository: acc.hasRepository,
       hasInstallScript,
+      possibleTypoSquat,
     });
 
     if (direct) directCount += 1; else transitiveCount += 1;
@@ -827,6 +837,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     if (!acc.hasLicense) missingLicenseCount += 1;
     if (!acc.hasRepository) missingRepositoryCount += 1;
     if (hasInstallScript) installScriptCount += 1;
+    if (possibleTypoSquat) possibleTypoSquatCount += 1;
   }
 
   const ecosystem = ecosystemForFormat(format);
@@ -844,6 +855,7 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     missingLicenseCount,
     missingRepositoryCount,
     installScriptCount,
+    possibleTypoSquatCount,
   };
   if (opts.directUnknown) totals.directUnknown = true;
   return {
@@ -1435,9 +1447,14 @@ function buildYarnV1Inventory(text) {
   let duplicateCount = 0;
   let missingLicenseCount = 0;
   let missingRepositoryCount = 0;
+  let possibleTypoSquatCount = 0;
   for (const name of names) {
     const acc = byName.get(name);
     const versions = [...acc.versions].sort(compareVersionsLoose);
+    // Typo-squat detection is parser-format-agnostic — it checks the
+    // package name itself, not lockfile metadata. yarn-v1 gets the chip
+    // the same as npm v2/v3 and pnpm.
+    const possibleTypoSquat = detectTypoSquat(name);
     inv.packages.push({
       name,
       versions,
@@ -1448,10 +1465,12 @@ function buildYarnV1Inventory(text) {
       // yarn-v1 lockfiles don't expose install-script flags; documented in
       // docs/ci-reporter.md as a known v0 caveat alongside Python lockfiles.
       hasInstallScript: false,
+      possibleTypoSquat,
     });
     if (versions.length > 1) duplicateCount += 1;
     if (!acc.hasLicense) missingLicenseCount += 1;
     if (!acc.hasRepository) missingRepositoryCount += 1;
+    if (possibleTypoSquat) possibleTypoSquatCount += 1;
   }
 
   inv.totals.totalPackages = inv.packages.length;
@@ -1465,5 +1484,6 @@ function buildYarnV1Inventory(text) {
   inv.totals.duplicateCount = duplicateCount;
   inv.totals.missingLicenseCount = missingLicenseCount;
   inv.totals.missingRepositoryCount = missingRepositoryCount;
+  inv.totals.possibleTypoSquatCount = possibleTypoSquatCount;
   return inv;
 }

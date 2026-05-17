@@ -390,12 +390,23 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   // inventory build failed but vuln scan succeeded).
   if (inventory && Array.isArray(inventory.packages) && Array.isArray(vulnerabilities)) {
     const installScriptIndex = new Map();
+    // Typo-squat homoglyph detection v0 — informational chip plumb-through.
+    // Same propagation shape as hasInstallScript: inventory is the source of
+    // truth, vuln rows pick up the per-name lookup so the UI never has to
+    // re-walk the lockfile to render the chip. Defaults to null on rows
+    // whose package is absent from the inventory (e.g. inventory build
+    // failed) so the chip stays hidden in that degraded mode.
+    const typoSquatIndex = new Map();
     for (const p of inventory.packages) {
-      if (p && p.name) installScriptIndex.set(p.name, p.hasInstallScript === true);
+      if (p && p.name) {
+        installScriptIndex.set(p.name, p.hasInstallScript === true);
+        typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
+      }
     }
     vulnerabilities = vulnerabilities.map(v => ({
       ...v,
       hasInstallScript: installScriptIndex.get(v.package) === true,
+      possibleTypoSquat: typoSquatIndex.get(v.package) || null,
     }));
   }
 
@@ -426,14 +437,19 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   // pipeline if selectAndScoreHealth throws.
   if (inventory && Array.isArray(inventory.packages) && selectedHealth && Array.isArray(selectedHealth.scored)) {
     const installScriptIndex = new Map();
+    const typoSquatIndex = new Map();
     for (const p of inventory.packages) {
-      if (p && p.name) installScriptIndex.set(p.name, p.hasInstallScript === true);
+      if (p && p.name) {
+        installScriptIndex.set(p.name, p.hasInstallScript === true);
+        typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
+      }
     }
     selectedHealth = {
       ...selectedHealth,
       scored: selectedHealth.scored.map(r => ({
         ...r,
         hasInstallScript: installScriptIndex.get(r.package) === true,
+        possibleTypoSquat: typoSquatIndex.get(r.package) || null,
       })),
     };
   }

@@ -195,6 +195,70 @@ v0 scope and known caveats:
   the same form. We default to false and surface no chip; this gap is
   deferred to a future release that can re-analyze the ecosystem honestly.
 
+## Typo-squat homoglyph detection (informational only)
+
+Borrowed-trust v2: an attacker publishes `lаngchain` (Cyrillic `а`
+in place of Latin `a`) on npm, points its `repository` field at the real
+`langchain-ai/langchain` GitHub repo, and inherits the legitimate
+project's Soyce score. The resolver cross-check (8c0d6ab) catches
+mismatches at the `package.json#name` level, but it cannot catch the
+case where the attacker's own `package.json#name` ALSO contains the
+homoglyph — both sides "agree" on a malicious name.
+
+What we surface:
+
+- Every inventory row, vuln row, and v3b selected-health row gets a
+  `⚠ POSSIBLE TYPO-SQUAT` chip when the package name's Unicode-TR39
+  confusables skeleton collides with a curated protected name AND the
+  byte sequences differ.
+- The chip tooltip names the suspected target: *"Package name uses
+  characters that visually resemble `langchain`. This could be a
+  typo-squat attack — verify the package is the one you intended."*
+- `inventory.totals.possibleTypoSquatCount` reports the count across the
+  whole tree.
+
+How the detector works:
+
+- `src/data/unicodeConfusables.js` is a hand-curated ~200-entry subset
+  of the Unicode TR39 Confusables table: Cyrillic / Greek / fullwidth
+  Latin lookalikes of common ASCII letters, plus the most-exploited
+  same-script confusables (`0`/`o`, `1`/`l`, `5`/`s`, `8`/`b`, ...).
+  NFKC normalization runs first inside `skeleton()`, then a lowercase
+  fold, then a per-code-point lookup. Zero-width characters (ZWSP,
+  ZWJ, ZWNJ, BOM, soft hyphen) drop to the empty string.
+- `src/data/protectedPackageNames.js` is a hand-curated ~100-entry list
+  of high-value targets (top npm installs + AI/ML/security-critical
+  names). Skeletons are pre-computed at module load time into a
+  `Map<skeleton, originalName>` so per-package lookup is O(1).
+- `detectTypoSquat(name)` returns `{ matched, suspectedTarget }` when
+  the skeleton matches a protected name AND `name !== suspectedTarget`
+  (**byte-exact** comparison — no case-folding). Self-match returns
+  null so a legitimate `langchain` install never fires the chip.
+
+What this is **not**:
+
+- The chip is **informational only**. It does NOT contribute to the
+  composite score, does NOT cap the verdict band, and does NOT raise
+  the Risk Profile dimension. Same posture as the install-script chip.
+- Not a complete TR39 implementation. The full table is ~6000 entries;
+  shipping it bloats the bundle without buying coverage of attacks
+  anyone actually runs. A homoglyph against a code point we don't have
+  in the table will pass through silently. v0.x research direction.
+- Not exhaustive on protected names. ~100 entries covers the top npm
+  installs + AI/ML/security-critical names; a typo-squat targeting an
+  off-list package will not fire. The chip is a heads-up, not an audit.
+
+False-positive bounds:
+
+- The curated protected-names list scopes "what counts as a target",
+  so we don't fire on every confusables collision between two random
+  packages.
+- The byte-exact self-match check guarantees the legitimate install
+  of each protected package never fires.
+- Scoped names (`@langchain/core`) include the `@` + `/` in the
+  skeleton, so a scoped attack only collides with the scoped target,
+  not with the bare unscoped name.
+
 ## Migration detection (fork-velocity-of-namesake)
 
 `xenova/transformers` is RISKY for the right reason on the wrong repo: the

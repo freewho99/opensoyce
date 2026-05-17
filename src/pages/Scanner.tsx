@@ -16,6 +16,14 @@ import { computeRiskProfile } from '../shared/riskProfile.js';
 import { buildMarkdownReport, buildJsonReport } from '../shared/buildScanReport.js';
 import { isTrustedInstallScript } from '../data/trustedInstallScripts.js';
 
+// Typo-squat homoglyph detection v0 — shape emitted by detectTypoSquat() in
+// src/data/protectedPackageNames.js. Informational only; the chip never
+// affects Risk Profile, score, or verdict band.
+interface PossibleTypoSquat {
+  matched: string;
+  suspectedTarget: string;
+}
+
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
 // forward-compat with future inference logic in v2.1+.
@@ -89,6 +97,11 @@ interface Vulnerability {
   // verdict bands. Absent on responses from older servers — render
   // defensively (chip hidden).
   hasInstallScript?: boolean;
+  // Typo-squat homoglyph detection v0 — populated by runScan from the
+  // matching inventory record. Null when no homoglyph attack is suspected;
+  // present (with suspectedTarget) when the package name's confusables
+  // skeleton collides with a protected name AND the bytes differ.
+  possibleTypoSquat?: PossibleTypoSquat | null;
 }
 
 // Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
@@ -108,6 +121,10 @@ interface InventoryPackage {
   // Sticky across versions: ANY version having the flag flips the merged
   // record to true. Defaults false on older responses.
   hasInstallScript?: boolean;
+  // Typo-squat homoglyph detection v0 — set when the package name's
+  // confusables skeleton collides with a curated protected name AND the
+  // names differ byte-for-byte (legitimate self-installs return null).
+  possibleTypoSquat?: PossibleTypoSquat | null;
 }
 
 interface InventoryTotals {
@@ -125,6 +142,9 @@ interface InventoryTotals {
   // Postinstall analysis v0 — count of packages with hasInstallScript===true.
   // Absent on older server responses; render defensively.
   installScriptCount?: number;
+  // Typo-squat homoglyph detection v0 — count of packages with a non-null
+  // possibleTypoSquat. Absent on older server responses; render defensively.
+  possibleTypoSquatCount?: number;
 }
 
 interface Inventory {
@@ -160,6 +180,8 @@ interface SelectedHealthRow {
   status: SelectedHealthStatus;
   // Postinstall analysis v0 — copied from the matching inventory record.
   hasInstallScript?: boolean;
+  // Typo-squat homoglyph detection v0 — copied from the matching inventory record.
+  possibleTypoSquat?: PossibleTypoSquat | null;
   // Fork-velocity-of-namesake v0 — copied from the analysis result.
   migration?: RepoMigration | null;
 }
@@ -982,6 +1004,8 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
         )}
         {/* Postinstall analysis v0 — same suppression rules as elsewhere. */}
         <InstallScriptChip name={row.package} hasInstallScript={row.hasInstallScript} />
+        {/* Typo-squat homoglyph v0 — same suppression rules as elsewhere. */}
+        <TypoSquatChip typoSquat={row.possibleTypoSquat} />
       </div>
 
       {/* Status zone -- separate row so the copy / chips never collide with
@@ -1071,6 +1095,24 @@ function InstallScriptChip({ name, hasInstallScript }: { name: string; hasInstal
   );
 }
 
+// Typo-squat homoglyph detection v0 — informational chip. Surfaces when the
+// scanned package name's confusables skeleton matches a curated protected
+// name AND the byte sequences differ (the legitimate-install self-match is
+// suppressed inside detectTypoSquat()). The chip never contributes to the
+// Risk Profile or composite score.
+function TypoSquatChip({ typoSquat }: { typoSquat: PossibleTypoSquat | null | undefined }) {
+  if (!typoSquat) return null;
+  const tooltip = `Package name uses characters that visually resemble "${typoSquat.suspectedTarget}". This could be a typo-squat attack — verify the package is the one you intended.`;
+  return (
+    <span
+      title={tooltip}
+      className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-500 text-black"
+    >
+      ⚠ POSSIBLE TYPO-SQUAT
+    </span>
+  );
+}
+
 interface InventoryRowProps {
   pkg: InventoryPackage;
   vulnInfo: { severity: Severity; identity: IdentityChip | null } | null;
@@ -1144,6 +1186,10 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
         {/* Postinstall analysis v0 — informational only; suppressed for
             curated trusted packages (TypeScript, esbuild, sharp, etc.). */}
         <InstallScriptChip name={pkg.name} hasInstallScript={pkg.hasInstallScript} />
+        {/* Typo-squat homoglyph v0 — informational only; never affects
+            score or band. Suppressed for the legitimate-install self-match
+            inside detectTypoSquat() so this only fires on attacks. */}
+        <TypoSquatChip typoSquat={pkg.possibleTypoSquat} />
       </div>
       {expanded && multi && (
         <div className="pb-3 pt-1 pl-2 border-t border-soy-bottle/10">
@@ -1223,7 +1269,7 @@ function VulnRow({ v }: { v: Vulnerability }) {
       {/* CVE / GHSA IDs + postinstall chip. The chip lives next to the IDs
           so the "vulnerable AND runs install scripts" combo is unmistakable.
           Suppressed for curated trusted packages (TypeScript, sharp, …). */}
-      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package))) && (
+      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat) && (
         <div className="flex flex-wrap gap-1.5 mb-3 items-center">
           {(v.ids || []).map((id) => (
             <span
@@ -1234,6 +1280,10 @@ function VulnRow({ v }: { v: Vulnerability }) {
             </span>
           ))}
           <InstallScriptChip name={v.package} hasInstallScript={v.hasInstallScript} />
+          {/* Typo-squat homoglyph v0 — the "vulnerable AND homoglyph"
+              combo is the most-dangerous case, so the chip lives next to
+              the IDs alongside the install-script chip. */}
+          <TypoSquatChip typoSquat={v.possibleTypoSquat} />
         </div>
       )}
 
