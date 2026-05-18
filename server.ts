@@ -14,6 +14,8 @@ import { detectMigration, makeFetchForks } from "./src/shared/detectMigration.js
 import { verdictFor } from "./src/shared/verdict.js";
 // @ts-ignore — plain JS handler, no .d.ts
 import earlyAccessHandler from "./api/early-access.js";
+// @ts-ignore — plain JS handler, no .d.ts
+import exceptionsHandler from "./api/exceptions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -317,6 +319,21 @@ async function startServer() {
       if (!res.headersSent) res.status(500).json({ ok: false, error: 'UPSTREAM_ERROR' });
     }
   });
+
+  // Exceptions dashboard CRUD (Sprint+3). All three verbs land in the same
+  // Vercel-style handler so the local Express server matches the prod
+  // HTTP-method-dispatch shape exactly.
+  const exceptionsAdapter = async (req: express.Request, res: express.Response) => {
+    try {
+      await exceptionsHandler(req, res);
+    } catch (err: any) {
+      console.error('exceptions handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ error: 'INTERNAL_ERROR', message: 'unexpected server error' });
+    }
+  };
+  app.get("/api/exceptions", exceptionsAdapter);
+  app.post("/api/exceptions", exceptionsAdapter);
+  app.delete("/api/exceptions", exceptionsAdapter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
