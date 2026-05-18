@@ -10,13 +10,13 @@ import { trackEvent } from '../utils/analytics';
  * Flow:
  *   1. User lands on /claim with no query params. Sees the entry form:
  *      owner + repo input, "Verify with GitHub" CTA.
- *   2. Click "Verify with GitHub" -> browser GET /api/claim-start?owner=&repo=,
- *      which 302-redirects to GitHub OAuth.
+ *   2. Click "Verify with GitHub" -> browser GET /api/claim/start?owner=&repo=,
+ *      which 302-redirects to GitHub OAuth.h
  *   3. After auth, GitHub redirects to /api/claim-callback. The callback
  *      verifies collaborator status, then 302-redirects to
  *      /claim?owner=...&repo=...&token=<signed-claim-token>.
  *   4. With ?token=... present, the page renders the rebuttal textarea.
- *      Submit POSTs { token, rebuttalBody } to /api/claim-submit.
+ *      Submit POSTs { token, rebuttalBody } to /api/claim/submit.
  *   5. On success, the page renders the freshly-created GitHub issue URL.
  *
  * Note: localStorage "claim" is gone — that flow was theater.
@@ -82,7 +82,7 @@ function ClaimEntry() {
     trackEvent('claim_verify_click', { owner, repo });
     const params = new URLSearchParams({ owner, repo });
     // Full page navigation — the OAuth round-trip leaves the SPA.
-    window.location.href = `/api/claim-start?${params.toString()}`;
+    window.location.href = `/api/claim/start?${params.toString()}`;
   };
 
   return (
@@ -174,7 +174,7 @@ function RebuttalForm({ owner, repo, token }: { owner: string; repo: string; tok
     setState({ kind: 'submitting' });
     trackEvent('claim_rebuttal_submit', { owner, repo, length: trimmed.length, notifyOnBandDrop });
     try {
-      const res = await fetch('/api/claim-submit', {
+      const res = await fetch('/api/claim/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, rebuttalBody: trimmed, notifyOnBandDrop }),
