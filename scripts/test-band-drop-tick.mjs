@@ -415,27 +415,48 @@ await test('13b. parseSubscriberMarker: missing/malformed -> null', async () => 
   eq(parseSubscriberMarker(null), null);
 });
 
-await test('13c. parseLastBandMarker: happy + missing', async () => {
-  eq(parseLastBandMarker('<!-- opensoyce-last-band: USE READY -->'), 'USE READY');
-  eq(parseLastBandMarker('<!-- opensoyce-last-band: WATCHLIST -->'), 'WATCHLIST');
+await test('13c. parseLastBandMarker: anchored to subscriber marker', async () => {
+  // The last-band marker is only honored when it appears AFTER the
+  // subscriber marker (anti-spoof: prevents a maintainer from injecting
+  // their own last-band marker into the rebuttal body to skip baseline).
+  const SUB = '<!-- opensoyce-subscriber: login=alice repo=foo/bar watches=band-drop -->';
+  eq(parseLastBandMarker(`${SUB}\n<!-- opensoyce-last-band: USE READY -->`), 'USE READY');
+  eq(parseLastBandMarker(`${SUB}\n<!-- opensoyce-last-band: WATCHLIST -->`), 'WATCHLIST');
+  // No subscriber marker -> last-band marker is ignored.
+  eq(parseLastBandMarker('<!-- opensoyce-last-band: USE READY -->'), null);
+  // last-band BEFORE subscriber -> ignored (this is the injection case).
+  eq(parseLastBandMarker(`my rebuttal mentions <!-- opensoyce-last-band: USE READY --> for context\n${SUB}`), null);
+  // No markers at all.
   eq(parseLastBandMarker('no marker'), null);
   eq(parseLastBandMarker(''), null);
   eq(parseLastBandMarker(null), null);
 });
 
-await test('13d. upsertLastBandMarker: insert + replace', async () => {
+await test('13d. upsertLastBandMarker: insert + replace + leaves user-authored markers alone', async () => {
   // Insert when subscriber marker exists.
-  const body1 = 'rebuttal\n<!-- opensoyce-subscriber: login=alice repo=foo/bar watches=band-drop -->';
+  const SUB = '<!-- opensoyce-subscriber: login=alice repo=foo/bar watches=band-drop -->';
+  const body1 = `rebuttal\n${SUB}`;
   const out1 = upsertLastBandMarker(body1, 'USE READY');
   ok(out1.includes('<!-- opensoyce-last-band: USE READY -->'), 'marker inserted');
-  // Replace existing marker.
+  // Replace existing marker AFTER the subscriber marker.
   const body2 = `${body1}\n<!-- opensoyce-last-band: USE READY -->`;
   const out2 = upsertLastBandMarker(body2, 'WATCHLIST');
   ok(out2.includes('<!-- opensoyce-last-band: WATCHLIST -->'), 'marker replaced');
   ok(!out2.includes('USE READY'), 'old marker removed');
-  // Append when no subscriber marker either.
-  const out3 = upsertLastBandMarker('plain text', 'STALE');
-  ok(out3.endsWith('<!-- opensoyce-last-band: STALE -->'), 'appended');
+  // User-authored "last-band" marker BEFORE the subscriber marker MUST be
+  // left untouched (it's user body content, not our marker).
+  const injectionBody = `<!-- opensoyce-last-band: USE READY -->\nthen the marker:\n${SUB}`;
+  const out3 = upsertLastBandMarker(injectionBody, 'WATCHLIST');
+  // The injection-position marker is preserved verbatim.
+  ok(out3.startsWith('<!-- opensoyce-last-band: USE READY -->\n'),
+    `user-authored marker preserved -- got: ${JSON.stringify(out3.slice(0, 60))}`);
+  // The real notifier-written marker appears AFTER the subscriber marker.
+  const subEnd = out3.indexOf(SUB) + SUB.length;
+  ok(out3.slice(subEnd).includes('<!-- opensoyce-last-band: WATCHLIST -->'),
+    'notifier marker inserted after subscriber marker');
+  // Append when no subscriber marker either (defensive fallback).
+  const out4 = upsertLastBandMarker('plain text', 'STALE');
+  ok(out4.endsWith('<!-- opensoyce-last-band: STALE -->'), 'appended');
 });
 
 await test('13e. buildDropCommentBody: includes mention + bands + lookup link', async () => {
@@ -448,6 +469,119 @@ await test('13e. buildDropCommentBody: includes mention + bands + lookup link', 
   ok(body.includes('FORKABLE'), 'names new band');
   ok(body.includes('https://www.opensoyce.com/lookup?q=facebook/react'), 'links to lookup');
   ok(body.toLowerCase().includes('unsubscribe'), 'mentions unsubscribe');
+});
+
+// ---------------------------------------------------------------------------
+// 14: Anti-spoof end-to-end -- attacker writes a last-band marker into the
+// rebuttal body BEFORE the subscriber marker. The notifier must treat this
+// as a first tick (baseline only, no notification).
+// ---------------------------------------------------------------------------
+
+await test('14. anti-spoof: user-injected last-band marker before subscriber -> still baselined', async () => {
+  let commentCount = 0;
+  let patchedBody = null;
+  __setDepsForTesting({
+    ...appAuthStubs(),
+    listIssuesByLabel: async () => [makeIssue({
+      number: 100,
+      body: `here is my rebuttal. it mentions <!-- opensoyce-last-band: USE READY --> in the body for reasons.
+
+<!-- opensoyce-subscriber: login=mallory repo=evil/repo watches=band-drop -->`,
+    })],
+    analyzeRepo: async () => makeScoreResult(5.2),
+    verdictFor: () => 'WATCHLIST',
+    postIssueComment: async () => { commentCount += 1; },
+    patchIssueBody: async (_t, _o, _r, _n, body) => { patchedBody = body; },
+  });
+  const req = makeReq({ headers: { authorization: `Bearer ${CRON_SECRET}` } });
+  const res = makeRes();
+  await handler(req, res);
+  eq(res._out.statusCode, 200);
+  // Critical: NO drop notification, even though "prevBand" in the body
+  // says USE READY and current band is WATCHLIST.
+  eq(commentCount, 0, 'must NOT post comment on injected marker');
+  eq(res._out.body.dropped, 0);
+  eq(res._out.body.baselined, 1);
+  // The injected marker is preserved (not stripped) and the real marker
+  // is written AFTER the subscriber marker.
+  ok(patchedBody.includes('mentions <!-- opensoyce-last-band: USE READY --> in'),
+    'user-authored marker text preserved');
+  const subIdx = patchedBody.indexOf('opensoyce-subscriber');
+  const realMarkerIdx = patchedBody.indexOf('opensoyce-last-band: WATCHLIST');
+  ok(realMarkerIdx > subIdx, 'real marker appears after subscriber marker');
+});
+
+// ---------------------------------------------------------------------------
+// 15: Defensive guard -- verdictFor returns a non-ladder band
+// ---------------------------------------------------------------------------
+
+await test('15. non-ladder band (HIGH MOMENTUM) -> errored, no PATCH, no comment', async () => {
+  let commentCount = 0;
+  let patchCount = 0;
+  __setDepsForTesting({
+    ...appAuthStubs(),
+    listIssuesByLabel: async () => [makeIssue({
+      number: 101,
+      body: '<!-- opensoyce-subscriber: login=alice repo=foo/bar watches=band-drop -->\n<!-- opensoyce-last-band: FORKABLE -->',
+    })],
+    analyzeRepo: async () => makeScoreResult(9.5),
+    verdictFor: () => 'HIGH MOMENTUM',
+    postIssueComment: async () => { commentCount += 1; },
+    patchIssueBody: async () => { patchCount += 1; },
+  });
+  const req = makeReq({ headers: { authorization: `Bearer ${CRON_SECRET}` } });
+  const res = makeRes();
+  await handler(req, res);
+  eq(res._out.statusCode, 200);
+  eq(res._out.body.errored, 1);
+  eq(commentCount, 0);
+  eq(patchCount, 0);
+  const errBreakdown = res._out.body.breakdown.find(b => b.outcome === 'errored');
+  ok(errBreakdown && errBreakdown.reason && errBreakdown.reason.includes('NON_LADDER_BAND'),
+    `expected NON_LADDER_BAND reason, got ${JSON.stringify(errBreakdown)}`);
+});
+
+// ---------------------------------------------------------------------------
+// 16: Marker round-trip on a real-shape claim-submit body
+// ---------------------------------------------------------------------------
+
+await test('16. marker round-trip on the actual claim-submit issue body shape', async () => {
+  // This is the exact body shape claim-submit.js builds when notifyOnBandDrop=true.
+  const claimSubmitBody = `**Repo:** [facebook/react](https://github.com/facebook/react)
+**Submitted by:** @alice (verified collaborator at 2026-05-17T12:00:00.000Z)
+**Current Soyce Score:** see https://www.opensoyce.com/lookup?q=facebook/react
+
+---
+
+### Maintainer's rebuttal
+
+We dispute the score because of reasons.
+
+---
+
+*Submitted via opensoyce.com/claim. The submitter was verified as a collaborator on the repo at submission time. OpenSoyce does not retain the GitHub access token used for verification.*
+
+---
+
+**Verdict-band notification subscription:** @alice requested
+notifications when the verdict band for facebook/react drops.
+
+<!-- opensoyce-subscriber: login=alice repo=facebook/react watches=band-drop -->`;
+  // First tick -- subscriber marker present, no last-band yet.
+  eq(parseLastBandMarker(claimSubmitBody), null);
+  const sub = parseSubscriberMarker(claimSubmitBody);
+  ok(sub, 'subscriber parsed');
+  eq(sub.login, 'alice');
+  eq(sub.owner, 'facebook');
+  eq(sub.repo, 'react');
+  // Notifier writes baseline marker.
+  const baselined = upsertLastBandMarker(claimSubmitBody, 'USE READY');
+  eq(parseLastBandMarker(baselined), 'USE READY');
+  // Second tick -- score drops.
+  const dropped = upsertLastBandMarker(baselined, 'WATCHLIST');
+  eq(parseLastBandMarker(dropped), 'WATCHLIST');
+  // The original rebuttal text is preserved verbatim.
+  ok(dropped.includes("We dispute the score because of reasons."), 'rebuttal preserved');
 });
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
  * GET /api/band-drop-tick
  * Authorization: Bearer ${CRON_SECRET}
  *
- * Every 6 hours (vercel.json crons) this endpoint:
+ * Once a day (vercel.json crons, see Hobby-tier limit) this endpoint:
  *   1. Lists open issues on freewho99/opensoyce labeled `band-drop-subscribed`.
  *   2. Parses each issue body for the subscriber marker
  *      `<!-- opensoyce-subscriber: login=X repo=O/R watches=band-drop -->`
@@ -61,19 +61,37 @@ export function parseSubscriberMarker(issueBody) {
 
 export function parseLastBandMarker(issueBody) {
   if (typeof issueBody !== 'string') return null;
-  const m = issueBody.match(LAST_BAND_RE);
+  // Only honor a last-band marker that appears AFTER the subscriber marker.
+  // The notifier always inserts the last-band marker immediately following
+  // the subscriber marker (see upsertLastBandMarker), so any earlier or
+  // standalone occurrence is user-authored content from the rebuttal body
+  // -- ignore it to prevent self-spoofing attacks ("write your own marker
+  // in the rebuttal body to skip the first-tick baseline").
+  const subMatch = issueBody.match(SUBSCRIBER_RE);
+  if (!subMatch) return null;
+  const subscriberEnd = subMatch.index + subMatch[0].length;
+  const tail = issueBody.slice(subscriberEnd);
+  const m = tail.match(LAST_BAND_RE);
   return m ? m[1] : null;
 }
 
 export function upsertLastBandMarker(issueBody, band) {
   const marker = `<!-- opensoyce-last-band: ${band} -->`;
-  if (LAST_BAND_RE.test(issueBody)) {
-    return issueBody.replace(LAST_BAND_RE, marker);
+  const subMatch = issueBody.match(SUBSCRIBER_RE);
+  if (subMatch) {
+    const subscriberEnd = subMatch.index + subMatch[0].length;
+    const head = issueBody.slice(0, subscriberEnd);
+    const tail = issueBody.slice(subscriberEnd);
+    // Replace the FIRST last-band marker in the tail (anything before the
+    // subscriber marker is treated as user-authored body text and left
+    // intact -- see parseLastBandMarker for the corresponding read-side
+    // anti-spoof guard).
+    if (LAST_BAND_RE.test(tail)) {
+      return head + tail.replace(LAST_BAND_RE, marker);
+    }
+    return `${head}\n${marker}${tail}`;
   }
-  // Append after subscriber marker if present, else at end.
-  if (SUBSCRIBER_RE.test(issueBody)) {
-    return issueBody.replace(SUBSCRIBER_RE, (match) => `${match}\n${marker}`);
-  }
+  // No subscriber marker -- shouldn't happen at this code path, but be safe.
   return `${issueBody}\n\n${marker}`;
 }
 
@@ -210,6 +228,14 @@ async function processSubscriber({ issue, installationToken, githubTokenForAnaly
     maintainerConcentration: scoreResult.maintainerConcentration || null,
     vendorSdkMatch: !!scoreResult.vendorSdk,
   });
+
+  // Defensive: only operate on bands that appear on the public ladder. If
+  // verdictFor ever returns a non-ladder band (e.g. editorial-only HIGH
+  // MOMENTUM), skip rather than write a marker that future ticks can't
+  // interpret.
+  if (BAND_LADDER.indexOf(newBand) === -1) {
+    return { outcome: 'errored', issueNumber: issue.number, reason: `NON_LADDER_BAND:${newBand}` };
+  }
 
   const prevBand = parseLastBandMarker(issue.body);
 
