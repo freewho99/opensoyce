@@ -103,13 +103,11 @@ If nothing happens:
 
 ---
 
-## 6. Known limitations (v0.1)
+## 6. Known limitations (v0.2)
 
-- **Stub scorer.** The check run always concludes `success` with a fixed `0 graveyard, 0 risky, 0 watchlist` summary. The real scoring engine (the same one behind `api/scan.js`) is the v0.2 follow-up.
-- **In-memory dedupe.** Head-SHA dedupe lives in a `Set` inside the function instance. A cold-start Vercel function will re-process the same SHA. Persistence (KV / Postgres) is sprint+1.
-- **No PR-comment stickiness.** Every event posts a new comment. v0.2 will look up the prior comment by the App's bot identity and PATCH it.
 - **Bounded PR file walk.** We list up to 300 files (3 pages × 100). Lockfile-only filtering means this is fine for ~all real PRs; mega-PRs with deeply-nested lockfiles in many subdirs may slip past.
-- **No installation-token caching.** Each webhook mints a fresh installation token. The token has a 1h lifetime — we use it for ~5s and discard. Negligible at v0.1 volume.
+- **No installation-token caching.** Each webhook mints a fresh installation token. The token has a 1h lifetime — we use it for ~5s and discard. Negligible at current volume; add KV caching if rate limits appear.
+- **GITHUB_TOKEN for full upstream scoring fidelity.** The scorer fetches repo metadata to classify packages. Without a GITHUB_TOKEN env var, it falls back to unauthenticated calls (60 req/hr limit). Set GITHUB_TOKEN for production installs with high PR volume.
 
 ---
 
