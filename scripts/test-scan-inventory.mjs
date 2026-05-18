@@ -144,11 +144,38 @@ test('npm v3 missing license/repository counts', () => {
     },
   });
   const inv = buildInventory(lock);
+  eq(inv.totals.licenseDataAvailable, true, 'npm-v3 carries license data');
+  eq(inv.totals.repositoryDataAvailable, true, 'npm-v3 carries repository data');
   eq(inv.totals.missingLicenseCount, 1, 'missingLicenseCount');
   eq(inv.totals.missingRepositoryCount, 2, 'missingRepositoryCount');
   eq(findPkg(inv, 'has-both').hasLicense, true, 'has-both license');
   eq(findPkg(inv, 'has-both').hasRepository, true, 'has-both repo');
   eq(findPkg(inv, 'has-neither').hasLicense, false, 'has-neither license');
+});
+
+// 5b. pnpm-lock format -- missing-counts should be null, NOT equal to package count
+test('pnpm-lock missingLicenseCount is null (lockfile does not carry license/repo)', () => {
+  const lock = [
+    "lockfileVersion: '9.0'",
+    '',
+    'importers:',
+    '  .:',
+    '    dependencies:',
+    '      lodash:',
+    '        specifier: ^4.17.21',
+    '        version: 4.17.21',
+    '',
+    'packages:',
+    '',
+    "  lodash@4.17.21:",
+    "    resolution: {integrity: sha512-fakefakefakefake}",
+    '',
+  ].join('\n');
+  const inv = buildInventory(lock);
+  eq(inv.totals.licenseDataAvailable, false, 'pnpm lockfile has no license channel');
+  eq(inv.totals.repositoryDataAvailable, false, 'pnpm lockfile has no repository channel');
+  eq(inv.totals.missingLicenseCount, null, 'count must be null, not totalPackages');
+  eq(inv.totals.missingRepositoryCount, null, 'count must be null, not totalPackages');
 });
 
 // 6. Empty / malformed lockfile -- no throw, format:'unknown'

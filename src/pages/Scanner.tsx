@@ -191,8 +191,12 @@ interface InventoryTotals {
   optionalCount: number;
   unknownScopeCount: number;
   duplicateCount: number;
-  missingLicenseCount: number;
-  missingRepositoryCount: number;
+  // null when the lockfile format doesn't carry license/repository fields
+  // (pnpm, yarn, npm-v1/v2, uv, poetry). Only npm-v3 emits these per-package.
+  missingLicenseCount: number | null;
+  missingRepositoryCount: number | null;
+  licenseDataAvailable?: boolean;
+  repositoryDataAvailable?: boolean;
   // Postinstall analysis v0 — count of packages with hasInstallScript===true.
   // Absent on older server responses; render defensively.
   installScriptCount?: number;
@@ -911,13 +915,25 @@ function InventoryPanel({
             <span>{totals.duplicateCount}</span>
           </div>
         )}
-        <div className="text-soy-bottle">
-          <span className="opacity-50">MISSING LICENSE</span>{' '}
-          <span>{totals.missingLicenseCount}</span>
-          <span className="mx-1 opacity-30">/</span>
-          <span className="opacity-50">REPO</span>{' '}
-          <span>{totals.missingRepositoryCount}</span>
-        </div>
+        {/* Only show MISSING LICENSE/REPO counts when the lockfile format
+            actually carries those fields per package. pnpm-lock, yarn.lock,
+            uv.lock, poetry.lock, and npm-v1/v2 do NOT, so the count would
+            always equal totalPackages -- misleading. */}
+        {totals.missingLicenseCount !== null && totals.missingRepositoryCount !== null && (
+          <div className="text-soy-bottle">
+            <span className="opacity-50">MISSING LICENSE</span>{' '}
+            <span>{totals.missingLicenseCount}</span>
+            <span className="mx-1 opacity-30">/</span>
+            <span className="opacity-50">REPO</span>{' '}
+            <span>{totals.missingRepositoryCount}</span>
+          </div>
+        )}
+        {(totals.missingLicenseCount === null || totals.missingRepositoryCount === null) && (
+          <div className="text-soy-bottle opacity-50" title="This lockfile format does not carry per-package license/repository metadata. License data lives in each package's published package.json, not the lockfile.">
+            <span>LICENSE/REPO META</span>{' '}
+            <span className="font-black">N/A FOR THIS LOCKFILE</span>
+          </div>
+        )}
       </div>
 
       {isYarn && (

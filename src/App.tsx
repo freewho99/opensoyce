@@ -32,6 +32,7 @@ import SignalInbox from './pages/SignalInbox';
 import SkillsAgentsCompare from './pages/SkillsAgentsCompare';
 import OpenDesignCaseStudy from './pages/OpenDesignCaseStudy';
 import Dashboard from './pages/Dashboard';
+import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
@@ -71,6 +72,7 @@ export function AppRoutes() {
         <Route path="/leaderboard/ai" element={<AiLeaderboard />} />
         <Route path="/graveyard/ai" element={<AiGraveyard />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
         <Route path="/project/:owner/:repo" element={<ProjectDetail />} />
         <Route path="/projects/:owner/:repo/fork" element={<ForkProject />} />

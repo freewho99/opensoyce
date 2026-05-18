@@ -707,8 +707,10 @@ function emptyInventory() {
       optionalCount: 0,
       unknownScopeCount: 0,
       duplicateCount: 0,
-      missingLicenseCount: 0,
-      missingRepositoryCount: 0,
+      licenseDataAvailable: false,
+      repositoryDataAvailable: false,
+      missingLicenseCount: null,
+      missingRepositoryCount: null,
       installScriptCount: 0,
       possibleTypoSquatCount: 0,
       dependencyConfusionCount: 0,
@@ -895,6 +897,17 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     if (modelWeightLoader) modelWeightLoaderCount += 1;
   }
 
+  // Only npm-v3 (lockfileVersion 3, the `packages` map) genuinely carries
+  // license/repository fields per-package inside the lockfile body. npm-v1,
+  // npm-v2, yarn-v1, pnpm-lock, uv.lock, poetry.lock all omit them by
+  // design -- their license info lives in the published package's own
+  // package.json / pyproject.toml, NOT in the lockfile. Reporting
+  // "missing license" for every package when the lockfile format has no
+  // license channel at all is mechanically true but misleading. Surface a
+  // separate flag so downstream UI can suppress the noise.
+  const licenseDataAvailable = format === 'npm-v3';
+  const repositoryDataAvailable = format === 'npm-v3';
+
   /** @type {any} */
   const totals = {
     totalPackages: packages.length,
@@ -906,8 +919,10 @@ function finalizeInventory(format, byName, totalEntries, opts = {}) {
     optionalCount,
     unknownScopeCount,
     duplicateCount,
-    missingLicenseCount,
-    missingRepositoryCount,
+    licenseDataAvailable,
+    repositoryDataAvailable,
+    missingLicenseCount: licenseDataAvailable ? missingLicenseCount : null,
+    missingRepositoryCount: repositoryDataAvailable ? missingRepositoryCount : null,
     installScriptCount,
     possibleTypoSquatCount,
     dependencyConfusionCount,
@@ -1567,8 +1582,16 @@ function buildYarnV1Inventory(text, opts = {}) {
   inv.totals.optionalCount = 0;
   inv.totals.unknownScopeCount = inv.packages.length;
   inv.totals.duplicateCount = duplicateCount;
-  inv.totals.missingLicenseCount = missingLicenseCount;
-  inv.totals.missingRepositoryCount = missingRepositoryCount;
+  // uv.lock / poetry.lock carry license/repository data via their own
+  // [package.metadata] blocks sometimes, but our parser doesn't yet
+  // extract them. Treat as "data unavailable" for v0 honesty rather
+  // than report every package as missing.
+  inv.totals.licenseDataAvailable = false;
+  inv.totals.repositoryDataAvailable = false;
+  inv.totals.missingLicenseCount = null;
+  inv.totals.missingRepositoryCount = null;
+  void missingLicenseCount;
+  void missingRepositoryCount;
   inv.totals.possibleTypoSquatCount = possibleTypoSquatCount;
   inv.totals.dependencyConfusionCount = dependencyConfusionCount;
   inv.totals.crossEcosystemBridgeCount = crossEcosystemBridgeCount;

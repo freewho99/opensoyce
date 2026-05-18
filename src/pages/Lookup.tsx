@@ -35,14 +35,30 @@ export default function Lookup() {
       .catch(() => setHasToken(false));
   }, []);
 
+  // Deep-link auto-run. If the URL carries ?q=owner/repo on mount, kick off
+  // analysis immediately so search-engine results, share links, and badge
+  // clicks land on the rendered nutrition label rather than an empty form.
+  // Re-derived from searchParams (not `input`) so a later input edit doesn't
+  // re-fire this. Empty deps -- mount-only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    const q = searchParams.get('q');
+    if (!q || !q.includes('/')) return;
+    const parts = q.split('/');
+    const o = parts[0]?.trim() || '';
+    const r = parts[1]?.trim() || '';
+    if (o && r) {
+      runAnalysis(o, r);
+    }
+  }, []);
+
   const showToast = (message: string) => {
     setToast({ message, show: true });
     setTimeout(() => setToast({ message: '', show: false }), 3000);
   };
 
-  const handleAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isValid) {
+  const runAnalysis = async (ownerArg: string, repoArg: string) => {
+    if (!ownerArg || !repoArg) {
       setError('FORMAT: owner/repo (e.g. facebook/react)');
       return;
     }
@@ -55,7 +71,7 @@ export default function Lookup() {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, repo })
+        body: JSON.stringify({ owner: ownerArg, repo: repoArg })
       });
 
       const data = await res.json();
@@ -71,7 +87,7 @@ export default function Lookup() {
       }
 
       // Map API response to UI state
-      const repoPath = `${owner}/${repo}`;
+      const repoPath = `${ownerArg}/${repoArg}`;
       trackEvent('analyze_project_click', { repo: repoPath, source: 'lookup' });
       
       setResult({
@@ -169,7 +185,7 @@ export default function Lookup() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         {/* Form Column */}
         <div className="lg:col-span-12 xl:col-span-12 h-fit">
-          <form onSubmit={handleAnalyze} className="bg-white border-2 border-soy-bottle/40 p-8 space-y-6">
+          <form onSubmit={(e) => { e.preventDefault(); runAnalysis(owner, repo); }} className="bg-white border-2 border-soy-bottle/40 p-8 space-y-6">
             <div className="flex items-center gap-3 mb-4">
               <Github className="text-soy-red" size={32} />
               <h2 className="text-2xl font-bold uppercase italic tracking-tight">Source</h2>
