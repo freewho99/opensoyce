@@ -753,6 +753,33 @@ function ResultsPanel({
           Inventory unavailable for this scan -- analysis still completed.
         </div>
       )}
+
+      {/* Guard upsell -- only renders alongside scan results. Drives the
+          manual-scan -> install-Guard funnel. */}
+      <div className="mt-10 bg-soy-bottle text-white border-4 border-black shadow-[8px_8px_0px_#E63322] p-8">
+        <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-3">
+          Want this checked on every PR?
+        </h3>
+        <p className="text-sm font-bold uppercase tracking-widest opacity-70 leading-relaxed mb-6 max-w-2xl">
+          Install OpenSoyce Guard to catch risky dependency changes before they merge.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            to="/guard/install"
+            className="inline-flex items-center gap-2 bg-soy-red text-white px-6 py-4 text-sm font-black uppercase italic tracking-widest border-4 border-black shadow-[4px_4px_0px_#000] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#000] transition-all"
+          >
+            Install Guard
+            <ArrowUpRight size={16} />
+          </Link>
+          <Link
+            to="/guard/install"
+            className="inline-flex items-center gap-2 bg-white text-soy-bottle px-6 py-4 text-sm font-black uppercase italic tracking-widest border-4 border-black shadow-[4px_4px_0px_#000] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#000] transition-all"
+          >
+            View Policy Example
+            <ArrowUpRight size={16} />
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
