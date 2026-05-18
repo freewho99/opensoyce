@@ -12,6 +12,7 @@ import Watchlist from './pages/Watchlist';
 import CLI from './pages/CLI';
 import Scanner from './pages/Scanner';
 import GuardInstall from './pages/GuardInstall';
+import GuardEarlyAccess from './pages/GuardEarlyAccess';
 import Compare from './pages/Compare';
 import Recommend from './pages/Recommend';
 import Pricing from './pages/Pricing';
@@ -53,6 +54,7 @@ export function AppRoutes() {
         <Route path="/scanner" element={<Scanner />} />
         <Route path="/guard" element={<Guard />} />
         <Route path="/guard/install" element={<GuardInstall />} />
+        <Route path="/guard/early-access" element={<GuardEarlyAccess />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/recommend" element={<Recommend />} />
         <Route path="/recipes" element={<Recommend />} />

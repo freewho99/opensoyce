@@ -12,6 +12,8 @@ import { computeMaintainerConcentration } from "./src/shared/maintainerConcentra
 import { getVendorSdk } from "./src/data/vendorSdks.js";
 import { detectMigration, makeFetchForks } from "./src/shared/detectMigration.js";
 import { verdictFor } from "./src/shared/verdict.js";
+// @ts-ignore — plain JS handler, no .d.ts
+import earlyAccessHandler from "./api/early-access.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -302,6 +304,17 @@ async function startServer() {
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Guard early-access waitlist intake. Delegates to the Vercel-style handler
+  // in api/early-access.js so the same code path runs locally and in prod.
+  app.post("/api/early-access", scoringLimiter, async (req, res) => {
+    try {
+      await earlyAccessHandler(req, res);
+    } catch (err: any) {
+      console.error('early-access handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ ok: false, error: 'UPSTREAM_ERROR' });
     }
   });
 
