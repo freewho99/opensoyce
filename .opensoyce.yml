@@ -1,4 +1,4 @@
 policy:
-  block: [graveyard, risky]
-  warn: [watchlist]
-  allow: [use-ready, stable, forkable]
+  block: [graveyard, risky, watchlist]
+  warn: [stable]
+  allow: [use-ready, forkable]
