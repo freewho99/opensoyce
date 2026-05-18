@@ -30,8 +30,6 @@
  *      retries failed deliveries aggressively and we'd spam ourselves.
  *
  * Out of scope (separate follow-ups):
- *   - Sticky PR comments / marker-based dedupe (PR 2).
- *   - .opensoyce.yml policy file parsing / failure conclusions (PR 4).
  *   - Live-fire dogfooding pass (PR 5).
  *
  * Engine-verdict → Guard-label mapping:
@@ -46,6 +44,8 @@
  */
 
 import crypto from 'node:crypto';
+
+import yaml from 'js-yaml';
 
 import { getInstallationToken, githubFetch, fetchLockfileContent } from './_guard-app.js';
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
@@ -438,6 +438,153 @@ function aggregateScans(perFile) {
 }
 
 // ---------------------------------------------------------------------------
+// .opensoyce.yml policy support (PR 4).
+//
+// A repo can ship `.opensoyce.yml` in its DEFAULT BRANCH (we deliberately do
+// NOT pass `?ref=` to the contents API so a PR author can't loosen policy in
+// the same PR they're trying to land). Shape (only `policy` is honored — the
+// other top-level keys parse-but-ignore for forward compat):
+//
+//   policy:
+//     block: [graveyard, risky]
+//     warn:  [watchlist, stable]
+//     allow: [use-ready, forkable]
+//
+// Default (no file / fetch error / parse error / missing `policy` key) is
+// warn-only and matches the PR-1-era hardcoded logic exactly:
+//   block: []
+//   warn:  [graveyard, risky, watchlist]
+//   allow: [use-ready, stable, forkable]
+// ---------------------------------------------------------------------------
+
+const POLICY_KEYS = new Set(['use-ready', 'stable', 'forkable', 'watchlist', 'risky', 'graveyard']);
+
+const DEFAULT_POLICY = Object.freeze({
+  block: [],
+  warn: ['graveyard', 'risky', 'watchlist'],
+  allow: ['use-ready', 'stable', 'forkable'],
+});
+
+// Verdict-label → lowercase policy-key mapping. The engine emits FORKABLE
+// distinct from STABLE; the UI collapses FORKABLE→STABLE for display but
+// the policy keys stay distinct so a team can carve out forkable separately
+// from stable if they want.
+const LABEL_TO_POLICY_KEY = {
+  'USE READY': 'use-ready',
+  'STABLE': 'stable',
+  'FORKABLE': 'forkable',
+  'WATCHLIST': 'watchlist',
+  'RISKY': 'risky',
+  'GRAVEYARD': 'graveyard',
+};
+
+/**
+ * Coerce one bucket (block/warn/allow) into a clean lowercase array of known
+ * policy keys. Anything that isn't an array → []. Anything not a string →
+ * dropped. Unknown labels → dropped with console.warn (so operators see when
+ * they've typo'd a key).
+ */
+function normalizeBucket(raw, bucketName) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue;
+    const lower = entry.toLowerCase().trim();
+    if (!POLICY_KEYS.has(lower)) {
+      console.warn(`guard-webhook: dropping unknown policy label in ${bucketName}: ${entry}`);
+      continue;
+    }
+    out.push(lower);
+  }
+  return out;
+}
+
+/**
+ * Fetch .opensoyce.yml from the repo's default branch. Returns
+ * `{ source: 'custom' | 'default', policy }`. Any failure mode (404, network,
+ * non-200, YAML parse error, missing/malformed `policy` key) falls back to
+ * the safe default — we never break the PR check on policy-fetch problems.
+ */
+async function fetchPolicy(token, owner, repo) {
+  let raw;
+  try {
+    // No `?ref=` → contents API uses the repo's default branch tip. That's
+    // load-bearing: it means a PR author can't ship a weaker policy IN the
+    // same PR they want to merge.
+    const res = await githubFetch(token, `/repos/${owner}/${repo}/contents/.opensoyce.yml`);
+    if (res.status === 404) {
+      return { source: 'default', policy: DEFAULT_POLICY };
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '(no body)');
+      console.error('guard-webhook: fetchPolicy non-OK', res.status, text.slice(0, 200));
+      return { source: 'default', policy: DEFAULT_POLICY };
+    }
+    const json = await res.json();
+    if (!json || typeof json.content !== 'string') {
+      console.error('guard-webhook: fetchPolicy missing content field');
+      return { source: 'default', policy: DEFAULT_POLICY };
+    }
+    raw = Buffer.from(json.content, 'base64').toString('utf8');
+  } catch (err) {
+    console.error('guard-webhook: fetchPolicy threw', err?.message || err);
+    return { source: 'default', policy: DEFAULT_POLICY };
+  }
+
+  let parsed;
+  try {
+    parsed = yaml.load(raw);
+  } catch (err) {
+    console.error('guard-webhook: .opensoyce.yml YAML parse error', err?.message || err);
+    return { source: 'default', policy: DEFAULT_POLICY };
+  }
+
+  if (!parsed || typeof parsed !== 'object' || !parsed.policy || typeof parsed.policy !== 'object') {
+    // Missing or non-object `policy` key → fall back.
+    return { source: 'default', policy: DEFAULT_POLICY };
+  }
+
+  const policy = {
+    block: normalizeBucket(parsed.policy.block, 'block'),
+    warn: normalizeBucket(parsed.policy.warn, 'warn'),
+    allow: normalizeBucket(parsed.policy.allow, 'allow'),
+  };
+  return { source: 'custom', policy };
+}
+
+/**
+ * Apply a policy to the aggregated scan results. Per dep:
+ *   - label in policy.block → BLOCK
+ *   - else label in policy.warn → WARN
+ *   - else → OK (covers explicit allow + anything unclassified)
+ *
+ * Returns `{ conclusion, blockedDeps, warnDeps }`:
+ *   - Any BLOCK → `failure`
+ *   - No BLOCK, any WARN → `neutral`
+ *   - All OK → `success`
+ */
+function applyPolicy(policy, agg) {
+  const block = new Set(policy.block);
+  const warn = new Set(policy.warn);
+  const blockedDeps = [];
+  const warnDeps = [];
+  for (const row of agg.all) {
+    const key = LABEL_TO_POLICY_KEY[row.label];
+    if (!key) continue;
+    if (block.has(key)) {
+      blockedDeps.push(row);
+    } else if (warn.has(key)) {
+      warnDeps.push(row);
+    }
+  }
+  let conclusion;
+  if (blockedDeps.length > 0) conclusion = 'failure';
+  else if (warnDeps.length > 0) conclusion = 'neutral';
+  else conclusion = 'success';
+  return { conclusion, blockedDeps, warnDeps };
+}
+
+// ---------------------------------------------------------------------------
 // Report builders. PR comment matches GuardPrCommentPreview.tsx visual shape.
 // ---------------------------------------------------------------------------
 
@@ -456,21 +603,17 @@ function buildNoLockfileCheck(headSha) {
 }
 
 /**
- * Conclusion logic (PR 1 of 5 — no policy file yet, that's PR 4):
- *   - All lockfiles failed to scan → failure.
- *   - Any GRAVEYARD or RISKY → neutral.
- *   - WATCHLIST only → neutral.
- *   - Otherwise → success.
+ * Conclusion logic (PR 4): if NO lockfile scanned successfully → failure.
+ * Otherwise the policy decision drives it (block/warn/allow). Pass through
+ * `decision.conclusion` from `applyPolicy()`.
  */
-function decideConclusion(perFile, agg) {
+function decideConclusion(perFile, decision) {
   const anyOk = perFile.some((f) => f.scan && f.scan.ok);
   if (!anyOk) return 'failure';
-  if (agg.counts.GRAVEYARD > 0 || agg.counts.RISKY > 0) return 'neutral';
-  if (agg.counts.WATCHLIST > 0) return 'neutral';
-  return 'success';
+  return decision.conclusion;
 }
 
-function buildReport(perFile, agg) {
+function buildReport(perFile, agg, decision) {
   const n = perFile.length;
   const list = perFile.map((f) => {
     const status = f.scan && f.scan.ok
@@ -478,14 +621,13 @@ function buildReport(perFile, agg) {
       : `scan failed: ${f.scan && f.scan.error ? f.scan.error : 'unknown'}`;
     return `- \`${f.lockfileFile.filename}\` (${status})`;
   }).join('\n');
-  const top = agg.all
-    .filter((r) => r.label === 'GRAVEYARD' || r.label === 'RISKY' || r.label === 'WATCHLIST')
+  const top = [...decision.blockedDeps, ...decision.warnDeps]
     .slice(0, 5)
     .map((r) => `- \`${r.name}\` — ${r.label}`)
     .join('\n') || '_none_';
-  const title = `Guard scanned ${n} lockfile${n === 1 ? '' : 's'} — ${agg.counts.GRAVEYARD} graveyard, ${agg.counts.RISKY} risky, ${agg.counts.WATCHLIST} watchlist.`;
+  const title = `Guard scanned ${n} lockfile${n === 1 ? '' : 's'} — ${decision.blockedDeps.length} blocked, ${decision.warnDeps.length} warned.`;
   const summary = [
-    `**Guard scanned ${n} lockfile${n === 1 ? '' : 's'}. ${agg.counts.GRAVEYARD} graveyard, ${agg.counts.RISKY} risky, ${agg.counts.WATCHLIST} watchlist.**`,
+    `**Guard scanned ${n} lockfile${n === 1 ? '' : 's'}. ${decision.blockedDeps.length} blocked, ${decision.warnDeps.length} warned.**`,
     '',
     'Lockfiles inspected:',
     list,
@@ -521,15 +663,16 @@ function renderRows(rows) {
   return rows.map((r) => `- \`${r.name}\` — ${r.label} — ${r.reason}`).join('\n');
 }
 
-function buildPrComment(headSha, perFile, agg) {
-  const blocked = agg.all.filter((r) => r.label === 'GRAVEYARD' || r.label === 'RISKY');
-  const warnings = agg.all.filter((r) => r.label === 'WATCHLIST');
+function buildPrComment(headSha, perFile, agg, decision, policySource) {
   const lockfileLines = perFile.map((f) => {
     const status = f.scan && f.scan.ok
       ? f.lockfileFile.status
       : `scan failed: ${f.scan && f.scan.error ? f.scan.error : 'unknown'}`;
     return `- \`${f.lockfileFile.filename}\` (${status})`;
   }).join('\n');
+  const policyFooter = policySource === 'custom'
+    ? '<sub>Policy: custom. v0.2</sub>'
+    : '<sub>Policy: default warn-only. v0.2</sub>';
   if (agg.totalChanged === 0) {
     return [
       GUARD_COMMENT_MARKER,
@@ -540,7 +683,7 @@ function buildPrComment(headSha, perFile, agg) {
       `**Lockfiles inspected:**`,
       lockfileLines,
       '',
-      '<sub>OpenSoyce Guard v0.2</sub>',
+      policyFooter,
     ].join('\n');
   }
   const summaryLines = LABELS.map((l) => `- ${l}: ${agg.counts[l]}`).join('\n');
@@ -557,17 +700,17 @@ function buildPrComment(headSha, perFile, agg) {
     summaryLines,
     '',
     '**Blocked dependencies:**',
-    renderRows(blocked),
+    renderRows(decision.blockedDeps),
     '',
     '**Warnings:**',
-    renderRows(warnings),
+    renderRows(decision.warnDeps),
     '',
     '**Suggested next moves:**',
     '- Replace graveyard dependencies',
     '- Pin and watch risky dependencies',
     '- Review warnings before merging',
     '',
-    '<sub>OpenSoyce Guard v0.2</sub>',
+    policyFooter,
   ].join('\n');
 }
 
@@ -746,8 +889,15 @@ async function runPullRequestScan({ token, owner, repo, prNumber, headSha, exist
 
   const agg = aggregateScans(perFile);
   const allFailed = perFile.every((f) => !f.scan || !f.scan.ok);
-  const { title, summary } = allFailed ? buildAllFailedReport(perFile) : buildReport(perFile, agg);
-  const conclusion = decideConclusion(perFile, agg);
+
+  // Fetch policy from default branch (NOT the PR head — a PR author can't
+  // weaken policy in the same PR they're trying to merge). Any failure mode
+  // falls back to safe warn-only defaults inside fetchPolicy().
+  const { source: policySource, policy } = await fetchPolicy(token, owner, repo);
+  const decision = applyPolicy(policy, agg);
+
+  const { title, summary } = allFailed ? buildAllFailedReport(perFile) : buildReport(perFile, agg, decision);
+  const conclusion = decideConclusion(perFile, decision);
 
   try {
     if (checkRunId) {
@@ -783,7 +933,7 @@ async function runPullRequestScan({ token, owner, repo, prNumber, headSha, exist
     try {
       await upsertPrComment(token, {
         owner, repo, prNumber,
-        body: buildPrComment(headSha, perFile, agg),
+        body: buildPrComment(headSha, perFile, agg, decision, policySource),
       });
     } catch (err) {
       // Comment failure is non-fatal; the check run is the source of truth.
