@@ -58,6 +58,11 @@ export const config = {
 
 const CHECK_RUN_NAME = 'OpenSoyce Guard';
 
+// Hidden HTML marker injected as the first line of every Guard PR comment.
+// Lets a later event find the existing Guard comment and PATCH it in place
+// instead of posting a fresh one. PRs 3 (dedupe) and 4 (policy) reuse this.
+const GUARD_COMMENT_MARKER = '<!-- opensoyce-guard-comment -->';
+
 const LOCKFILE_NAMES = new Set([
   'package-lock.json',
   'pnpm-lock.yaml',
@@ -180,7 +185,62 @@ async function updateCheckRun(token, { owner, repo, checkRunId, conclusion, titl
   return res.json();
 }
 
-async function postPrComment(token, { owner, repo, prNumber, body }) {
+/**
+ * Walk up to 3 pages of PR comments looking for one tagged with our hidden
+ * marker. Returns `{ id }` if found, `null` otherwise. Never throws — any
+ * API error is logged and we return null so the caller falls back to POST.
+ */
+async function findGuardComment(token, owner, repo, prNumber) {
+  try {
+    for (let page = 1; page <= 3; page++) {
+      const res = await githubFetch(
+        token,
+        `/repos/${owner}/${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`,
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => '(no body)');
+        console.error('guard-webhook: list comments failed', res.status, text.slice(0, 200));
+        return null;
+      }
+      const batch = await res.json();
+      if (!Array.isArray(batch)) return null;
+      for (const c of batch) {
+        if (c && typeof c.body === 'string' && c.body.includes(GUARD_COMMENT_MARKER)) {
+          return { id: c.id };
+        }
+      }
+      if (batch.length < 100) break;
+    }
+    return null;
+  } catch (err) {
+    console.error('guard-webhook: findGuardComment threw', err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * Sticky PR comment: if a prior Guard comment exists (matched via the hidden
+ * marker), PATCH it with the new body. Otherwise POST a new comment. Either
+ * failure mode falls back to POST so a transient API hiccup never silences
+ * the signal.
+ */
+async function upsertPrComment(token, { owner, repo, prNumber, body }) {
+  const existing = await findGuardComment(token, owner, repo, prNumber);
+  if (existing && existing.id) {
+    try {
+      const res = await githubFetch(token, `/repos/${owner}/${repo}/issues/comments/${existing.id}`, {
+        method: 'PATCH',
+        body: { body },
+      });
+      if (res.ok) return res.json();
+      const text = await res.text().catch(() => '(no body)');
+      console.error('guard-webhook: PATCH comment failed', res.status, text.slice(0, 200));
+      // Fall through to POST.
+    } catch (err) {
+      console.error('guard-webhook: PATCH comment threw', err?.message || err);
+      // Fall through to POST.
+    }
+  }
   // PR-level comments use the Issues API (PRs are issues).
   const res = await githubFetch(token, `/repos/${owner}/${repo}/issues/${prNumber}/comments`, {
     method: 'POST',
@@ -436,6 +496,7 @@ function buildPrComment(headSha, perFile, agg) {
   }).join('\n');
   if (agg.totalChanged === 0) {
     return [
+      GUARD_COMMENT_MARKER,
       `### OpenSoyce Guard — verdict for \`${headSha.slice(0, 7)}\``,
       '',
       'No dependency changes scored — lockfile changed but no resolvable deps.',
@@ -448,6 +509,7 @@ function buildPrComment(headSha, perFile, agg) {
   }
   const summaryLines = LABELS.map((l) => `- ${l}: ${agg.counts[l]}`).join('\n');
   return [
+    GUARD_COMMENT_MARKER,
     `### OpenSoyce Guard — verdict for \`${headSha.slice(0, 7)}\``,
     '',
     `**This PR changes ${agg.totalChanged} dependenc${agg.totalChanged === 1 ? 'y' : 'ies'}.**`,
@@ -618,7 +680,7 @@ async function handlePullRequest(payload) {
   // surfaces the failure; a comment with zero numbers is just noise.
   if (!allFailed) {
     try {
-      await postPrComment(token, {
+      await upsertPrComment(token, {
         owner, repo, prNumber,
         body: buildPrComment(headSha, perFile, agg),
       });
