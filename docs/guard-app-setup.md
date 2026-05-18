@@ -105,8 +105,9 @@ If nothing happens:
 
 ## 6. Known limitations (v0.2)
 
+**What v0.2 added.** Installation-token caching (reused across warm invocations, 5-min safety margin before expiry), comment-ID memoization via the Check Run's `external_id`, and inline SARIF 2.1.0 reports in the Check Run summary.
+
 - **Bounded PR file walk.** We list up to 300 files (3 pages × 100). Lockfile-only filtering means this is fine for ~all real PRs; mega-PRs with deeply-nested lockfiles in many subdirs may slip past.
-- **No installation-token caching.** Each webhook mints a fresh installation token. The token has a 1h lifetime — we use it for ~5s and discard. Negligible at current volume; add KV caching if rate limits appear.
 - **GITHUB_TOKEN for full upstream scoring fidelity.** The scorer fetches repo metadata to classify packages. Without a GITHUB_TOKEN env var, it falls back to unauthenticated calls (60 req/hr limit). Set GITHUB_TOKEN for production installs with high PR volume.
 
 ---
