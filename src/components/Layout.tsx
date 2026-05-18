@@ -23,30 +23,69 @@ import {
   ArrowRight,
   Menu,
   X,
+  Shield,
+  BadgeCheck,
+  HelpCircle,
+  Swords,
+  BarChart3,
+  LayoutDashboard,
+  Inbox,
+  FileText,
+  type LucideIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
 declare function trackEvent(name: string, props?: Record<string, unknown>): void;
 
-const PAGES = [
-  { label: 'Leaderboards', path: '/leaderboards', hint: 'Top ranked open-source projects' },
-  { label: 'Remix', path: '/remix', hint: 'Remix and fork projects' },
-  { label: 'Methodology', path: '/methodology', hint: 'How we score projects' },
-  { label: 'Submit a Project', path: '/submit-project', hint: 'Add your project' },
-  { label: 'Lookup', path: '/lookup', hint: 'Analyze any GitHub repo' },
-  { label: 'Blog', path: '/blog', hint: 'News and updates' },
-  { label: 'Watchlist', path: '/watchlist', hint: 'Track your favorite repos' },
-  { label: 'Pricing', path: '/pricing', hint: 'Plans and pricing' },
-  { label: 'CLI', path: '/cli', hint: 'Command line tool' },
-  { label: 'Graveyard', path: '/graveyard', hint: 'Abandoned projects' },
-  { label: 'Heat Check', path: '/heat-check', hint: 'Trending right now' },
-  { label: 'Scanner', path: '/scan', hint: 'Deep scan a repository' },
-  { label: 'AI Recipes', path: '/recommend', hint: 'AI-powered stack recommendations' },
-  { label: 'Compare', path: '/compare', hint: 'Side-by-side repo comparison' },
-  { label: 'About', path: '/about', hint: 'About OpenSoyce' },
-  { label: 'Settings', path: '/settings', hint: 'Your account settings' },
+type NavGroup = 'CORE' | 'DISCOVER' | 'TRUST' | 'DEVELOPER';
+
+type NavItem = {
+  label: string;
+  path: string;
+  hint: string;
+  icon: LucideIcon;
+  group: NavGroup;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  // CORE — the money path: Scan → Guard → Watchlist → Compare → Pricing
+  { label: 'Scanner', path: '/scanner', hint: 'Deep scan a repository', icon: ScanLine, group: 'CORE' },
+  { label: 'Guard', path: '/guard', hint: 'PR-time supply-chain checks', icon: Shield, group: 'CORE' },
+  { label: 'Watchlist', path: '/watchlist', hint: 'Track your favorite repos', icon: Star, group: 'CORE' },
+  { label: 'Compare', path: '/compare', hint: 'Side-by-side repo comparison', icon: GitCompare, group: 'CORE' },
+  { label: 'Pricing', path: '/pricing', hint: 'Plans and pricing', icon: DollarSign, group: 'CORE' },
+
+  // DISCOVER — exploration surfaces
+  { label: 'Leaderboards', path: '/leaderboards', hint: 'Top ranked open-source projects', icon: Trophy, group: 'DISCOVER' },
+  { label: 'Heat Check', path: '/heat-check', hint: 'Trending right now', icon: Flame, group: 'DISCOVER' },
+  { label: 'Graveyard', path: '/graveyard', hint: 'Abandoned projects', icon: Skull, group: 'DISCOVER' },
+  { label: 'Blog', path: '/blog', hint: 'News and updates', icon: Newspaper, group: 'DISCOVER' },
+  { label: 'AI Recipes', path: '/recipes', hint: 'AI-powered stack recommendations', icon: Wand2, group: 'DISCOVER' },
+  { label: 'Lookup', path: '/lookup', hint: 'Analyze any GitHub repo', icon: Search, group: 'DISCOVER' },
+  { label: 'Remix', path: '/remix', hint: 'Remix and fork projects', icon: Shuffle, group: 'DISCOVER' },
+  { label: 'Submit', path: '/submit-project', hint: 'Add your project', icon: Send, group: 'DISCOVER' },
+  { label: 'Challenge', path: '/challenge', hint: 'Take on the Soyce challenge', icon: Swords, group: 'DISCOVER' },
+
+  // TRUST — credibility surfaces
+  { label: 'Methodology', path: '/methodology', hint: 'How we score projects', icon: BookOpen, group: 'TRUST' },
+  { label: 'Proof', path: '/proof', hint: 'Engine, parsers, signals, tests', icon: BadgeCheck, group: 'TRUST' },
+  { label: 'Claim', path: '/claim', hint: 'Maintainers: claim your project', icon: FileText, group: 'TRUST' },
+  { label: 'About', path: '/about', hint: 'About OpenSoyce', icon: Info, group: 'TRUST' },
+  { label: 'FAQ', path: '/faq', hint: 'Frequently asked questions', icon: HelpCircle, group: 'TRUST' },
+
+  // DEVELOPER — tools & personal surfaces
+  { label: 'CLI', path: '/cli', hint: 'Command line tool', icon: Terminal, group: 'DEVELOPER' },
+  { label: 'Dashboard', path: '/dashboard', hint: 'Your dashboard', icon: LayoutDashboard, group: 'DEVELOPER' },
+  { label: 'Analytics', path: '/analytics', hint: 'Usage analytics', icon: BarChart3, group: 'DEVELOPER' },
+  { label: 'Signal Inbox', path: '/admin/signals', hint: 'Admin signal inbox', icon: Inbox, group: 'DEVELOPER' },
+  { label: 'Settings', path: '/settings', hint: 'Your account settings', icon: Settings, group: 'DEVELOPER' },
 ];
+
+const NAV_GROUP_ORDER: NavGroup[] = ['CORE', 'DISCOVER', 'TRUST', 'DEVELOPER'];
+
+// Kept for the header search dropdown — same shape as before.
+const PAGES = NAV_ITEMS.map(({ label, path, hint }) => ({ label, path, hint }));
 
 export default function Layout() {
   const { isLoggedIn, user, login, logout, isLoading } = useAuth();
@@ -243,58 +282,34 @@ export default function Layout() {
       {/* Left Sidebar — drawer on <lg, permanent at lg+ */}
       <aside className={`fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-64 lg:w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden transform transition-transform duration-200 ease-out lg:translate-x-0 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
-          <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>
-            <Trophy size={13} strokeWidth={2.5} /><span>Leaderboards</span>
-          </NavLink>
-          <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>
-            <Shuffle size={13} strokeWidth={2.5} /><span>Remix</span>
-          </NavLink>
-          <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>
-            <BookOpen size={13} strokeWidth={2.5} /><span>Methodology</span>
-          </NavLink>
-          <NavLink to="/submit-project" onClick={() => trackEvent('submit_project_click', { source: 'nav' })} className={navLinkClass}>
-            <Send size={13} strokeWidth={2.5} /><span>Submit</span>
-          </NavLink>
-          <NavLink to="/lookup" onClick={() => trackEvent('lookup_click', { source: 'nav' })} className={navLinkClass}>
-            <Search size={13} strokeWidth={2.5} /><span>Lookup</span>
-          </NavLink>
-          <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>
-            <Newspaper size={13} strokeWidth={2.5} /><span>Blog</span>
-          </NavLink>
-          <NavLink to="/watchlist" className={navLinkClass}>
-            <Star size={13} strokeWidth={2.5} /><span>Watchlist</span>
-          </NavLink>
-          <NavLink to="/pricing" className={navLinkClass}>
-            <DollarSign size={13} strokeWidth={2.5} /><span>Pricing</span>
-          </NavLink>
-          <div className="border-t border-soy-bottle/15 my-2 mx-1" />
-          <p className="text-[8px] font-black uppercase tracking-widest opacity-30 px-3 mb-1">Tools</p>
-          <NavLink to="/cli" className={navLinkClass}>
-            <Terminal size={13} strokeWidth={2.5} /><span>CLI</span>
-          </NavLink>
-          <NavLink to="/graveyard" className={navLinkClass}>
-            <Skull size={13} strokeWidth={2.5} /><span>Graveyard</span>
-          </NavLink>
-          <NavLink to="/heat-check" className={navLinkClass}>
-            <Flame size={13} strokeWidth={2.5} /><span>Heat Check</span>
-          </NavLink>
-          <NavLink to="/scan" className={navLinkClass}>
-            <ScanLine size={13} strokeWidth={2.5} /><span>Scanner</span>
-          </NavLink>
-          <NavLink to="/recommend" className={navLinkClass}>
-            <Wand2 size={13} strokeWidth={2.5} /><span>AI Recipes</span>
-          </NavLink>
-          <NavLink to="/compare" className={navLinkClass}>
-            <GitCompare size={13} strokeWidth={2.5} /><span>Compare</span>
-          </NavLink>
-          <NavLink to="/about" className={navLinkClass}>
-            <Info size={13} strokeWidth={2.5} /><span>About</span>
-          </NavLink>
+          {NAV_GROUP_ORDER.map((group, idx) => {
+            const items = NAV_ITEMS.filter(i => i.group === group);
+            if (items.length === 0) return null;
+            return (
+              <div key={group} className="flex flex-col gap-0.5">
+                {idx > 0 && <div className="border-t border-soy-bottle/15 my-2 mx-1" />}
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 px-3 mt-1 mb-1">
+                  {group}
+                </p>
+                {items.map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
+                      className={navLinkClass}
+                    >
+                      <Icon size={13} strokeWidth={2.5} />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            );
+          })}
         </nav>
         <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-2 flex-shrink-0">
-          <NavLink to="/settings" className={navLinkClass}>
-            <Settings size={13} strokeWidth={2.5} /><span>Settings</span>
-          </NavLink>
           <a href="mailto:support@opensoyce.com" className={bottomLinkClass} onClick={() => trackEvent('support_click', { source: 'nav' })}>
             <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
           </a>
