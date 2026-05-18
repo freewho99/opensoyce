@@ -36,6 +36,7 @@ import OpenDesignCaseStudy from './pages/OpenDesignCaseStudy';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Guard from './pages/Guard';
+import Proof from './pages/Proof';
 import NotFound from './pages/NotFound';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
@@ -65,6 +66,7 @@ export function AppRoutes() {
         <Route path="/faq" element={<FAQ />} />
         <Route path="/about" element={<About />} />
         <Route path="/methodology" element={<Methodology />} />
+        <Route path="/proof" element={<Proof />} />
         <Route path="/remix" element={<Remix />} />
         <Route path="/heat-check" element={<HeatCheck />} />
         <Route path="/submit-project" element={<SubmitProject />} />
