@@ -11,6 +11,7 @@ import Lookup from './pages/Lookup';
 import Watchlist from './pages/Watchlist';
 import CLI from './pages/CLI';
 import Scanner from './pages/Scanner';
+import GuardInstall from './pages/GuardInstall';
 import Compare from './pages/Compare';
 import Recommend from './pages/Recommend';
 import Pricing from './pages/Pricing';
@@ -33,6 +34,7 @@ import SkillsAgentsCompare from './pages/SkillsAgentsCompare';
 import OpenDesignCaseStudy from './pages/OpenDesignCaseStudy';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
+import Guard from './pages/Guard';
 import NotFound from './pages/NotFound';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
@@ -49,6 +51,8 @@ export function AppRoutes() {
         <Route path="/cli" element={<CLI />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/scanner" element={<Scanner />} />
+        <Route path="/guard" element={<Guard />} />
+        <Route path="/guard/install" element={<GuardInstall />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/recommend" element={<Recommend />} />
         <Route path="/recipes" element={<Recommend />} />
