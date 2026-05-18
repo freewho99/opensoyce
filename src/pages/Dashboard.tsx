@@ -1,241 +1,584 @@
-import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { motion, AnimatePresence } from 'motion/react';
-import { Github, ShieldCheck, Award, Eye, Copy, Check, ArrowUpRight, MessageSquare, Code, ExternalLink, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+/**
+ * Exceptions dashboard (Sprint+3 PR 3).
+ *
+ * Flow:
+ *   1. Mount → probe /api/exceptions?action=whoami.
+ *   2. If 401 → show "Sign in with GitHub" CTA. Click generates a UUID state,
+ *      stores it in sessionStorage, redirects to GitHub OAuth authorize.
+ *   3. GitHub redirects back to /dashboard?code=...&state=... → we POST
+ *      { code, state } to /api/exceptions?action=auth-callback, which mints
+ *      the osg_session cookie and returns { login }.
+ *   4. With a session, fetch my-repos and let the user pick one. Selecting a
+ *      repo lists its exceptions and lets the user grant / revoke.
+ *
+ * CSRF posture (acknowledged weakness): the OAuth state is a client-generated
+ * UUID round-tripped through sessionStorage. We verify the returned state
+ * matches what we stored, but the backend does NOT verify a signature on it.
+ * The OAuth code itself is single-use and bound to redirect_uri, which limits
+ * forgery blast radius. Server-signed state is a follow-up.
+ */
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Github, Shield, Trash2, RefreshCw, AlertTriangle, Plus, LogOut, ChevronRight } from 'lucide-react';
+
+type ExceptionRow = {
+  id: string;
+  owner: string;
+  repo: string;
+  package_name: string;
+  ecosystem: string;
+  reason: string;
+  expires_at: string;
+  granted_by: string;
+  created_at: string;
+  revoked_at: string | null;
+};
+
+type RepoRef = { owner: string; repo: string };
+
+type Phase =
+  | 'loading'
+  | 'oauth-callback'
+  | 'unauth'
+  | 'auth'
+  | 'error-config';
+
+const ECOSYSTEMS = ['npm', 'pnpm', 'yarn', 'uv', 'poetry', 'mixed'] as const;
+const EXPIRY_OPTIONS = [7, 14, 30, 60, 90];
+const REASON_MIN = 10;
+const REASON_MAX = 2000;
+const OAUTH_STATE_KEY = 'dashboard_oauth_state';
+
+function classifyStatus(row: ExceptionRow): 'active' | 'expired' | 'revoked' {
+  if (row.revoked_at) return 'revoked';
+  const expiresMs = Date.parse(row.expires_at);
+  if (Number.isFinite(expiresMs) && expiresMs <= Date.now()) return 'expired';
+  return 'active';
+}
+
+function formatExpires(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+}
 
 export default function Dashboard() {
-  const { user, isLoggedIn, login, isLoading: isAuthLoading } = useAuth();
-  const [copySuccess, setCopySuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'markdown' | 'html'>('markdown');
+  const [phase, setPhase] = useState<Phase>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [login, setLogin] = useState<string | null>(null);
+  const [oauthClientId, setOauthClientId] = useState<string | null>(null);
+  const [repos, setRepos] = useState<RepoRef[] | null>(null);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState<RepoRef | null>(null);
+  const [exceptions, setExceptions] = useState<ExceptionRow[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
 
-  if (!isLoggedIn || !user) {
+  // Grant form state.
+  const [pkgName, setPkgName] = useState('');
+  const [ecosystem, setEcosystem] = useState<typeof ECOSYSTEMS[number]>('npm');
+  const [reason, setReason] = useState('');
+  const [expiresInDays, setExpiresInDays] = useState(30);
+  const [granting, setGranting] = useState(false);
+  const [grantError, setGrantError] = useState<string | null>(null);
+
+  // ------------------------------------------------------------- bootstrap
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // 1. Detect an OAuth callback (?code= & ?state= in URL).
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const state = params.get('state');
+
+      if (code && state) {
+        setPhase('oauth-callback');
+        const stored = sessionStorage.getItem(OAUTH_STATE_KEY);
+        if (!stored || stored !== state) {
+          setErrorMessage('OAUTH state mismatch — try signing in again.');
+          // Strip the bogus query params either way.
+          window.history.replaceState({}, '', '/dashboard');
+          setPhase('unauth');
+          return;
+        }
+        sessionStorage.removeItem(OAUTH_STATE_KEY);
+        try {
+          const resp = await fetch('/api/exceptions?action=auth-callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, state }),
+          });
+          // Strip query params regardless of success so a refresh doesn't
+          // re-attempt with the now-consumed code.
+          window.history.replaceState({}, '', '/dashboard');
+          if (!resp.ok) {
+            const body = await resp.json().catch(() => null);
+            const msg = body && body.error === 'OAUTH_NOT_CONFIGURED'
+              ? 'OpenSoyce is missing its GitHub OAuth credentials. Contact support@opensoyce.com.'
+              : body && body.message ? body.message : `Sign-in failed (${resp.status}).`;
+            if (cancelled) return;
+            setErrorMessage(msg);
+            setPhase('unauth');
+            return;
+          }
+          const body = await resp.json();
+          if (cancelled) return;
+          setLogin(body.login || null);
+          setPhase('auth');
+          return;
+        } catch (e: unknown) {
+          if (cancelled) return;
+          setErrorMessage('Network error during sign-in. Try again.');
+          setPhase('unauth');
+          return;
+        }
+      }
+
+      // 2. Probe whoami for an existing session.
+      try {
+        const resp = await fetch('/api/exceptions?action=whoami', { credentials: 'same-origin' });
+        if (cancelled) return;
+        if (resp.ok) {
+          const body = await resp.json();
+          setLogin(body.login || null);
+          setPhase('auth');
+        } else {
+          setPhase('unauth');
+        }
+      } catch {
+        if (cancelled) return;
+        setPhase('unauth');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Once we're 'auth', fetch the user's repos.
+  useEffect(() => {
+    if (phase !== 'auth') return;
+    if (repos !== null) return;
+    let cancelled = false;
+    (async () => {
+      setReposLoading(true);
+      try {
+        const resp = await fetch('/api/exceptions?action=my-repos', { credentials: 'same-origin' });
+        if (!resp.ok) {
+          if (cancelled) return;
+          setRepos([]);
+          setReposLoading(false);
+          return;
+        }
+        const body = await resp.json();
+        if (cancelled) return;
+        setRepos(Array.isArray(body.repos) ? body.repos : []);
+      } catch {
+        if (cancelled) return;
+        setRepos([]);
+      } finally {
+        if (!cancelled) setReposLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [phase, repos]);
+
+  // Fetch oauth client_id once for the sign-in button.
+  useEffect(() => {
+    if (oauthClientId !== null) return;
+    if (phase !== 'unauth') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch('/api/config');
+        if (!resp.ok) return;
+        const body = await resp.json();
+        if (cancelled) return;
+        if (typeof body.githubOauthClientId === 'string') {
+          setOauthClientId(body.githubOauthClientId);
+        } else {
+          setOauthClientId('');
+        }
+      } catch {
+        if (cancelled) return;
+        setOauthClientId('');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [phase, oauthClientId]);
+
+  // Fetch exceptions whenever selectedRepo changes.
+  const refreshExceptions = useCallback(async (repo: RepoRef) => {
+    setListLoading(true);
+    setListError(null);
+    try {
+      const url = `/api/exceptions?owner=${encodeURIComponent(repo.owner)}&repo=${encodeURIComponent(repo.repo)}`;
+      const resp = await fetch(url, { credentials: 'same-origin' });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        setListError((body && body.message) || `Failed to load exceptions (${resp.status}).`);
+        setExceptions([]);
+      } else {
+        const body = await resp.json();
+        setExceptions(Array.isArray(body.exceptions) ? body.exceptions : []);
+      }
+    } catch {
+      setListError('Network error loading exceptions.');
+      setExceptions([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRepo) return;
+    refreshExceptions(selectedRepo);
+  }, [selectedRepo, refreshExceptions]);
+
+  // ------------------------------------------------------------- actions
+  const handleSignIn = useCallback(() => {
+    if (!oauthClientId) {
+      setErrorMessage('OpenSoyce is missing its GitHub OAuth client ID. Contact support@opensoyce.com.');
+      return;
+    }
+    const state = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessionStorage.setItem(OAUTH_STATE_KEY, state);
+    const redirectUri = `${window.location.origin}/dashboard`;
+    const params = new URLSearchParams({
+      client_id: oauthClientId,
+      redirect_uri: redirectUri,
+      scope: 'read:user',
+      state,
+      allow_signup: 'false',
+    });
+    window.location.href = `https://github.com/login/oauth/authorize?${params.toString()}`;
+  }, [oauthClientId]);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await fetch('/api/exceptions?action=logout', { method: 'POST', credentials: 'same-origin' });
+    } catch {
+      // best-effort; we still tear down local state.
+    }
+    setLogin(null);
+    setRepos(null);
+    setSelectedRepo(null);
+    setExceptions([]);
+    setPhase('unauth');
+  }, []);
+
+  const handleGrant = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRepo) return;
+    setGrantError(null);
+    const trimmedReason = reason.trim();
+    if (trimmedReason.length < REASON_MIN || trimmedReason.length > REASON_MAX) {
+      setGrantError(`Reason must be ${REASON_MIN}–${REASON_MAX} characters after trimming.`);
+      return;
+    }
+    if (!pkgName.trim()) {
+      setGrantError('Package name is required.');
+      return;
+    }
+    setGranting(true);
+    try {
+      const resp = await fetch('/api/exceptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
+          package_name: pkgName.trim(),
+          ecosystem,
+          reason: trimmedReason,
+          expires_in_days: expiresInDays,
+        }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        setGrantError((body && body.message) || `Failed to grant exception (${resp.status}).`);
+      } else {
+        setPkgName('');
+        setReason('');
+        await refreshExceptions(selectedRepo);
+      }
+    } catch {
+      setGrantError('Network error granting exception.');
+    } finally {
+      setGranting(false);
+    }
+  }, [selectedRepo, pkgName, ecosystem, reason, expiresInDays, refreshExceptions]);
+
+  const handleRevoke = useCallback(async (id: string) => {
+    if (!selectedRepo) return;
+    try {
+      const resp = await fetch(`/api/exceptions?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        setListError((body && body.message) || `Failed to revoke (${resp.status}).`);
+        return;
+      }
+      await refreshExceptions(selectedRepo);
+    } catch {
+      setListError('Network error revoking exception.');
+    }
+  }, [selectedRepo, refreshExceptions]);
+
+  // ------------------------------------------------------------- render
+  const reasonLen = reason.trim().length;
+  const sortedRepos = useMemo(() => repos || [], [repos]);
+
+  if (phase === 'loading' || phase === 'oauth-callback') {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-32 text-center">
+        <p className="text-xs font-black uppercase tracking-widest opacity-60">
+          {phase === 'oauth-callback' ? 'SIGNING YOU IN…' : 'LOADING DASHBOARD…'}
+        </p>
+      </div>
+    );
+  }
+
+  if (phase === 'unauth') {
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center min-h-[60vh]">
         <div className="bg-white border-4 border-soy-bottle p-12 shadow-[12px_12px_0px_#E63322] text-center w-full max-w-md">
-          <ShieldCheck size={64} className="text-soy-red mx-auto mb-8" />
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-4">DASHBOARD ACCESS RESTRICTED</h2>
-          <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-8 leading-relaxed">
-            ONLY VERIFIED MAINTAINERS CAN ACCESS THE DASHBOARD. PLEASE SIGN IN TO CONTINUE.
+          <Shield size={64} className="text-soy-red mx-auto mb-8" />
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-4">EXCEPTIONS DASHBOARD</h2>
+          <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-6 leading-relaxed">
+            SIGN IN WITH GITHUB TO MANAGE EXCEPTIONS FOR REPOS WHERE GUARD IS INSTALLED.
           </p>
-          <button 
-            onClick={() => login()}
-            disabled={isAuthLoading}
+          {errorMessage && (
+            <div className="bg-soy-red text-white border-2 border-soy-bottle p-3 mb-6 text-[10px] font-black uppercase tracking-widest">
+              {errorMessage}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleSignIn}
+            disabled={!oauthClientId}
             className="w-full bg-soy-bottle text-soy-label py-4 text-xl font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 disabled:opacity-50"
           >
             <Github size={24} />
-            {isAuthLoading ? 'CONNECTING...' : 'SIGN IN WITH GITHUB →'}
+            {oauthClientId === null ? 'LOADING…' : oauthClientId === '' ? 'OAUTH NOT CONFIGURED' : 'SIGN IN WITH GITHUB'}
           </button>
         </div>
       </div>
     );
   }
 
-  const badgeCode = activeTab === 'markdown' 
-    ? `[![OpenSoyce Score](https://api.soyce.io/badge/devuser42/my-app)](https://opensoyce.io/projects/devuser42/my-app)`
-    : `<a href="https://opensoyce.io/projects/devuser42/my-app"><img src="https://api.soyce.io/badge/devuser42/my-app" alt="OpenSoyce Score"></a>`;
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(badgeCode);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
-  };
-
-  const stats = [
-    { label: 'CLAIMED REPOS', value: '1' },
-    { label: 'AVG SOYCE SCORE', value: '9.3' },
-    { label: 'PROFILE VIEWS', value: '2,847', sub: '(THIS MONTH)' },
-    { label: 'BADGE IMPRESSIONS', value: '12,450' },
-  ];
-
-  const activities = [
-    { icon: '🔍', text: 'Score recalculated: 9.3 → 9.3 (no change)', time: '2 days ago' },
-    { icon: '✅', text: 'Verification email sent', time: '3 days ago' },
-    { icon: '🚩', text: 'Claim submitted for devuser42/my-app', time: '4 days ago' },
-    { icon: '👀', text: 'Profile viewed 847 times this week', time: 'ongoing' },
-  ];
-
+  // phase === 'auth'
   return (
-    <div className="max-w-7xl mx-auto px-4 py-12">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-        <div className="flex items-center gap-6">
-          <div className="relative">
-            <img src={user.avatar_url} alt={user.login} className="w-16 h-16 rounded-full border-4 border-soy-bottle" />
-            <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-none p-1 border-2 border-soy-bottle">
-              <ShieldCheck size={16} strokeWidth={3} />
-            </div>
-          </div>
-          <div>
-            <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-2">MAINTAINER DASHBOARD</h1>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-widest opacity-60">LOGGED IN AS:</span>
-              <span className="text-[10px] font-black uppercase tracking-widest text-soy-red underline decoration-2 underline-offset-4">{user.login}</span>
-              <span className="bg-emerald-500 text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-widest h-fit">VERIFIED</span>
-            </div>
+    <div className="max-w-7xl mx-auto px-4 py-12 font-mono">
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 border-b-4 border-soy-bottle pb-6">
+        <div>
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-2">EXCEPTIONS DASHBOARD</h1>
+          <div className="text-[10px] font-black uppercase tracking-widest opacity-60">
+            SIGNED IN AS <span className="text-soy-red">@{login}</span>
           </div>
         </div>
-        <Link 
-          to="/claim" 
-          className="bg-soy-bottle text-soy-label px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-soy-red transition-all shadow-[4px_4px_0px_#000]"
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="self-start md:self-auto flex items-center gap-2 border-2 border-soy-bottle px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-soy-label transition-colors"
         >
-          CLAIM ANOTHER REPO
-        </Link>
+          <LogOut size={14} /> Sign Out
+        </button>
       </header>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-        {stats.map((stat, i) => (
-          <div key={i} className="bg-black text-white p-6 md:p-8 flex flex-col justify-center border-b-8 border-soy-red shadow-[8px_8px_0px_#302C26]">
-            <span className="text-xs font-black uppercase tracking-[.2em] opacity-40 mb-2 truncate">{stat.label}</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl md:text-5xl font-black italic tracking-tighter text-soy-label">{stat.value}</span>
+      {!selectedRepo ? (
+        <section className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#000]">
+          <h2 className="text-2xl font-black uppercase italic tracking-tighter mb-2">PICK A REPO</h2>
+          <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-6">
+            REPOS WHERE GUARD IS INSTALLED AND YOU HAVE WRITE OR ADMIN ACCESS.
+          </p>
+          {reposLoading ? (
+            <p className="text-xs font-black uppercase tracking-widest opacity-60">LOADING REPOS…</p>
+          ) : sortedRepos.length === 0 ? (
+            <div className="bg-soy-label/20 border-2 border-soy-bottle p-6">
+              <p className="text-xs font-bold uppercase tracking-widest opacity-70 leading-relaxed">
+                NO ELIGIBLE REPOS FOUND. INSTALL THE OPENSOYCE GUARD GITHUB APP ON A REPO
+                YOU HAVE WRITE ACCESS TO, THEN COME BACK.
+              </p>
             </div>
-            {stat.sub && <span className="text-[8px] font-black uppercase tracking-widest opacity-40 mt-1">{stat.sub}</span>}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mb-12">
-        {/* Main Card */}
-        <div className="lg:col-span-2 space-y-12">
-          <div className="bg-white border-4 border-soy-bottle p-8 md:p-12 shadow-[12px_12px_0px_#000]">
-            <div className="flex justify-between items-start mb-12">
-              <div>
-                <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-2">devuser42/my-app</h2>
-                <div className="flex gap-2">
-                  <span className="bg-emerald-500 text-white px-2 py-1 text-[10px] font-black uppercase tracking-widest">VERIFIED</span>
-                  <span className="bg-amber-400 text-soy-label px-2 py-1 text-[10px] font-black uppercase tracking-widest">PENDING REVIEW</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-6xl font-black italic tracking-tighter text-soy-red leading-none">9.3</div>
-                <div className="text-[10px] font-black uppercase tracking-widest opacity-40">SOYCE SCORE</div>
-                <div className="mt-2 text-emerald-500 font-black italic text-xs flex items-center justify-end gap-1">
-                   <ArrowUpRight size={14} /> +0.3 OVER 30D
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 mb-12">
-              {[
-                { label: 'MAINTENANCE', score: 9.5 },
-                { label: 'SECURITY', score: 9.0 },
-                { label: 'COMMUNITY', score: 9.8 },
-                { label: 'DOCUMENTATION', score: 8.9 },
-              ].map(dim => (
-                <div key={dim.label} className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
-                    <span className="opacity-40">{dim.label}</span>
-                    <span>{(dim.score ?? 0).toFixed(1)}/10</span>
-                  </div>
-                  <div className="h-2 bg-soy-label/20 w-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${dim.score * 10}%` }}
-                      className="h-full bg-soy-red"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap gap-4 pt-8 border-t-2 border-soy-label">
-              <button className="bg-soy-red text-white px-8 py-4 font-black uppercase tracking-widest text-sm hover:bg-soy-bottle transition-all shadow-[4px_4px_0px_#000]">
-                GENERATE BADGE
-              </button>
-              <button className="bg-white border-4 border-soy-bottle px-8 py-4 font-black uppercase tracking-widest text-sm hover:bg-soy-label transition-all">
-                DISPUTE SCORE
-              </button>
-            </div>
-          </div>
-
-          {/* Badge Generator Content */}
-          <div className="bg-white border-4 border-soy-bottle p-8 md:p-12 shadow-[12px_12px_0px_#302C26]">
-            <div className="flex items-center gap-4 mb-8">
-              <Code size={32} className="text-soy-red" />
-              <h3 className="text-3xl font-black uppercase italic tracking-tighter">YOUR OPENSOYCE BADGE</h3>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-8">
-              <div>
-                <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-4 italic">LIVE PREVIEW</h4>
-                <div className="inline-flex items-stretch border-2 border-soy-bottle shadow-[4px_4px_0px_#000]">
-                  <div className="bg-soy-bottle text-white px-3 py-1 text-[10px] font-black uppercase flex items-center">OpenSoyce Score</div>
-                  <div className="bg-soy-red text-white px-3 py-1 text-2xl font-black italic flex items-center">9.3 / 10</div>
-                </div>
-                <p className="mt-8 text-xs font-bold uppercase tracking-widest opacity-40 italic leading-relaxed">
-                  DISPLAY THE NUTRITION FACTS OF YOUR PROJECT DIRECTLY IN YOUR README TO BUILD TRUST WITH USERS.
-                </p>
-              </div>
-              <div className="space-y-4">
-                <div className="flex gap-4 border-b-2 border-soy-label pb-2">
-                  <button 
-                    onClick={() => setActiveTab('markdown')}
-                    className={`text-[10px] font-black uppercase tracking-widest pb-2 -mb-[10px] ${activeTab === 'markdown' ? 'text-soy-red border-b-4 border-soy-red' : 'opacity-40'}`}
+          ) : (
+            <ul className="divide-y-2 divide-soy-label border-2 border-soy-bottle">
+              {sortedRepos.map(r => (
+                <li key={`${r.owner}/${r.repo}`}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRepo(r)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-soy-label transition-colors"
                   >
-                    MARKDOWN
+                    <span className="text-xs font-black uppercase tracking-widest">{r.owner}/{r.repo}</span>
+                    <ChevronRight size={16} className="text-soy-red" />
                   </button>
-                  <button 
-                    onClick={() => setActiveTab('html')}
-                    className={`text-[10px] font-black uppercase tracking-widest pb-2 -mb-[10px] ${activeTab === 'html' ? 'text-soy-red border-b-4 border-soy-red' : 'opacity-40'}`}
-                  >
-                    HTML
-                  </button>
-                </div>
-                <div className="bg-soy-label/20 border-2 border-soy-bottle p-4 relative group">
-                  <pre className="text-[10px] font-mono whitespace-pre-wrap break-all leading-normal opacity-80">
-                    {badgeCode}
-                  </pre>
-                  <button 
-                    onClick={copyToClipboard}
-                    className="absolute top-2 right-2 p-2 bg-soy-bottle text-soy-label opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    {copySuccess ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar Activity */}
-        <div className="space-y-12">
-          <div className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#000]">
-            <h3 className="text-2xl font-black uppercase italic tracking-tight mb-8 border-b-4 border-soy-bottle pb-2">RECENT ACTIVITY</h3>
-            <div className="space-y-8">
-              {activities.map((activity, i) => (
-                <div key={i} className="flex gap-4">
-                  <span className="text-2xl shrink-0">{activity.icon}</span>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest leading-tight mb-1">{activity.text}</p>
-                    <span className="text-[8px] font-bold uppercase tracking-widest opacity-40">{activity.time}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button className="w-full mt-12 py-4 border-2 border-soy-bottle text-[10px] font-black uppercase tracking-widest hover:bg-soy-label transition-colors">
-              VIEW FULL HISTORY
-            </button>
-          </div>
-
-          <div className="bg-soy-bottle p-8 shadow-[8px_8px_0px_#E63322]">
-            <h4 className="text-white text-xl font-black uppercase italic tracking-tighter mb-4">MAINTAINER PERKS</h4>
-            <ul className="space-y-4">
-              {[
-                'Score Dispute Requests',
-                'Custom Project Meta Description',
-                'Maintainer Only Analytics',
-                'Early Access to Audit v2'
-              ].map(perk => (
-                <li key={perk} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-soy-label opacity-80">
-                  <Check size={14} className="text-soy-red" /> {perk}
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+      ) : (
+        <>
+          <div className="flex items-center gap-3 mb-6">
+            <button
+              type="button"
+              onClick={() => setSelectedRepo(null)}
+              className="text-[10px] font-black uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-soy-red"
+            >
+              ← All repos
+            </button>
+            <span className="text-[10px] font-black uppercase tracking-widest opacity-60">/</span>
+            <span className="text-xs font-black uppercase tracking-widest">{selectedRepo.owner}/{selectedRepo.repo}</span>
           </div>
-        </div>
-      </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            {/* Grant form */}
+            <section className="lg:col-span-2 bg-white border-4 border-soy-bottle p-6 shadow-[8px_8px_0px_#000]">
+              <h2 className="text-xl font-black uppercase italic tracking-tighter mb-4 flex items-center gap-2">
+                <Plus size={20} /> Grant exception
+              </h2>
+              <form onSubmit={handleGrant} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1">Package name</label>
+                  <input
+                    type="text"
+                    value={pkgName}
+                    onChange={e => setPkgName(e.target.value)}
+                    placeholder="lodash"
+                    className="w-full border-2 border-soy-bottle bg-soy-label/10 px-3 py-2 text-xs font-mono focus:outline-none focus:bg-white"
+                    maxLength={214}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1">Ecosystem</label>
+                  <select
+                    value={ecosystem}
+                    onChange={e => setEcosystem(e.target.value as typeof ECOSYSTEMS[number])}
+                    className="w-full border-2 border-soy-bottle bg-soy-label/10 px-3 py-2 text-xs font-mono focus:outline-none focus:bg-white"
+                  >
+                    {ECOSYSTEMS.map(eco => <option key={eco} value={eco}>{eco}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1">
+                    Reason <span className="opacity-60">({reasonLen}/{REASON_MAX})</span>
+                  </label>
+                  <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    placeholder="Approved by security team on 2026-05-18; vendor SBOM attached…"
+                    className="w-full border-2 border-soy-bottle bg-soy-label/10 px-3 py-2 text-xs font-mono focus:outline-none focus:bg-white min-h-[120px]"
+                    maxLength={REASON_MAX + 100}
+                    required
+                  />
+                  {reasonLen > 0 && reasonLen < REASON_MIN && (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-soy-red mt-1">
+                      Need at least {REASON_MIN} characters.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1">Expires in</label>
+                  <select
+                    value={expiresInDays}
+                    onChange={e => setExpiresInDays(Number(e.target.value))}
+                    className="w-full border-2 border-soy-bottle bg-soy-label/10 px-3 py-2 text-xs font-mono focus:outline-none focus:bg-white"
+                  >
+                    {EXPIRY_OPTIONS.map(d => <option key={d} value={d}>{d} days</option>)}
+                  </select>
+                </div>
+                {grantError && (
+                  <div className="bg-soy-red text-white border-2 border-soy-bottle p-3 text-[10px] font-black uppercase tracking-widest flex items-start gap-2">
+                    <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {grantError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={granting}
+                  className="w-full bg-soy-red text-white py-3 text-xs font-black uppercase tracking-widest hover:bg-soy-bottle transition-all disabled:opacity-50 border-2 border-soy-bottle"
+                >
+                  {granting ? 'GRANTING…' : 'GRANT EXCEPTION'}
+                </button>
+              </form>
+            </section>
+
+            {/* List */}
+            <section className="lg:col-span-3 bg-white border-4 border-soy-bottle p-6 shadow-[8px_8px_0px_#000]">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-black uppercase italic tracking-tighter">Active exceptions</h2>
+                <button
+                  type="button"
+                  onClick={() => selectedRepo && refreshExceptions(selectedRepo)}
+                  className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest hover:text-soy-red"
+                >
+                  <RefreshCw size={12} /> Refresh
+                </button>
+              </div>
+              {listError && (
+                <div className="bg-soy-red text-white border-2 border-soy-bottle p-3 mb-4 text-[10px] font-black uppercase tracking-widest">
+                  {listError}
+                </div>
+              )}
+              {listLoading ? (
+                <p className="text-xs font-black uppercase tracking-widest opacity-60">LOADING…</p>
+              ) : exceptions.length === 0 ? (
+                <div className="bg-soy-label/20 border-2 border-soy-bottle p-6">
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-70">
+                    NO EXCEPTIONS GRANTED YET.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {exceptions.map(row => {
+                    const status = classifyStatus(row);
+                    const dim = status !== 'active';
+                    return (
+                      <li
+                        key={row.id}
+                        className={`border-2 border-soy-bottle p-4 ${dim ? 'bg-soy-label/30 opacity-60' : 'bg-white'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-sm font-black uppercase tracking-widest break-all">{row.package_name}</span>
+                              <span className="text-[9px] font-bold uppercase tracking-widest bg-soy-label/40 px-1.5 py-0.5">
+                                {row.ecosystem}
+                              </span>
+                              {status === 'expired' && (
+                                <span className="text-[9px] font-black uppercase tracking-widest bg-amber-400 text-soy-bottle px-1.5 py-0.5">EXPIRED</span>
+                              )}
+                              {status === 'revoked' && (
+                                <span className="text-[9px] font-black uppercase tracking-widest bg-soy-bottle text-white px-1.5 py-0.5">REVOKED</span>
+                              )}
+                            </div>
+                            <p className="text-xs leading-relaxed mb-2 whitespace-pre-wrap break-words">{row.reason}</p>
+                            <p className="text-[9px] font-black uppercase tracking-widest opacity-60">
+                              Expires {formatExpires(row.expires_at)} · Granted by @{row.granted_by}
+                            </p>
+                          </div>
+                          {status === 'active' && (
+                            <button
+                              type="button"
+                              onClick={() => handleRevoke(row.id)}
+                              className="flex items-center gap-1 border-2 border-soy-bottle px-3 py-1.5 text-[10px] font-black uppercase tracking-widest hover:bg-soy-red hover:text-white hover:border-soy-red transition-colors flex-shrink-0"
+                            >
+                              <Trash2 size={12} /> Revoke
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
+        </>
+      )}
     </div>
   );
 }

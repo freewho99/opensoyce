@@ -6,13 +6,17 @@
  * table (see docs/supabase-setup.md).
  *
  * Routes:
- *   GET    /api/exceptions?owner=<o>&repo=<r>   — list exceptions for a repo
- *   POST   /api/exceptions                      — grant a new exception
- *   DELETE /api/exceptions?id=<uuid>            — soft-revoke an exception
+ *   GET    /api/exceptions?owner=<o>&repo=<r>     — list exceptions for a repo
+ *   POST   /api/exceptions                        — grant a new exception
+ *   DELETE /api/exceptions?id=<uuid>              — soft-revoke an exception
+ *   GET    /api/exceptions?action=whoami          — return { login } if signed in
+ *   GET    /api/exceptions?action=my-repos        — repos the signed-in user can manage
+ *   POST   /api/exceptions?action=auth-callback   — exchange OAuth code, mint cookie
+ *   POST   /api/exceptions?action=logout          — clear the session cookie
  *
  * Auth: dashboard session token (osg_session cookie or Authorization: Bearer),
- * HMAC-signed with OPENSOYCE_DASHBOARD_SECRET. Minting is PR 3 (frontend
- * OAuth flow); this handler only verifies.
+ * HMAC-signed with OPENSOYCE_DASHBOARD_SECRET. Minting happens in the
+ * auth-callback branch below after a GitHub OAuth handshake.
  *
  * Permission: GET requires Guard to be installed on the repo (any permission
  * level — read suffices). POST/DELETE require write or admin on the repo.
@@ -26,7 +30,7 @@
 
 import crypto from 'node:crypto';
 import { isValidGithubName } from '../src/shared/validateRepo.js';
-import { generateAppJwt, getInstallationToken } from './_guard-app.js';
+import { generateAppJwt, getInstallationToken, githubFetch } from './_guard-app.js';
 import { getSupabase } from './_supabase.js';
 
 // ---------------------------------------------------------------------------
@@ -79,10 +83,34 @@ function getCachedInstallationId(owner, repo) {
 //   Payload: { login: string, exp: number (unix seconds) }
 // ---------------------------------------------------------------------------
 
+function base64urlEncode(bufOrString) {
+  const buf = Buffer.isBuffer(bufOrString) ? bufOrString : Buffer.from(bufOrString, 'utf8');
+  return buf.toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
 function base64urlDecode(s) {
   const pad = '='.repeat((4 - (s.length % 4)) % 4);
   const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
   return Buffer.from(b64, 'base64');
+}
+
+/**
+ * Mint an osg_session token using the same scheme verifySessionToken accepts:
+ *   <base64url(payloadJSON)>.<hex(hmacSha256(payloadJSON, key))>
+ * Payload: { login, exp (unix seconds) }.
+ */
+export function signSessionToken({ login, ttlSec = 28800 }, key) {
+  if (!key || typeof key !== 'string') throw new Error('HMAC_KEY_MISSING');
+  if (!login || typeof login !== 'string') throw new Error('LOGIN_MISSING');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { login, exp: now + ttlSec };
+  const json = JSON.stringify(payload);
+  const enc = base64urlEncode(json);
+  const sig = crypto.createHmac('sha256', key).update(json).digest('hex');
+  return `${enc}.${sig}`;
 }
 
 function timingSafeEqualHex(a, b) {
@@ -443,15 +471,260 @@ async function handleRevoke(req, res, session) {
 }
 
 // ---------------------------------------------------------------------------
+// Session / OAuth handlers (whoami, auth-callback, logout)
+// ---------------------------------------------------------------------------
+
+function setSessionCookie(res, token, maxAgeSec) {
+  // SameSite=Lax so the cookie rides along when GitHub 302-redirects back to
+  // /dashboard. HttpOnly so frontend JS can't read it (matters because the
+  // token is a verification credential). Secure because production is HTTPS.
+  const cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSec}`;
+  res.setHeader('Set-Cookie', cookie);
+}
+
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+}
+
+async function handleWhoami(req, res, session) {
+  return sendJson(res, 200, { login: session.login });
+}
+
+async function handleLogout(req, res) {
+  clearSessionCookie(res);
+  return sendJson(res, 200, { ok: true });
+}
+
+async function handleAuthCallback(req, res) {
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+  const code = body && typeof body.code === 'string' ? body.code.trim() : '';
+  const state = body && typeof body.state === 'string' ? body.state.trim() : '';
+  if (!code || code.length > 200) return err(res, 400, 'BAD_REQUEST', 'code must be a non-empty string under 200 chars');
+  if (!state || state.length > 200) return err(res, 400, 'BAD_REQUEST', 'state must be a non-empty string under 200 chars');
+
+  const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    console.error('exceptions auth-callback: GITHUB_OAUTH_CLIENT_ID / GITHUB_OAUTH_CLIENT_SECRET missing');
+    return err(res, 500, 'OAUTH_NOT_CONFIGURED', 'OpenSoyce is missing its GitHub OAuth credentials');
+  }
+  const dashboardSecret = process.env.OPENSOYCE_DASHBOARD_SECRET;
+  if (!dashboardSecret) {
+    console.error('exceptions auth-callback: OPENSOYCE_DASHBOARD_SECRET missing');
+    return err(res, 500, 'DASHBOARD_NOT_CONFIGURED', 'dashboard sessions are not configured on the server');
+  }
+
+  // Note: state is generated client-side as a UUID, sessionStorage-bound, and
+  // round-tripped through GitHub's state param. The frontend verifies it
+  // matches what it stored before sending us this callback. This is weaker
+  // than server-signed CSRF, but the OAuth code is single-use and bound to
+  // redirect_uri so cross-site forgery has limited blast radius.
+  let exch;
+  try {
+    const resp = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'opensoyce-exceptions',
+      },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
+    });
+    if (!resp.ok) {
+      console.error('exceptions auth-callback: token exchange status', resp.status);
+      return err(res, 502, 'OAUTH_EXCHANGE_FAILED', 'GitHub rejected the OAuth code');
+    }
+    exch = await resp.json();
+  } catch (e) {
+    console.error('exceptions auth-callback: token exchange threw', e && e.message);
+    return err(res, 502, 'OAUTH_EXCHANGE_FAILED', 'could not reach GitHub to exchange the OAuth code');
+  }
+  if (!exch || typeof exch.access_token !== 'string' || !exch.access_token) {
+    const detail = exch && (exch.error_description || exch.error) ? String(exch.error_description || exch.error) : 'unknown';
+    return err(res, 400, 'OAUTH_REJECTED', `GitHub rejected the authorization code: ${detail}`);
+  }
+  const accessToken = exch.access_token;
+
+  let login;
+  try {
+    const userResp = await fetch('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'opensoyce-exceptions',
+      },
+    });
+    if (!userResp.ok) {
+      console.error('exceptions auth-callback: /user status', userResp.status);
+      return err(res, 502, 'USER_LOOKUP_FAILED', 'could not read your GitHub identity');
+    }
+    const userBody = await userResp.json().catch(() => null);
+    if (!userBody || typeof userBody.login !== 'string') {
+      return err(res, 502, 'USER_LOOKUP_FAILED', 'GitHub user payload missing login');
+    }
+    login = userBody.login;
+  } catch (e) {
+    console.error('exceptions auth-callback: /user threw', e && e.message);
+    return err(res, 502, 'USER_LOOKUP_FAILED', 'could not reach GitHub to read your identity');
+  }
+
+  const token = signSessionToken({ login, ttlSec: 28800 }, dashboardSecret);
+  setSessionCookie(res, token, 28800);
+  return sendJson(res, 200, { ok: true, login });
+}
+
+// ---------------------------------------------------------------------------
+// my-repos: list installations where (a) Guard is installed and (b) the
+// signed-in user has write/admin access. Used by the dashboard repo picker.
+// Per warm-instance cache keyed by login + lazy TTL.
+// ---------------------------------------------------------------------------
+
+const MY_REPOS_CACHE = new Map();
+const MY_REPOS_CACHE_TTL_MS = 60_000;
+const MY_REPOS_CACHE_MAX = 100;
+
+function cacheMyRepos(login, repos) {
+  if (!MY_REPOS_CACHE.has(login) && MY_REPOS_CACHE.size >= MY_REPOS_CACHE_MAX) {
+    const oldest = MY_REPOS_CACHE.keys().next().value;
+    if (oldest !== undefined) MY_REPOS_CACHE.delete(oldest);
+  }
+  MY_REPOS_CACHE.delete(login);
+  MY_REPOS_CACHE.set(login, { repos, at: Date.now() });
+}
+
+function getCachedMyRepos(login) {
+  const entry = MY_REPOS_CACHE.get(login);
+  if (!entry) return null;
+  if (Date.now() - entry.at > MY_REPOS_CACHE_TTL_MS) {
+    MY_REPOS_CACHE.delete(login);
+    return null;
+  }
+  return entry.repos;
+}
+
+async function handleMyRepos(req, res, session) {
+  const cached = getCachedMyRepos(session.login);
+  if (cached) return sendJson(res, 200, { repos: cached, cached: true });
+
+  let jwt;
+  try {
+    jwt = generateAppJwt();
+  } catch (e) {
+    console.error('exceptions my-repos: app jwt failed', e && e.message);
+    return err(res, 500, 'APP_NOT_CONFIGURED', 'GitHub App credentials are missing');
+  }
+
+  // List installations the App is on.
+  let installations;
+  try {
+    const resp = await fetch('https://api.github.com/app/installations?per_page=100', {
+      headers: {
+        'Authorization': `Bearer ${jwt}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'opensoyce-exceptions',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    if (!resp.ok) {
+      console.error('exceptions my-repos: installations status', resp.status);
+      return err(res, 502, 'INSTALLATIONS_LOOKUP_FAILED', 'could not list App installations');
+    }
+    installations = await resp.json();
+  } catch (e) {
+    console.error('exceptions my-repos: installations threw', e && e.message);
+    return err(res, 502, 'INSTALLATIONS_LOOKUP_FAILED', 'GitHub unreachable');
+  }
+  if (!Array.isArray(installations)) installations = [];
+
+  const repos = [];
+  for (const inst of installations) {
+    if (!inst || typeof inst.id !== 'number') continue;
+    let tokenResp;
+    try {
+      tokenResp = await getInstallationToken(inst.id);
+    } catch (e) {
+      console.error('exceptions my-repos: installation token failed', inst.id, e && e.message);
+      continue;
+    }
+    const instToken = tokenResp && tokenResp.token;
+    if (!instToken) continue;
+
+    // List repos for this installation. Single page (100) is enough for MVE;
+    // pagination is a follow-up if anyone installs on >100 repos.
+    let repoBody;
+    try {
+      const repoResp = await githubFetch(instToken, '/installation/repositories?per_page=100');
+      if (!repoResp.ok) {
+        console.error('exceptions my-repos: installation/repositories status', repoResp.status);
+        continue;
+      }
+      repoBody = await repoResp.json();
+    } catch (e) {
+      console.error('exceptions my-repos: installation/repositories threw', e && e.message);
+      continue;
+    }
+    const list = (repoBody && Array.isArray(repoBody.repositories)) ? repoBody.repositories : [];
+    for (const r of list) {
+      if (!r || !r.owner || typeof r.owner.login !== 'string' || typeof r.name !== 'string') continue;
+      const owner = r.owner.login;
+      const name = r.name;
+      // Filter by user's permission: write or admin.
+      let perm;
+      try {
+        const pResp = await githubFetch(instToken, `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/collaborators/${encodeURIComponent(session.login)}/permission`);
+        if (!pResp.ok) continue;
+        const pBody = await pResp.json().catch(() => null);
+        perm = pBody && typeof pBody.permission === 'string' ? pBody.permission : 'none';
+      } catch (e) {
+        console.error('exceptions my-repos: perm check threw', e && e.message);
+        continue;
+      }
+      if (perm === 'admin' || perm === 'write') {
+        repos.push({ owner, repo: name });
+      }
+    }
+  }
+  // Deduplicate (paranoia — same repo shouldn't show up in two installations).
+  const seen = new Set();
+  const deduped = [];
+  for (const r of repos) {
+    const k = `${r.owner.toLowerCase()}/${r.repo.toLowerCase()}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    deduped.push(r);
+  }
+  deduped.sort((a, b) => `${a.owner}/${a.repo}`.localeCompare(`${b.owner}/${b.repo}`));
+  cacheMyRepos(session.login, deduped);
+  return sendJson(res, 200, { repos: deduped });
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
 export default async function handler(req, res) {
   try {
+    const method = (req.method || 'GET').toUpperCase();
+    const q = getQuery(req);
+    const action = typeof q.action === 'string' ? q.action : '';
+
+    // Public (no-auth) branches first. auth-callback mints the cookie, so it
+    // can't require one. logout clears the cookie unconditionally.
+    if (method === 'POST' && action === 'auth-callback') return await handleAuthCallback(req, res);
+    if (method === 'POST' && action === 'logout') return await handleLogout(req, res);
+
+    // Auth-gated branches.
     const session = verifyDashboardSession(req);
     if (!session) return err(res, 401, 'AUTH_REQUIRED', 'a valid dashboard session is required');
 
-    const method = (req.method || 'GET').toUpperCase();
+    if (method === 'GET' && action === 'whoami') return await handleWhoami(req, res, session);
+    if (method === 'GET' && action === 'my-repos') return await handleMyRepos(req, res, session);
+
     if (method === 'GET') return await handleList(req, res, session);
     if (method === 'POST') return await handleGrant(req, res, session);
     if (method === 'DELETE') return await handleRevoke(req, res, session);
