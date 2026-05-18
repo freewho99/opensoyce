@@ -13,6 +13,10 @@
  *   GET    /api/exceptions?action=my-repos        — repos the signed-in user can manage
  *   POST   /api/exceptions?action=auth-callback   — exchange OAuth code, mint cookie
  *   POST   /api/exceptions?action=logout          — clear the session cookie
+ *   GET    /api/exceptions?action=watchlist-list     — Sprint+4: signed-in user's package watchlist + latest verdicts
+ *   GET    /api/exceptions?action=watchlist-changes  — Sprint+4: recent degradations across watched packages
+ *   POST   /api/exceptions?action=watchlist-add      — Sprint+4: add a package to the user's watchlist
+ *   POST   /api/exceptions?action=watchlist-remove   — Sprint+4: remove a package from the user's watchlist
  *
  * Auth: dashboard session token (osg_session cookie or Authorization: Bearer),
  * HMAC-signed with OPENSOYCE_DASHBOARD_SECRET. Minting happens in the
@@ -704,6 +708,272 @@ async function handleMyRepos(req, res, session) {
 }
 
 // ---------------------------------------------------------------------------
+// Sprint+4: Watchlist (watched_packages + verdict_snapshots)
+//
+// Personal package watchlist scoped to the signed-in user. Reads
+// verdict_snapshots written by api/guard-webhook.js (Sprint+4 PR 1) to surface
+// the latest verdict per repo and detect recent degradations.
+// ---------------------------------------------------------------------------
+
+// Severity ranking for degradation detection. Higher rank == worse verdict.
+// Mirrors the verdict ladder USE READY < STABLE < FORKABLE < WATCHLIST <
+// RISKY < GRAVEYARD. A degradation is a strictly positive rank delta.
+const WATCHLIST_LABEL_RANK = {
+  'USE READY': 0,
+  'STABLE': 1,
+  'FORKABLE': 2,
+  'WATCHLIST': 3,
+  'RISKY': 4,
+  'GRAVEYARD': 5,
+};
+
+const WATCHLIST_CHANGES_WINDOW_DAYS = 30;
+const WATCHLIST_SNAPSHOT_FETCH_LIMIT = 200;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function handleWatchlistList(req, res, session) {
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions watchlist-list: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const { data: watched, error: wErr } = await sb
+    .from('watched_packages')
+    .select('id, package_name, ecosystem, created_at')
+    .eq('user_login', session.login)
+    .order('created_at', { ascending: false });
+
+  if (wErr) {
+    console.error('exceptions watchlist-list: watched_packages query failed', wErr.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+  const rows = Array.isArray(watched) ? watched : [];
+  if (rows.length === 0) return sendJson(res, 200, { watched: [] });
+
+  // For each watched package, fetch recent snapshots ordered by scanned_at desc
+  // and de-dupe by (owner, repo) keeping the first occurrence (== most recent).
+  // Sequential queries — MVE only; if a user watches >20 packages this gets
+  // chatty. Batch via a single IN() query later.
+  const out = [];
+  for (const w of rows) {
+    const { data: snaps, error: sErr } = await sb
+      .from('verdict_snapshots')
+      .select('owner, repo, label, scanned_at')
+      .eq('package_name', w.package_name)
+      .eq('ecosystem', w.ecosystem)
+      .order('scanned_at', { ascending: false })
+      .limit(WATCHLIST_SNAPSHOT_FETCH_LIMIT);
+
+    if (sErr) {
+      console.error('exceptions watchlist-list: verdict_snapshots query failed', sErr.message);
+      return err(res, 500, 'DB_ERROR', 'database query failed');
+    }
+
+    const seen = new Set();
+    const verdicts = [];
+    for (const s of (Array.isArray(snaps) ? snaps : [])) {
+      if (!s || typeof s.owner !== 'string' || typeof s.repo !== 'string') continue;
+      const key = `${s.owner.toLowerCase()}/${s.repo.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      verdicts.push({ owner: s.owner, repo: s.repo, label: s.label, scanned_at: s.scanned_at });
+    }
+
+    out.push({
+      id: w.id,
+      package_name: w.package_name,
+      ecosystem: w.ecosystem,
+      created_at: w.created_at,
+      verdicts,
+    });
+  }
+
+  return sendJson(res, 200, { watched: out });
+}
+
+async function handleWatchlistChanges(req, res, session) {
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions watchlist-changes: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const { data: watched, error: wErr } = await sb
+    .from('watched_packages')
+    .select('package_name, ecosystem')
+    .eq('user_login', session.login);
+
+  if (wErr) {
+    console.error('exceptions watchlist-changes: watched_packages query failed', wErr.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+  const rows = Array.isArray(watched) ? watched : [];
+  if (rows.length === 0) return sendJson(res, 200, { changes: [] });
+
+  const sinceIso = new Date(Date.now() - WATCHLIST_CHANGES_WINDOW_DAYS * 86400 * 1000).toISOString();
+  const changes = [];
+
+  for (const w of rows) {
+    const { data: snaps, error: sErr } = await sb
+      .from('verdict_snapshots')
+      .select('owner, repo, label, scanned_at')
+      .eq('package_name', w.package_name)
+      .eq('ecosystem', w.ecosystem)
+      .gte('scanned_at', sinceIso)
+      .order('scanned_at', { ascending: false })
+      .limit(WATCHLIST_SNAPSHOT_FETCH_LIMIT);
+
+    if (sErr) {
+      console.error('exceptions watchlist-changes: verdict_snapshots query failed', sErr.message);
+      return err(res, 500, 'DB_ERROR', 'database query failed');
+    }
+
+    // Group by (owner, repo). Snapshots are already ordered scanned_at desc,
+    // so the first two entries per group are latest and prior.
+    const byRepo = new Map();
+    for (const s of (Array.isArray(snaps) ? snaps : [])) {
+      if (!s || typeof s.owner !== 'string' || typeof s.repo !== 'string') continue;
+      const key = `${s.owner}/${s.repo}`;
+      let bucket = byRepo.get(key);
+      if (!bucket) {
+        bucket = [];
+        byRepo.set(key, bucket);
+      }
+      if (bucket.length < 2) bucket.push(s);
+    }
+
+    for (const bucket of byRepo.values()) {
+      if (bucket.length < 2) continue;
+      const [latest, prior] = bucket;
+      const latestRank = WATCHLIST_LABEL_RANK[latest.label];
+      const priorRank = WATCHLIST_LABEL_RANK[prior.label];
+      if (typeof latestRank !== 'number' || typeof priorRank !== 'number') continue;
+      if (latestRank > priorRank) {
+        changes.push({
+          package_name: w.package_name,
+          ecosystem: w.ecosystem,
+          owner: latest.owner,
+          repo: latest.repo,
+          prev_label: prior.label,
+          new_label: latest.label,
+          scanned_at: latest.scanned_at,
+        });
+      }
+    }
+  }
+
+  changes.sort((a, b) => (a.scanned_at < b.scanned_at ? 1 : a.scanned_at > b.scanned_at ? -1 : 0));
+  return sendJson(res, 200, { changes });
+}
+
+function validateWatchlistPackage(body) {
+  const packageName = body && typeof body.package_name === 'string' ? body.package_name.trim() : '';
+  const ecosystem = body && typeof body.ecosystem === 'string' ? body.ecosystem.trim() : '';
+  if (packageName.length < PACKAGE_NAME_MIN || packageName.length > PACKAGE_NAME_MAX) {
+    return { error: `package_name must be ${PACKAGE_NAME_MIN}-${PACKAGE_NAME_MAX} chars` };
+  }
+  if (!PACKAGE_NAME_RE.test(packageName)) return { error: 'package_name has invalid characters' };
+  if (!ALLOWED_ECOSYSTEMS.has(ecosystem)) {
+    return { error: `ecosystem must be one of ${[...ALLOWED_ECOSYSTEMS].join(', ')}` };
+  }
+  return { value: { packageName, ecosystem } };
+}
+
+async function handleWatchlistAdd(req, res, session) {
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+  const validated = validateWatchlistPackage(body);
+  if (validated.error) return err(res, 400, 'BAD_REQUEST', validated.error);
+  const { packageName, ecosystem } = validated.value;
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions watchlist-add: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const { data, error } = await sb
+    .from('watched_packages')
+    .insert({
+      user_login: session.login,
+      package_name: packageName,
+      ecosystem,
+    })
+    .select('id, package_name, ecosystem, created_at')
+    .single();
+
+  if (error) {
+    // Postgres unique_violation == 23505. Duplicate add is an idempotent no-op
+    // (the dashboard "add" button should be safe to click twice).
+    if (error.code === '23505') {
+      return sendJson(res, 200, { ok: true, already_watched: true });
+    }
+    console.error('exceptions watchlist-add: insert failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database write failed');
+  }
+  return sendJson(res, 201, { ok: true, watched: data });
+}
+
+async function handleWatchlistRemove(req, res, session) {
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+
+  const id = body && typeof body.id === 'string' ? body.id.trim() : '';
+  const packageName = body && typeof body.package_name === 'string' ? body.package_name.trim() : '';
+  const ecosystem = body && typeof body.ecosystem === 'string' ? body.ecosystem.trim() : '';
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions watchlist-remove: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  // Accept either { id } or { package_name, ecosystem }. Always scope the
+  // delete to the signed-in user so cross-user removal is impossible.
+  let query = sb.from('watched_packages').delete().eq('user_login', session.login);
+
+  if (id) {
+    if (!UUID_RE.test(id)) return err(res, 400, 'BAD_REQUEST', 'id is not a valid UUID');
+    query = query.eq('id', id);
+  } else if (packageName || ecosystem) {
+    const validated = validateWatchlistPackage({ package_name: packageName, ecosystem });
+    if (validated.error) return err(res, 400, 'BAD_REQUEST', validated.error);
+    query = query
+      .eq('package_name', validated.value.packageName)
+      .eq('ecosystem', validated.value.ecosystem);
+  } else {
+    return err(res, 400, 'BAD_REQUEST', 'either id or (package_name, ecosystem) is required');
+  }
+
+  const { data, error } = await query.select('id');
+  if (error) {
+    console.error('exceptions watchlist-remove: delete failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database write failed');
+  }
+  if (!Array.isArray(data) || data.length === 0) {
+    return err(res, 404, 'NOT_FOUND', 'watchlist entry not found');
+  }
+  return sendJson(res, 200, { ok: true });
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -724,6 +994,10 @@ export default async function handler(req, res) {
 
     if (method === 'GET' && action === 'whoami') return await handleWhoami(req, res, session);
     if (method === 'GET' && action === 'my-repos') return await handleMyRepos(req, res, session);
+    if (method === 'GET' && action === 'watchlist-list') return await handleWatchlistList(req, res, session);
+    if (method === 'GET' && action === 'watchlist-changes') return await handleWatchlistChanges(req, res, session);
+    if (method === 'POST' && action === 'watchlist-add') return await handleWatchlistAdd(req, res, session);
+    if (method === 'POST' && action === 'watchlist-remove') return await handleWatchlistRemove(req, res, session);
 
     if (method === 'GET') return await handleList(req, res, session);
     if (method === 'POST') return await handleGrant(req, res, session);
