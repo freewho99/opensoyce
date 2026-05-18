@@ -67,6 +67,24 @@ const CHECK_RUN_NAME = 'OpenSoyce Guard';
 // instead of posting a fresh one. PRs 3 (dedupe) and 4 (policy) reuse this.
 const GUARD_COMMENT_MARKER = '<!-- opensoyce-guard-comment -->';
 
+// External-ID encoding for Check Runs. The base form keeps the Sprint+1
+// dedupe shape (`guard-v0.2-{pr}-{sha}`); after we post the first PR comment
+// for a given head SHA we append `:c{commentId}` so the NEXT webhook can read
+// the comment ID directly off the check run lookup it already does — turning
+// a 90-item paginated comment walk into a single GET.
+const EXTERNAL_ID_PREFIX = 'guard-v0.2';
+
+function buildExternalId(prNumber, headSha, commentId) {
+  const base = `${EXTERNAL_ID_PREFIX}-${prNumber}-${headSha}`;
+  return commentId ? `${base}:c${commentId}` : base;
+}
+
+function parseCommentIdFromExternalId(externalId) {
+  if (typeof externalId !== 'string') return null;
+  const m = /:c(\d+)$/.exec(externalId);
+  return m ? Number(m[1]) : null;
+}
+
 const LOCKFILE_NAMES = new Set([
   'package-lock.json',
   'pnpm-lock.yaml',
@@ -147,7 +165,7 @@ async function createCheckRun(token, { owner, repo, headSha, status, conclusion,
   const body = {
     name: CHECK_RUN_NAME,
     head_sha: headSha,
-    external_id: `guard-v0.2-${prNumber}-${headSha}`,
+    external_id: buildExternalId(prNumber, headSha),
     status,
     output: { title, summary },
   };
@@ -214,6 +232,7 @@ async function findExistingCheckRun(token, owner, repo, headSha) {
       id: latest.id,
       status: latest.status,
       conclusion: latest.conclusion || null,
+      externalId: typeof latest.external_id === 'string' ? latest.external_id : null,
     };
   } catch (err) {
     console.error('guard-webhook: findExistingCheckRun threw', err?.message || err);
@@ -255,20 +274,85 @@ async function findGuardComment(token, owner, repo, prNumber) {
 }
 
 /**
- * Sticky PR comment: if a prior Guard comment exists (matched via the hidden
- * marker), PATCH it with the new body. Otherwise POST a new comment. Either
- * failure mode falls back to POST so a transient API hiccup never silences
- * the signal.
+ * Patch ONLY the `external_id` of a check run, leaving status / conclusion /
+ * output untouched. Used to stash the PR comment ID on the check run after
+ * the first successful POST so the next webhook can skip `findGuardComment()`
+ * entirely. Never throws — caller treats it as fire-and-forget.
  */
-async function upsertPrComment(token, { owner, repo, prNumber, body }) {
-  const existing = await findGuardComment(token, owner, repo, prNumber);
+async function patchCheckRunExternalId(token, owner, repo, checkRunId, externalId) {
+  const res = await githubFetch(token, `/repos/${owner}/${repo}/check-runs/${checkRunId}`, {
+    method: 'PATCH',
+    body: { external_id: externalId },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '(no body)');
+    throw new Error(`CHECK_RUN_EXTERNAL_ID_PATCH_FAILED status=${res.status} body=${text.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+/**
+ * Try the memoized comment ID. Returns the parsed comment object if the
+ * direct GET returns 200 AND the body still carries our marker (defensive —
+ * if a user has overwritten the comment with something else the marker is
+ * gone and we want the marker-walk fallback to take over). Returns null
+ * for 404, non-200, missing marker, or any thrown error.
+ */
+async function tryMemoizedComment(token, owner, repo, commentId) {
+  try {
+    const res = await githubFetch(token, `/repos/${owner}/${repo}/issues/comments/${commentId}`);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '(no body)');
+      console.error('guard-webhook: memoized comment GET non-OK', res.status, text.slice(0, 200));
+      return null;
+    }
+    const json = await res.json();
+    if (!json || typeof json.body !== 'string' || !json.body.includes(GUARD_COMMENT_MARKER)) {
+      // Defensive: cheap safety against an external edit that stripped the
+      // marker. Falling through to the marker-walk costs at most one GET.
+      return null;
+    }
+    return { id: json.id };
+  } catch (err) {
+    console.error('guard-webhook: memoized comment GET threw', err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * Sticky PR comment: if a prior Guard comment exists (located either via the
+ * memoized comment ID stashed on the check run's `external_id`, or — fallback
+ * — by walking the PR's issue comments looking for the hidden HTML marker),
+ * PATCH it with the new body. Otherwise POST a new comment. Either failure
+ * mode falls back to POST so a transient API hiccup never silences the signal.
+ *
+ * Returns `{ commentId, wasCreated }` so the caller knows whether to stash
+ * the new comment ID onto the check run's external_id.
+ */
+async function upsertPrComment(token, { owner, repo, prNumber, body, memoizedCommentId }) {
+  // Fast path: direct GET on the memoized comment ID. Cuts a 1–3 page issue-
+  // comment walk down to a single GET when the memo is intact.
+  let existing = null;
+  if (memoizedCommentId) {
+    existing = await tryMemoizedComment(token, owner, repo, memoizedCommentId);
+  }
+  // Marker-walk fallback covers: first run on a PR, comment deleted by a
+  // user, marker stripped by an external edit, or a malformed external_id
+  // from a prior version of this code.
+  if (!existing) {
+    existing = await findGuardComment(token, owner, repo, prNumber);
+  }
   if (existing && existing.id) {
     try {
       const res = await githubFetch(token, `/repos/${owner}/${repo}/issues/comments/${existing.id}`, {
         method: 'PATCH',
         body: { body },
       });
-      if (res.ok) return res.json();
+      if (res.ok) {
+        await res.json().catch(() => null);
+        return { commentId: existing.id, wasCreated: false };
+      }
       const text = await res.text().catch(() => '(no body)');
       console.error('guard-webhook: PATCH comment failed', res.status, text.slice(0, 200));
       // Fall through to POST.
@@ -286,7 +370,8 @@ async function upsertPrComment(token, { owner, repo, prNumber, body }) {
     const text = await res.text().catch(() => '(no body)');
     throw new Error(`PR_COMMENT_FAILED status=${res.status} body=${text.slice(0, 200)}`);
   }
-  return res.json();
+  const created = await res.json();
+  return { commentId: created?.id ?? null, wasCreated: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -760,17 +845,24 @@ async function handlePullRequest(payload) {
     // existing run rather than POSTing a new one (handled below).
   }
 
+  // Pull the memoized comment ID off the existing check run's external_id
+  // (if present). On a warm second-webhook this avoids the 1–3 page issue-
+  // comment walk in upsertPrComment.
+  const memoizedCommentId = existingRun
+    ? parseCommentIdFromExternalId(existingRun.externalId)
+    : null;
+
   IN_FLIGHT_RUNS.add(inFlightKey);
   try {
     return await runPullRequestScan({
-      token, owner, repo, prNumber, headSha, existingRun,
+      token, owner, repo, prNumber, headSha, existingRun, memoizedCommentId,
     });
   } finally {
     IN_FLIGHT_RUNS.delete(inFlightKey);
   }
 }
 
-async function runPullRequestScan({ token, owner, repo, prNumber, headSha, existingRun }) {
+async function runPullRequestScan({ token, owner, repo, prNumber, headSha, existingRun, memoizedCommentId }) {
   // If we already have an in-progress/queued check run for this head SHA
   // (crash recovery, or duplicate-event race), PATCH it rather than POST
   // a new one. Applies to both the no-lockfile and lockfile-found paths.
@@ -931,10 +1023,25 @@ async function runPullRequestScan({ token, owner, repo, prNumber, headSha, exist
   // surfaces the failure; a comment with zero numbers is just noise.
   if (!allFailed) {
     try {
-      await upsertPrComment(token, {
+      const { commentId, wasCreated } = await upsertPrComment(token, {
         owner, repo, prNumber,
         body: buildPrComment(headSha, perFile, agg, decision, policySource),
+        memoizedCommentId,
       });
+      // After posting a FRESH comment (first time on this head SHA, or after
+      // the prior one was deleted), stash its ID on the check run's
+      // external_id so the next webhook can skip findGuardComment(). PATCH
+      // path doesn't need this — the existing external_id already points at
+      // the same comment we just updated. Fire-and-forget: the marker-walk
+      // fallback covers any failure here, so don't block the response.
+      if (wasCreated && commentId && checkRunId) {
+        patchCheckRunExternalId(
+          token, owner, repo, checkRunId,
+          buildExternalId(prNumber, headSha, commentId),
+        ).catch((err) => console.error(
+          'guard-webhook: patch external_id failed', err?.message || err,
+        ));
+      }
     } catch (err) {
       // Comment failure is non-fatal; the check run is the source of truth.
       console.error('guard-webhook: PR comment failed', err?.message || err);
