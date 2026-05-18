@@ -20,13 +20,17 @@
  *                                lockfile at the PR head -> runScan each
  *                                -> aggregate verdicts -> completed
  *                                check run + PR comment.
- *   4. Idempotency: in-memory Set of head SHAs already processed.
+ *   4. Idempotency: durable, GitHub-side. Every invocation queries the
+ *      existing OpenSoyce Guard check run for the head SHA — a completed
+ *      run short-circuits (no duplicate comment, no duplicate check run);
+ *      an in-progress run is PATCHed in place. Cold-start safe — the
+ *      function instance no longer needs to remember anything. Operators
+ *      can force a rescore with GUARD_FORCE_RESCORE=1.
  *   5. Always return 200 on processed events. NEVER 5xx to GitHub — it
  *      retries failed deliveries aggressively and we'd spam ourselves.
  *
  * Out of scope (separate follow-ups):
  *   - Sticky PR comments / marker-based dedupe (PR 2).
- *   - Durable webhook dedupe across cold starts (PR 3).
  *   - .opensoyce.yml policy file parsing / failure conclusions (PR 4).
  *   - Live-fire dogfooding pass (PR 5).
  *
@@ -71,20 +75,12 @@ const LOCKFILE_NAMES = new Set([
   'poetry.lock',
 ]);
 
-// In-memory dedupe. Vercel functions are short-lived but warm instances
-// reuse this. Bounded so a long-lived warm instance can't leak memory.
-// Persistent dedupe is sprint+1.
-const PROCESSED_SHAS = new Set();
-const PROCESSED_MAX = 500;
-
-function markProcessed(sha) {
-  PROCESSED_SHAS.add(sha);
-  if (PROCESSED_SHAS.size > PROCESSED_MAX) {
-    // Drop the oldest entry (insertion order = iteration order in Set).
-    const first = PROCESSED_SHAS.values().next().value;
-    if (first !== undefined) PROCESSED_SHAS.delete(first);
-  }
-}
+// Within-invocation re-entry guard. Keyed by `${owner}/${repo}@${headSha}`.
+// Durable dedupe (across invocations / cold starts) is handled by querying
+// the existing OpenSoyce Guard check run on GitHub — see findExistingCheckRun.
+// This Set only protects against duplicate webhook events arriving while a
+// previous invocation in the SAME function instance is still executing.
+const IN_FLIGHT_RUNS = new Set();
 
 // ---------------------------------------------------------------------------
 // Signature verification (HMAC-SHA256, constant-time compare)
@@ -151,7 +147,7 @@ async function createCheckRun(token, { owner, repo, headSha, status, conclusion,
   const body = {
     name: CHECK_RUN_NAME,
     head_sha: headSha,
-    external_id: `guard-v0.1-${prNumber}-${headSha}`,
+    external_id: `guard-v0.2-${prNumber}-${headSha}`,
     status,
     output: { title, summary },
   };
@@ -169,20 +165,60 @@ async function createCheckRun(token, { owner, repo, headSha, status, conclusion,
   return res.json();
 }
 
-async function updateCheckRun(token, { owner, repo, checkRunId, conclusion, title, summary }) {
+async function updateCheckRun(token, { owner, repo, checkRunId, status, conclusion, title, summary }) {
+  const effectiveStatus = status || 'completed';
+  const body = {
+    status: effectiveStatus,
+    output: { title, summary },
+  };
+  if (effectiveStatus === 'completed' && conclusion) {
+    body.conclusion = conclusion;
+  }
   const res = await githubFetch(token, `/repos/${owner}/${repo}/check-runs/${checkRunId}`, {
     method: 'PATCH',
-    body: {
-      status: 'completed',
-      conclusion,
-      output: { title, summary },
-    },
+    body,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '(no body)');
     throw new Error(`CHECK_RUN_UPDATE_FAILED status=${res.status} body=${text.slice(0, 200)}`);
   }
   return res.json();
+}
+
+/**
+ * Query GitHub for the latest OpenSoyce Guard check run for a given head SHA.
+ * Returns `{ id, status, conclusion } | null`. Never throws — on 5xx / network
+ * failure, logs and returns null so processing proceeds (better risk a
+ * duplicate than skip the user-visible PR comment).
+ */
+async function findExistingCheckRun(token, owner, repo, headSha) {
+  try {
+    const path = `/repos/${owner}/${repo}/commits/${headSha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=latest`;
+    const res = await githubFetch(token, path);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '(no body)');
+      console.error('guard-webhook: findExistingCheckRun failed', res.status, text.slice(0, 200));
+      return null;
+    }
+    const json = await res.json();
+    const runs = Array.isArray(json?.check_runs) ? json.check_runs : [];
+    if (runs.length === 0) return null;
+    // Multiple runs returned (race) → take most recent by created_at.
+    const sorted = runs.slice().sort((a, b) => {
+      const at = Date.parse(a?.created_at || '') || 0;
+      const bt = Date.parse(b?.created_at || '') || 0;
+      return bt - at;
+    });
+    const latest = sorted[0];
+    return {
+      id: latest.id,
+      status: latest.status,
+      conclusion: latest.conclusion || null,
+    };
+  } catch (err) {
+    console.error('guard-webhook: findExistingCheckRun threw', err?.message || err);
+    return null;
+  }
 }
 
 /**
@@ -551,15 +587,51 @@ async function handlePullRequest(payload) {
     return { status: 'bad_payload' };
   }
 
-  // Dedupe by head SHA. Same SHA shouldn't be re-scored if we're warm.
-  const dedupeKey = `${owner}/${repo}#${prNumber}@${headSha}`;
-  if (PROCESSED_SHAS.has(dedupeKey)) {
-    return { status: 'duplicate', headSha };
+  // Within-invocation re-entry guard: if a duplicate webhook event arrives
+  // while THIS function instance is still processing the same (owner, repo,
+  // head SHA), don't fight ourselves. Durable cross-invocation dedupe is
+  // handled by the GitHub-side check-run lookup below.
+  const inFlightKey = `${owner}/${repo}@${headSha}`;
+  if (IN_FLIGHT_RUNS.has(inFlightKey)) {
+    return { status: 'duplicate', reason: 'in_flight', headSha };
   }
 
   // Mint installation token. No caching in v0.1.
   const tokenResp = await getInstallationToken(installationId);
   const token = tokenResp.token;
+
+  // Durable dedupe via GitHub-side check-run lookup. Operators can force a
+  // rescore with GUARD_FORCE_RESCORE=1 (PR 2's sticky-comment logic will
+  // PATCH the prior comment in place, so a force-rescore overwrites instead
+  // of stacking).
+  const forceRescore = process.env.GUARD_FORCE_RESCORE === '1';
+  let existingRun = null;
+  if (!forceRescore) {
+    existingRun = await findExistingCheckRun(token, owner, repo, headSha);
+    if (existingRun && existingRun.status === 'completed') {
+      // Already processed. No duplicate comment, no duplicate check run.
+      return { status: 'duplicate', reason: 'already_completed', headSha, conclusion: existingRun.conclusion };
+    }
+    // status: in_progress | queued → crashed mid-flight or a duplicate event
+    // arrived while a prior invocation was still running. We'll PATCH that
+    // existing run rather than POSTing a new one (handled below).
+  }
+
+  IN_FLIGHT_RUNS.add(inFlightKey);
+  try {
+    return await runPullRequestScan({
+      token, owner, repo, prNumber, headSha, existingRun,
+    });
+  } finally {
+    IN_FLIGHT_RUNS.delete(inFlightKey);
+  }
+}
+
+async function runPullRequestScan({ token, owner, repo, prNumber, headSha, existingRun }) {
+  // If we already have an in-progress/queued check run for this head SHA
+  // (crash recovery, or duplicate-event race), PATCH it rather than POST
+  // a new one. Applies to both the no-lockfile and lockfile-found paths.
+  const recoverableRunId = existingRun && existingRun.status !== 'completed' ? existingRun.id : null;
 
   // List PR files first so we can decide whether to even create a check run.
   let files;
@@ -567,15 +639,23 @@ async function handlePullRequest(payload) {
     files = await listPrFiles(token, owner, repo, prNumber);
   } catch (err) {
     console.error('guard-webhook: listPrFiles failed', err?.message || err);
-    // Create a failure check so the PR author sees something went wrong.
-    await createCheckRun(token, {
-      owner, repo, headSha, prNumber,
-      status: 'completed',
-      conclusion: 'failure',
-      title: 'Guard could not list PR files.',
-      summary: `Error: \`${(err?.message || 'unknown').slice(0, 300)}\``,
-    }).catch((e) => console.error('guard-webhook: failure check create failed', e?.message || e));
-    markProcessed(dedupeKey);
+    // Create (or PATCH) a failure check so the PR author sees something went wrong.
+    if (recoverableRunId) {
+      await updateCheckRun(token, {
+        owner, repo, checkRunId: recoverableRunId,
+        conclusion: 'failure',
+        title: 'Guard could not list PR files.',
+        summary: `Error: \`${(err?.message || 'unknown').slice(0, 300)}\``,
+      }).catch((e) => console.error('guard-webhook: failure check patch failed', e?.message || e));
+    } else {
+      await createCheckRun(token, {
+        owner, repo, headSha, prNumber,
+        status: 'completed',
+        conclusion: 'failure',
+        title: 'Guard could not list PR files.',
+        summary: `Error: \`${(err?.message || 'unknown').slice(0, 300)}\``,
+      }).catch((e) => console.error('guard-webhook: failure check create failed', e?.message || e));
+    }
     return { status: 'list_files_failed' };
   }
 
@@ -583,30 +663,52 @@ async function handlePullRequest(payload) {
 
   if (lockfileFiles.length === 0) {
     const { conclusion, title, summary } = buildNoLockfileCheck(headSha);
-    await createCheckRun(token, {
-      owner, repo, headSha, prNumber,
-      status: 'completed',
-      conclusion,
-      title,
-      summary,
-    });
-    markProcessed(dedupeKey);
+    if (recoverableRunId) {
+      // Crashed → recovered no-lockfile path: PATCH instead of creating a duplicate.
+      await updateCheckRun(token, {
+        owner, repo, checkRunId: recoverableRunId,
+        conclusion, title, summary,
+      });
+    } else {
+      await createCheckRun(token, {
+        owner, repo, headSha, prNumber,
+        status: 'completed',
+        conclusion,
+        title,
+        summary,
+      });
+    }
     return { status: 'no_lockfile' };
   }
 
   // Two-step: in_progress first (so PR shows a running check), then complete.
-  let checkRunId;
-  try {
-    const created = await createCheckRun(token, {
-      owner, repo, headSha, prNumber,
-      status: 'in_progress',
-      title: 'OpenSoyce Guard scanning…',
-      summary: `Inspecting ${lockfileFiles.length} lockfile change(s).`,
-    });
-    checkRunId = created?.id;
-  } catch (err) {
-    console.error('guard-webhook: in_progress check create failed', err?.message || err);
-    // Don't bail — fall through to single-shot completion below.
+  // If we already have an in-progress/queued check (crash recovery), reuse it.
+  let checkRunId = recoverableRunId;
+  if (checkRunId) {
+    try {
+      await updateCheckRun(token, {
+        owner, repo, checkRunId,
+        status: 'in_progress',
+        title: 'OpenSoyce Guard scanning…',
+        summary: `Inspecting ${lockfileFiles.length} lockfile change(s).`,
+      });
+    } catch (err) {
+      console.error('guard-webhook: in_progress check patch failed', err?.message || err);
+      // Don't bail — we'll attempt the completion update below.
+    }
+  } else {
+    try {
+      const created = await createCheckRun(token, {
+        owner, repo, headSha, prNumber,
+        status: 'in_progress',
+        title: 'OpenSoyce Guard scanning…',
+        summary: `Inspecting ${lockfileFiles.length} lockfile change(s).`,
+      });
+      checkRunId = created?.id;
+    } catch (err) {
+      console.error('guard-webhook: in_progress check create failed', err?.message || err);
+      // Don't bail — fall through to single-shot completion below.
+    }
   }
 
   // Real scanner: fetch each lockfile's content at the PR head, then run the
@@ -671,7 +773,6 @@ async function handlePullRequest(payload) {
         summary: `Error: \`${(err?.message || 'unknown').slice(0, 300)}\``,
       }).catch(() => {});
     }
-    markProcessed(dedupeKey);
     return { status: 'check_completion_failed' };
   }
 
@@ -690,7 +791,6 @@ async function handlePullRequest(payload) {
     }
   }
 
-  markProcessed(dedupeKey);
   return {
     status: 'scanned',
     lockfiles: lockfileFiles.length,
