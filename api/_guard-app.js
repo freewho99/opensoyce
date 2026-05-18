@@ -19,6 +19,30 @@
 
 import crypto from 'node:crypto';
 
+/**
+ * Installation token cache — per warm function instance.
+ *
+ * GitHub installation tokens are valid ~1 hour. A typical webhook uses one
+ * for ~5 seconds, so on a busy installation 80%+ of webhook invocations
+ * landing on the same warm instance can reuse a cached token instead of
+ * paying for a fresh App-JWT mint + token-exchange round trip.
+ *
+ * Keyed by installationId. Value shape:
+ *   { token: string, expiresAt: number (ms epoch), fetchedAt: number (ms epoch) }
+ *
+ * Eviction: when at CACHE_MAX_ENTRIES cap, drop the oldest insertion
+ * (Map iteration order is insertion order, so keys().next().value is
+ * the oldest fetchedAt).
+ *
+ * Cold starts re-mint (the Map lives in module scope and dies with the
+ * function instance). Rejected/revoked tokens are not invalidated here —
+ * the next API call will 401 and the webhook error path will surface it.
+ * Adding 401-driven cache invalidation is a follow-up.
+ */
+const INSTALLATION_TOKEN_CACHE = new Map();
+const TOKEN_SAFETY_MARGIN_MS = 5 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 500;
+
 function base64url(bufOrString) {
   const buf = Buffer.isBuffer(bufOrString) ? bufOrString : Buffer.from(bufOrString, 'utf8');
   return buf.toString('base64')
@@ -97,6 +121,15 @@ export function generateAppJwt(appId, privateKey) {
  */
 export async function getInstallationToken(installationId, appJwt) {
   if (!installationId) throw new Error('installationId required');
+
+  // Cache hit path: return cached token shape if it has more than the
+  // safety margin of life left. Same `{ token, expires_at, permissions }`
+  // shape as the GitHub REST response so callers can't tell the difference.
+  const cached = INSTALLATION_TOKEN_CACHE.get(installationId);
+  if (cached && cached.expiresAt - Date.now() > TOKEN_SAFETY_MARGIN_MS) {
+    return { token: cached.token, expires_at: cached.expires_at, permissions: cached.permissions };
+  }
+
   const jwt = appJwt ?? generateAppJwt();
   const url = `https://api.github.com/app/installations/${installationId}/access_tokens`;
   const res = await fetch(url, {
@@ -112,7 +145,34 @@ export async function getInstallationToken(installationId, appJwt) {
     const body = await res.text().catch(() => '(no body)');
     throw new Error(`INSTALLATION_TOKEN_FAILED status=${res.status} body=${body.slice(0, 200)}`);
   }
-  return res.json();
+  const data = await res.json();
+
+  // Cache the freshly minted token. If expires_at fails to parse cleanly
+  // (NaN), fall back to a conservative 50-minute lifetime so we still get
+  // most of the cache benefit while leaving a 10-minute buffer vs the
+  // real ~60-minute GitHub lifetime.
+  const parsedExpiry = Date.parse(data.expires_at);
+  const expiresAt = Number.isFinite(parsedExpiry) ? parsedExpiry : Date.now() + 3000 * 1000;
+
+  // Evict oldest entry when at cap. Map iteration is insertion-ordered
+  // so the first key is the oldest fetchedAt.
+  if (!INSTALLATION_TOKEN_CACHE.has(installationId) && INSTALLATION_TOKEN_CACHE.size >= CACHE_MAX_ENTRIES) {
+    const oldestKey = INSTALLATION_TOKEN_CACHE.keys().next().value;
+    if (oldestKey !== undefined) INSTALLATION_TOKEN_CACHE.delete(oldestKey);
+  }
+  // Delete-then-set so a refreshed entry moves to the end of insertion
+  // order (otherwise a frequently-refreshed installation could become
+  // the "oldest" while actually being the newest).
+  INSTALLATION_TOKEN_CACHE.delete(installationId);
+  INSTALLATION_TOKEN_CACHE.set(installationId, {
+    token: data.token,
+    expires_at: data.expires_at,
+    permissions: data.permissions,
+    expiresAt,
+    fetchedAt: Date.now(),
+  });
+
+  return data;
 }
 
 /**
