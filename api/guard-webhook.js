@@ -698,6 +698,197 @@ function decideConclusion(perFile, decision) {
   return decision.conclusion;
 }
 
+// ---------------------------------------------------------------------------
+// SARIF 2.1.0 inline report (Sprint+2 PR 3).
+//
+// We emit a SARIF doc as a fenced JSON code block inside the Check Run's
+// `output.text` (via `output.summary`, GitHub treats both the same — 64 KB
+// cap). The doc is wrapped in a <details> so the human verdict stays the
+// headline; reviewers expand the block to copy/save SARIF, and downstream
+// tooling polling the Check Run API can grep the fence to extract it.
+//
+// One `result` entry per (non-OK dep, lockfile) pair. USE READY is skipped
+// entirely (it's "all clear" — nothing for a SARIF consumer to triage).
+// FORKABLE is collapsed to STABLE (matches the rest of the comment shape).
+//
+// Severity mapping:
+//   graveyard, risky → error
+//   watchlist        → warning
+//   stable           → note
+// ---------------------------------------------------------------------------
+
+const SARIF_TOOL_DRIVER = Object.freeze({
+  name: 'OpenSoyce Guard',
+  informationUri: 'https://www.opensoyce.com/guard',
+  version: '0.2.0',
+  rules: [
+    { id: 'graveyard', name: 'GraveyardDependency', shortDescription: { text: 'Dependency on an abandoned package.' }, defaultConfiguration: { level: 'error' } },
+    { id: 'risky', name: 'RiskyDependency', shortDescription: { text: 'Dependency with unresolved security or maintenance risk.' }, defaultConfiguration: { level: 'error' } },
+    { id: 'watchlist', name: 'WatchlistDependency', shortDescription: { text: 'Dependency on a fast-moving package or recent advisory history.' }, defaultConfiguration: { level: 'warning' } },
+    { id: 'stable', name: 'StableDependency', shortDescription: { text: 'Dependency on a stable package.' }, defaultConfiguration: { level: 'note' } },
+  ],
+});
+
+// Severity rank for descending-severity truncation (error first).
+const SARIF_LEVEL_RANK = { error: 3, warning: 2, note: 1 };
+
+/**
+ * Map a Guard label to the SARIF ruleId / level pair.
+ * Returns null for USE READY (skipped entirely per spec).
+ */
+function sarifClassify(label) {
+  switch (label) {
+    case 'GRAVEYARD': return { ruleId: 'graveyard', level: 'error' };
+    case 'RISKY': return { ruleId: 'risky', level: 'error' };
+    case 'WATCHLIST': return { ruleId: 'watchlist', level: 'warning' };
+    // FORKABLE arrives mapped to STABLE already (mapVerdictToLabel above).
+    case 'STABLE': return { ruleId: 'stable', level: 'note' };
+    case 'USE READY': return null;
+    default: return null;
+  }
+}
+
+/**
+ * Build a SARIF 2.1.0 document from the per-file scan rows. One `result` per
+ * (dep, lockfile) pair — SARIF consumers expect granular locations, and a
+ * monorepo with the same risky dep in multiple lockfiles should surface each.
+ *
+ * @param {Array<{ lockfileFile: { filename: string }, scan: { ok: boolean, scored: Array<{ name: string, label: string, reason: string }> } }>} perFile
+ * @returns {object} SARIF 2.1.0 document.
+ */
+function buildSarifReport(perFile) {
+  const results = [];
+  for (const f of perFile) {
+    if (!f.scan || !f.scan.ok) continue;
+    const uri = f.lockfileFile.filename;
+    for (const row of f.scan.scored) {
+      const cls = sarifClassify(row.label);
+      if (!cls) continue;
+      // version isn't surfaced by runScan's per-dep output today; reason
+      // carries the engine's "why" string (or the label as a fallback).
+      const messageParts = [row.name];
+      if (row.reason && row.reason !== row.label) {
+        messageParts.push(` — ${row.reason}`);
+      }
+      results.push({
+        ruleId: cls.ruleId,
+        level: cls.level,
+        message: { text: messageParts.join('') },
+        locations: [
+          {
+            physicalLocation: {
+              artifactLocation: { uri },
+            },
+            logicalLocations: [
+              { name: row.name, kind: 'package' },
+            ],
+          },
+        ],
+      });
+    }
+  }
+  return {
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+    version: '2.1.0',
+    runs: [
+      {
+        tool: { driver: SARIF_TOOL_DRIVER },
+        results,
+      },
+    ],
+  };
+}
+
+/**
+ * JSON.stringify the SARIF doc with size-aware truncation. If the serialized
+ * doc + already-built human summary would exceed `maxBytes`, drop SARIF
+ * `results` entries (lowest severity first) until it fits. The driver block
+ * stays — a SARIF doc with zero results is still valid.
+ *
+ * Returns `{ text, truncatedCount, totalCount }` where `text` is the final
+ * JSON string and `truncatedCount` is how many results were dropped.
+ */
+function serializeSarif(sarif, maxBytes) {
+  const totalCount = sarif.runs?.[0]?.results?.length ?? 0;
+  // Quick path: full doc fits.
+  let text = JSON.stringify(sarif, null, 2);
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) {
+    return { text, truncatedCount: 0, totalCount };
+  }
+  // Sort results by severity desc (error > warning > note); within the same
+  // severity, preserve original order (stable sort in V8).
+  const original = sarif.runs[0].results;
+  const ranked = original
+    .map((r, idx) => ({ r, idx, rank: SARIF_LEVEL_RANK[r.level] ?? 0 }))
+    .sort((a, b) => (b.rank - a.rank) || (a.idx - b.idx))
+    .map((x) => x.r);
+  // Binary-search the largest prefix that fits. Avoids quadratic stringify.
+  let lo = 0;
+  let hi = ranked.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const trial = {
+      ...sarif,
+      runs: [{ ...sarif.runs[0], results: ranked.slice(0, mid) }],
+    };
+    const trialText = JSON.stringify(trial, null, 2);
+    if (Buffer.byteLength(trialText, 'utf8') <= maxBytes) {
+      best = mid;
+      text = trialText;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return { text, truncatedCount: totalCount - best, totalCount };
+}
+
+/**
+ * Append the SARIF doc to a Check Run summary as a collapsed <details> block.
+ * 64 KB is the Check Run output.text cap; we leave a margin so the GitHub UI
+ * (which adds whitespace) doesn't trip on the edge.
+ *
+ * Returns the new summary string. If the summary alone is already over the
+ * SARIF budget the SARIF block is omitted (the human verdict wins).
+ */
+function appendSarifBlock(summary, perFile) {
+  const CHECK_RUN_BUDGET = 64 * 1024;
+  const SAFETY_MARGIN = 1024; // leave a kilobyte for GitHub's UI overhead
+  const summaryBytes = Buffer.byteLength(summary, 'utf8');
+  // Reserve ~400 bytes for the <details> wrapper + truncation footer.
+  const sarifBudget = CHECK_RUN_BUDGET - SAFETY_MARGIN - summaryBytes - 400;
+  if (sarifBudget < 512) {
+    // Not enough room left even for the smallest meaningful SARIF doc.
+    return summary;
+  }
+  const sarif = buildSarifReport(perFile);
+  if ((sarif.runs?.[0]?.results?.length ?? 0) === 0) {
+    // Nothing to triage — all deps are USE READY (or there were no deps).
+    // Skip the block entirely; the human summary already says "0 blocked, 0 warned".
+    return summary;
+  }
+  const { text, truncatedCount, totalCount } = serializeSarif(sarif, sarifBudget);
+  const truncationNote = truncatedCount > 0
+    ? `\n<sub>SARIF results truncated to first ${totalCount - truncatedCount} of ${totalCount}.</sub>`
+    : '';
+  // Note: the inner fence uses ``` and the outer markdown context keeps the
+  // <details> open — GitHub renders this exactly as the spec illustrates.
+  const block = [
+    '',
+    '<details>',
+    '<summary>SARIF report (click to expand)</summary>',
+    '',
+    '```json',
+    text,
+    '```',
+    '',
+    '</details>',
+    truncationNote,
+  ].join('\n');
+  return summary + block;
+}
+
 function buildReport(perFile, agg, decision) {
   const n = perFile.length;
   const list = perFile.map((f) => {
@@ -711,7 +902,7 @@ function buildReport(perFile, agg, decision) {
     .map((r) => `- \`${r.name}\` — ${r.label}`)
     .join('\n') || '_none_';
   const title = `Guard scanned ${n} lockfile${n === 1 ? '' : 's'} — ${decision.blockedDeps.length} blocked, ${decision.warnDeps.length} warned.`;
-  const summary = [
+  const humanSummary = [
     `**Guard scanned ${n} lockfile${n === 1 ? '' : 's'}. ${decision.blockedDeps.length} blocked, ${decision.warnDeps.length} warned.**`,
     '',
     'Lockfiles inspected:',
@@ -722,6 +913,7 @@ function buildReport(perFile, agg, decision) {
     '',
     '(_Full breakdown in PR comment._)',
   ].join('\n');
+  const summary = appendSarifBlock(humanSummary, perFile);
   return { title, summary };
 }
 
