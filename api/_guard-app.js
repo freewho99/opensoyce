@@ -139,3 +139,75 @@ export async function githubFetch(token, path, opts = {}) {
   }
   return fetch(url, init);
 }
+
+/**
+ * Fetch a file's content at a specific ref using the contents API. Returns
+ * `{ text, size }` on success or throws a tagged error. The 5MB ceiling
+ * mirrors the /api/scan ceiling so the same scoring pipeline upstream
+ * doesn't have to defend against a Guard-only oversize path.
+ *
+ * @param {string} token
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} path
+ * @param {string} ref
+ * @returns {Promise<{ text: string, size: number }>}
+ */
+export async function fetchLockfileContent(token, owner, repo, path, ref) {
+  const encoded = path.split('/').map(encodeURIComponent).join('/');
+  const res = await githubFetch(token, `/repos/${owner}/${repo}/contents/${encoded}?ref=${encodeURIComponent(ref)}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '(no body)');
+    const err = new Error(`CONTENT_FETCH_FAILED status=${res.status} body=${body.slice(0, 200)}`);
+    err.code = 'CONTENT_FETCH_FAILED';
+    throw err;
+  }
+  const data = await res.json();
+  // The contents API returns an array if `path` is a directory — guard.
+  if (Array.isArray(data)) {
+    const err = new Error('CONTENT_IS_DIRECTORY');
+    err.code = 'CONTENT_IS_DIRECTORY';
+    throw err;
+  }
+  if (typeof data.size === 'number' && data.size > 5_000_000) {
+    const err = new Error(`CONTENT_TOO_LARGE size=${data.size}`);
+    err.code = 'CONTENT_TOO_LARGE';
+    throw err;
+  }
+  if (data.encoding !== 'base64' || typeof data.content !== 'string') {
+    // Files >1MB return `content: ""` and require the blobs API. Fetch via
+    // git_url (the blob URL embedded in the contents response).
+    if (data.git_url) {
+      const blobRes = await githubFetch(token, data.git_url);
+      if (!blobRes.ok) {
+        const body = await blobRes.text().catch(() => '(no body)');
+        const err = new Error(`BLOB_FETCH_FAILED status=${blobRes.status} body=${body.slice(0, 200)}`);
+        err.code = 'BLOB_FETCH_FAILED';
+        throw err;
+      }
+      const blob = await blobRes.json();
+      if (blob.encoding !== 'base64' || typeof blob.content !== 'string') {
+        const err = new Error('BLOB_BAD_ENCODING');
+        err.code = 'BLOB_BAD_ENCODING';
+        throw err;
+      }
+      const text = Buffer.from(blob.content, 'base64').toString('utf8');
+      if (text.length > 5_000_000) {
+        const err = new Error(`CONTENT_TOO_LARGE size=${text.length}`);
+        err.code = 'CONTENT_TOO_LARGE';
+        throw err;
+      }
+      return { text, size: text.length };
+    }
+    const err = new Error('CONTENT_BAD_ENCODING');
+    err.code = 'CONTENT_BAD_ENCODING';
+    throw err;
+  }
+  const text = Buffer.from(data.content, 'base64').toString('utf8');
+  if (text.length > 5_000_000) {
+    const err = new Error(`CONTENT_TOO_LARGE size=${text.length}`);
+    err.code = 'CONTENT_TOO_LARGE';
+    throw err;
+  }
+  return { text, size: text.length };
+}
