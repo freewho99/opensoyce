@@ -455,12 +455,16 @@ async function scanOneLockfile(lockfileText, filename, getAnalysis) {
     // (`selectedHealth.scored[].verdict`). We collect both; dedupe by
     // `${ecosystem}:${name}` to avoid double-counting the same package.
     const seen = new Set();
-    const pushRow = (name, label, reason) => {
+    const pushRow = (name, label, reason, rawLabel) => {
       if (!name || !label) return;
       const key = `${ecosystem}:${name}`;
       if (seen.has(key)) return;
       seen.add(key);
-      scored.push({ name, ecosystem, label, reason: reason || label });
+      // `rawLabel` is the engine's pre-mapping verdict (USE READY / FORKABLE /
+      // STABLE / WATCHLIST / RISKY / STALE). Carried through so the Sprint+4
+      // verdict_snapshots writer can record lossless history — the comment/
+      // SARIF surfaces still use `label` (FORKABLE collapsed to STABLE).
+      scored.push({ name, ecosystem, label, reason: reason || label, rawLabel });
     };
     for (const v of result.vulnerabilities || []) {
       const verdict = v.repoHealth && v.repoHealth.verdict;
@@ -472,7 +476,7 @@ async function scanOneLockfile(lockfileText, filename, getAnalysis) {
       const reason = sev
         ? `open ${sev} advisory on ${v.package}`
         : label;
-      pushRow(v.package, label, reason);
+      pushRow(v.package, label, reason, verdict);
     }
     if (result.selectedHealth && Array.isArray(result.selectedHealth.scored)) {
       for (const row of result.selectedHealth.scored) {
@@ -481,7 +485,7 @@ async function scanOneLockfile(lockfileText, filename, getAnalysis) {
         if (!label) continue;
         // The engine doesn't surface a free-text reason for selected-health
         // rows. Fall back to verdict label — per spec, "don't invent reasons".
-        pushRow(row.package, label, label);
+        pushRow(row.package, label, label, row.verdict);
       }
     }
     return {
@@ -520,7 +524,9 @@ function aggregateScans(perFile) {
   for (const r of all) {
     if (counts[r.label] !== undefined) counts[r.label] += 1;
   }
-  return { all, counts, totalChanged: all.length };
+  // `byKey` is exposed alongside `all` so the Sprint+4 verdict_snapshots
+  // writer can iterate `${ecosystem}:${name}` keys without re-deriving them.
+  return { all, byKey, counts, totalChanged: all.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -745,6 +751,97 @@ async function fetchExceptions(owner, repo) {
   } catch (err) {
     console.warn('guard-webhook: exceptions lookup threw:', err && err.message ? err.message : err);
     return new Map();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Verdict snapshots writer (Sprint+4 PR 1).
+//
+// After every PR scan, insert one row per scored dep into Supabase's
+// `verdict_snapshots` table. This is the data the Sprint+4 watchlist
+// dashboard (PRs 2/3) will read to surface current verdicts across watched
+// repos and detect recent degradations.
+//
+// Stores the RAW engine label (USE READY / FORKABLE / STABLE / WATCHLIST /
+// RISKY / GRAVEYARD — note GRAVEYARD is the schema's spelling for STALE), not
+// the FORKABLE→STABLE-collapsed display label, so the history is lossless
+// for future analysis.
+//
+// FAILURE-MODE CONTRACT (mirrors fetchExceptions): the webhook MUST NEVER
+// fail because Supabase is down or unconfigured. Env missing, insert error,
+// or 1s timeout all degrade to a single console.warn and an empty return.
+// ---------------------------------------------------------------------------
+
+const VALID_SNAPSHOT_LABELS = new Set([
+  'USE READY', 'STABLE', 'FORKABLE', 'WATCHLIST', 'RISKY', 'GRAVEYARD',
+]);
+
+// Engine emits STALE; the snapshot schema's check constraint spells it
+// GRAVEYARD. Normalize at the boundary so the raw history is still lossless
+// against the agreed schema vocabulary (STALE and GRAVEYARD mean the same
+// thing — "the package is abandoned"; the engine and the schema just picked
+// different words).
+function normalizeRawLabel(rawLabel) {
+  if (typeof rawLabel !== 'string') return null;
+  if (rawLabel === 'STALE') return 'GRAVEYARD';
+  return VALID_SNAPSHOT_LABELS.has(rawLabel) ? rawLabel : null;
+}
+
+async function recordVerdictSnapshots(owner, repo, agg) {
+  const byKey = agg && agg.byKey instanceof Map ? agg.byKey : null;
+  if (!byKey || byKey.size === 0) return;
+
+  const rows = [];
+  for (const [key, dep] of byKey.entries()) {
+    const sepIdx = key.indexOf(':');
+    if (sepIdx <= 0) continue;
+    const ecosystem = key.slice(0, sepIdx);
+    const name = key.slice(sepIdx + 1);
+    const normalized = normalizeRawLabel(dep.rawLabel);
+    if (!normalized) {
+      console.warn(
+        'guard-webhook: snapshot dropping row with invalid label',
+        { ecosystem, name, rawLabel: dep.rawLabel },
+      );
+      continue;
+    }
+    rows.push({
+      owner,
+      repo,
+      package_name: name,
+      ecosystem,
+      label: normalized,
+    });
+  }
+  if (rows.length === 0) return;
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    console.warn('guard-webhook: snapshot write skipped:', msg);
+    return;
+  }
+
+  // Race the insert against a 1s timeout so a slow / hung Supabase never
+  // pushes us past the Check Run round-trip budget. Vercel recycles the
+  // function after the response is sent so a fire-and-forget Promise might
+  // not complete — we have to wait, but only for 1s.
+  const insertPromise = sb.from('verdict_snapshots').insert(rows);
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('snapshot_insert_timeout')), 1000),
+  );
+  try {
+    const result = await Promise.race([insertPromise, timeoutPromise]);
+    if (result && result.error) {
+      console.warn('guard-webhook: snapshot insert error:', result.error.message);
+    }
+  } catch (err) {
+    console.warn(
+      'guard-webhook: snapshot insert timed out or threw:',
+      err && err.message ? err.message : err,
+    );
   }
 }
 
@@ -1326,33 +1423,47 @@ async function runPullRequestScan({ token, owner, repo, prNumber, headSha, exist
 
   // PR comment (mirrors the check summary, formatted as GuardPrCommentPreview).
   // Skip the comment when every lockfile scan failed — the check run already
-  // surfaces the failure; a comment with zero numbers is just noise.
-  if (!allFailed) {
-    try {
-      const { commentId, wasCreated } = await upsertPrComment(token, {
-        owner, repo, prNumber,
-        body: buildPrComment(headSha, perFile, agg, decision, policySource),
-        memoizedCommentId,
-      });
-      // After posting a FRESH comment (first time on this head SHA, or after
-      // the prior one was deleted), stash its ID on the check run's
-      // external_id so the next webhook can skip findGuardComment(). PATCH
-      // path doesn't need this — the existing external_id already points at
-      // the same comment we just updated. Fire-and-forget: the marker-walk
-      // fallback covers any failure here, so don't block the response.
-      if (wasCreated && commentId && checkRunId) {
-        patchCheckRunExternalId(
-          token, owner, repo, checkRunId,
-          buildExternalId(prNumber, headSha, commentId),
-        ).catch((err) => console.error(
-          'guard-webhook: patch external_id failed', err?.message || err,
-        ));
-      }
-    } catch (err) {
-      // Comment failure is non-fatal; the check run is the source of truth.
-      console.error('guard-webhook: PR comment failed', err?.message || err);
-    }
-  }
+  // surfaces the failure; a comment with zero numbers is just noise. The
+  // Sprint+4 snapshot write runs in parallel with the comment upsert so the
+  // Supabase round-trip costs zero perceived latency when the DB is healthy
+  // (the comment write is its peer in wall-clock time); when Supabase is
+  // slow/down the 1s timeout inside recordVerdictSnapshots caps the worst case.
+  const commentPromise = allFailed
+    ? Promise.resolve()
+    : (async () => {
+        try {
+          const { commentId, wasCreated } = await upsertPrComment(token, {
+            owner, repo, prNumber,
+            body: buildPrComment(headSha, perFile, agg, decision, policySource),
+            memoizedCommentId,
+          });
+          // After posting a FRESH comment (first time on this head SHA, or after
+          // the prior one was deleted), stash its ID on the check run's
+          // external_id so the next webhook can skip findGuardComment(). PATCH
+          // path doesn't need this — the existing external_id already points at
+          // the same comment we just updated. Fire-and-forget: the marker-walk
+          // fallback covers any failure here, so don't block the response.
+          if (wasCreated && commentId && checkRunId) {
+            patchCheckRunExternalId(
+              token, owner, repo, checkRunId,
+              buildExternalId(prNumber, headSha, commentId),
+            ).catch((err) => console.error(
+              'guard-webhook: patch external_id failed', err?.message || err,
+            ));
+          }
+        } catch (err) {
+          // Comment failure is non-fatal; the check run is the source of truth.
+          console.error('guard-webhook: PR comment failed', err?.message || err);
+        }
+      })();
+
+  // recordVerdictSnapshots never throws — its contract is to swallow every
+  // failure mode (env missing, insert error, 1s timeout) into a console.warn —
+  // so plain Promise.all is safe here without a wrapping try/catch.
+  await Promise.all([
+    commentPromise,
+    recordVerdictSnapshots(owner, repo, agg),
+  ]);
 
   return {
     status: 'scanned',
