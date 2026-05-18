@@ -25,9 +25,9 @@
  */
 
 import crypto from 'node:crypto';
-import { createClient } from '@supabase/supabase-js';
 import { isValidGithubName } from '../src/shared/validateRepo.js';
 import { generateAppJwt, getInstallationToken } from './_guard-app.js';
+import { getSupabase } from './_supabase.js';
 
 // ---------------------------------------------------------------------------
 // Constants + validation
@@ -44,18 +44,8 @@ const EXPIRES_MAX_DAYS = 365;
 const SESSION_COOKIE_NAME = 'osg_session';
 
 // ---------------------------------------------------------------------------
-// Supabase client (lazy — cold starts that don't need it don't pay the cost)
+// Supabase client lives in ./_supabase.js (shared with api/guard-webhook.js).
 // ---------------------------------------------------------------------------
-
-let supabaseClient;
-function getSupabase() {
-  if (supabaseClient) return supabaseClient;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('SUPABASE_ENV_MISSING');
-  supabaseClient = createClient(url, key, { auth: { persistSession: false } });
-  return supabaseClient;
-}
 
 // ---------------------------------------------------------------------------
 // Installation-id cache (warm-instance lifetime)

@@ -48,6 +48,7 @@ import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 
 import { getInstallationToken, githubFetch, fetchLockfileContent } from './_guard-app.js';
+import { getSupabase } from './_supabase.js';
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
 import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
 import { runScan, mapWithConcurrency } from '../src/shared/runScan.js';
@@ -643,21 +644,44 @@ async function fetchPolicy(token, owner, repo) {
  *   - else label in policy.warn → WARN
  *   - else → OK (covers explicit allow + anything unclassified)
  *
- * Returns `{ conclusion, blockedDeps, warnDeps }`:
+ * Sprint+3 exception demotion (BLOCK → WARN only):
+ *   When `exceptions` (Map<`${ecosystem}:${name}`, { reason, expires_at,
+ *   granted_by }>) contains a dep that WOULD have been BLOCKed by policy,
+ *   that dep is demoted to WARN instead. The dep stays visible in the
+ *   "Warnings" section, annotated with the exception reason + expiry, but
+ *   it no longer drives the Check Run to `failure`. Exceptions DO NOT
+ *   affect WARN deps (no WARN→OK demotion) and DO NOT affect deps whose
+ *   label isn't in `policy.block`. Tracks demoted rows in
+ *   `decision.exceptionsApplied` so the comment footer can surface the
+ *   "N active exception(s)" suffix.
+ *
+ * Returns `{ conclusion, blockedDeps, warnDeps, exceptionsApplied }`:
  *   - Any BLOCK → `failure`
  *   - No BLOCK, any WARN → `neutral`
  *   - All OK → `success`
  */
-function applyPolicy(policy, agg) {
+function applyPolicy(policy, agg, exceptions) {
   const block = new Set(policy.block);
   const warn = new Set(policy.warn);
+  const exceptionMap = exceptions instanceof Map ? exceptions : null;
   const blockedDeps = [];
   const warnDeps = [];
+  let exceptionsApplied = 0;
   for (const row of agg.all) {
     const key = LABEL_TO_POLICY_KEY[row.label];
     if (!key) continue;
     if (block.has(key)) {
-      blockedDeps.push(row);
+      const exKey = `${row.ecosystem}:${row.name}`;
+      const exception = exceptionMap ? exceptionMap.get(exKey) : null;
+      if (exception) {
+        // BLOCK → WARN demotion. Keep visibility, lose the failure conclusion.
+        // Carry exception metadata onto the row so the comment renderer can
+        // surface "(exception expires <date>: <reason>)".
+        warnDeps.push({ ...row, exception });
+        exceptionsApplied += 1;
+      } else {
+        blockedDeps.push(row);
+      }
     } else if (warn.has(key)) {
       warnDeps.push(row);
     }
@@ -666,7 +690,74 @@ function applyPolicy(policy, agg) {
   if (blockedDeps.length > 0) conclusion = 'failure';
   else if (warnDeps.length > 0) conclusion = 'neutral';
   else conclusion = 'success';
-  return { conclusion, blockedDeps, warnDeps };
+  return { conclusion, blockedDeps, warnDeps, exceptionsApplied };
+}
+
+// ---------------------------------------------------------------------------
+// Exceptions lookup (Sprint+3).
+//
+// Reads non-revoked, non-expired rows from Supabase's `exceptions` table for
+// the current (owner, repo). Returns a Map keyed by `${ecosystem}:${package}`
+// (the same shape `aggregateScans` uses) so `applyPolicy` can demote BLOCKs
+// in O(1) per dep.
+//
+// FAILURE-MODE CONTRACT: this lookup is best-effort. Missing env vars, table
+// not migrated, network failures, query errors — every failure mode returns
+// an EMPTY MAP with a single console.warn. The check run MUST NEVER fail
+// because Supabase is down or unconfigured.
+// ---------------------------------------------------------------------------
+
+async function fetchExceptions(owner, repo) {
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    if (msg === 'SUPABASE_ENV_MISSING') {
+      console.warn('guard-webhook: exceptions lookup skipped: SUPABASE_ENV_MISSING');
+    } else {
+      console.warn('guard-webhook: exceptions lookup skipped:', msg);
+    }
+    return new Map();
+  }
+  try {
+    const { data, error } = await sb
+      .from('exceptions')
+      .select('package_name, ecosystem, reason, expires_at, granted_by')
+      .eq('owner', owner)
+      .eq('repo', repo)
+      .is('revoked_at', null)
+      .gt('expires_at', new Date().toISOString());
+    if (error) {
+      console.warn('guard-webhook: exceptions lookup failed:', error.message);
+      return new Map();
+    }
+    const map = new Map();
+    for (const row of data || []) {
+      if (!row || typeof row.ecosystem !== 'string' || typeof row.package_name !== 'string') continue;
+      map.set(`${row.ecosystem}:${row.package_name}`, {
+        reason: row.reason || '',
+        expires_at: row.expires_at,
+        granted_by: row.granted_by || '',
+      });
+    }
+    return map;
+  } catch (err) {
+    console.warn('guard-webhook: exceptions lookup threw:', err && err.message ? err.message : err);
+    return new Map();
+  }
+}
+
+/**
+ * Format an exception's `expires_at` timestamp (ISO string) as a bare date
+ * for the comment annotation. Falls back gracefully on malformed input.
+ */
+function formatExpiry(expiresAt) {
+  if (typeof expiresAt !== 'string' || !expiresAt) return 'unknown';
+  const d = new Date(expiresAt);
+  if (Number.isNaN(d.getTime())) return 'unknown';
+  // YYYY-MM-DD — short, unambiguous, locale-free.
+  return d.toISOString().slice(0, 10);
 }
 
 // ---------------------------------------------------------------------------
@@ -937,7 +1028,17 @@ function buildAllFailedReport(perFile) {
 
 function renderRows(rows) {
   if (!rows.length) return '_none_';
-  return rows.map((r) => `- \`${r.name}\` — ${r.label} — ${r.reason}`).join('\n');
+  return rows.map((r) => {
+    // Demoted-from-BLOCK rows carry an `exception` payload. Distinguish them
+    // visually from organic WATCHLIST/WARN rows so the team can see at a
+    // glance which warnings are "excepted blocks" vs. raw warnings.
+    if (r.exception) {
+      const expiry = formatExpiry(r.exception.expires_at);
+      const reason = r.exception.reason ? `: "${r.exception.reason}"` : '';
+      return `- \`${r.name}\` — ${r.label} (exception expires ${expiry}${reason})`;
+    }
+    return `- \`${r.name}\` — ${r.label} — ${r.reason}`;
+  }).join('\n');
 }
 
 function buildPrComment(headSha, perFile, agg, decision, policySource) {
@@ -947,9 +1048,16 @@ function buildPrComment(headSha, perFile, agg, decision, policySource) {
       : `scan failed: ${f.scan && f.scan.error ? f.scan.error : 'unknown'}`;
     return `- \`${f.lockfileFile.filename}\` (${status})`;
   }).join('\n');
-  const policyFooter = policySource === 'custom'
-    ? '<sub>Policy: custom. v0.2</sub>'
-    : '<sub>Policy: default warn-only. v0.2</sub>';
+  const exceptionsApplied = decision && typeof decision.exceptionsApplied === 'number'
+    ? decision.exceptionsApplied
+    : 0;
+  const exceptionSuffix = exceptionsApplied > 0
+    ? ` — ${exceptionsApplied} active exception${exceptionsApplied === 1 ? '' : 's'}.`
+    : '';
+  const policyBase = policySource === 'custom'
+    ? 'Policy: custom. v0.2'
+    : 'Policy: default warn-only. v0.2';
+  const policyFooter = `<sub>${policyBase}${exceptionSuffix}</sub>`;
   if (agg.totalChanged === 0) {
     return [
       GUARD_COMMENT_MARKER,
@@ -1178,7 +1286,13 @@ async function runPullRequestScan({ token, owner, repo, prNumber, headSha, exist
   // weaken policy in the same PR they're trying to merge). Any failure mode
   // falls back to safe warn-only defaults inside fetchPolicy().
   const { source: policySource, policy } = await fetchPolicy(token, owner, repo);
-  const decision = applyPolicy(policy, agg);
+
+  // Sprint+3: consult the exceptions table. Failure modes (Supabase down,
+  // env unset, table not migrated, query error) all degrade to an empty
+  // Map inside fetchExceptions — the check run NEVER fails because of an
+  // exceptions-lookup hiccup.
+  const exceptions = await fetchExceptions(owner, repo);
+  const decision = applyPolicy(policy, agg, exceptions);
 
   const { title, summary } = allFailed ? buildAllFailedReport(perFile) : buildReport(perFile, agg, decision);
   const conclusion = decideConclusion(perFile, decision);
