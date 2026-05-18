@@ -71,7 +71,7 @@ When opted in:
 - The success screen confirms the subscription.
 
 **The opt-in surface is real, the receipt is durable, and as of v0.1 the
-notifier itself is live.** A Vercel cron job runs every 6 hours, walks
+notifier itself is live.** A Vercel cron job runs once a day, walks
 all open issues labeled `band-drop-subscribed`, re-scans each subscribed
 repo, and posts a comment on the rebuttal issue when the band drops.
 
@@ -81,7 +81,8 @@ Only band-tier transitions DOWN that ladder trigger notifications. Score
 fluctuations within a band do not trigger. Bands moving UP do not trigger.
 
 **v0.1 trigger model (live).** The cron endpoint `/api/band-drop-tick`
-runs every 6 hours. Each tick:
+runs once a day (09:00 UTC, ±59 min per Vercel's Hobby-tier scheduling
+precision). Each tick:
 
 1. Mints an installation token for the OpenSoyce GitHub App.
 2. Lists open issues on `freewho99/opensoyce` labeled
