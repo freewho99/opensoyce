@@ -701,6 +701,11 @@ function ScoreStrip({ label, value }: { label: string; value: number }) {
 }
 
 function ActionBtn({ label, repo }: { label: string, repo: string }) {
+  const urls: Record<string, string> = {
+    USE:  `https://github.com/${repo}`,
+    FORK: `https://github.com/${repo}/fork`,
+    GROW: `https://github.com/${repo}`,
+  };
   const styles: Record<string, string> = {
     USE:  'flex-1 bg-black text-white border-2 border-black py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-red hover:border-soy-red transition-all shadow-[2px_2px_0px_#000]',
     FORK: 'flex-1 bg-white text-soy-red border-2 border-soy-red py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-red hover:text-white transition-all shadow-[2px_2px_0px_#000]',
@@ -708,8 +713,9 @@ function ActionBtn({ label, repo }: { label: string, repo: string }) {
   };
   return (
     <button 
-      onClick={() => trackEvent(`${label.toLowerCase()}_click`, { repo, page: '/' })}
-       className={styles[label] ?? styles.GROW}
+      type="button"
+      onClick={() => { trackEvent(`${label.toLowerCase()}_click`, { repo, page: '/' }); window.open(urls[label] ?? `https://github.com/${repo}`, '_blank'); }}
+      className={styles[label] ?? styles.GROW}
     >
       {label}
     </button>
