@@ -846,6 +846,133 @@ async function recordVerdictSnapshots(owner, repo, agg) {
 }
 
 /**
+ * Sprint+5 PR 1: post a one-line Slack alert when the Guard decision concludes
+ * `failure`. Per-repo Slack incoming-webhook URLs live in the `notifications`
+ * table (see docs/supabase-sprint-5.md). Runs in parallel with the check-run
+ * / comment / snapshot writes so it adds zero wall-clock latency when Slack
+ * is healthy.
+ *
+ * Hard contract: this function NEVER throws. Every failure path —
+ * `SUPABASE_ENV_MISSING`, DB timeout, missing row, NULL URL, bad URL prefix,
+ * 4xx/5xx from Slack, fetch timeout, network error — collapses to a
+ * console.warn / console.error + silent return so the Check Run pipeline
+ * stays insulated from notification breakage.
+ */
+async function maybePostSlackAlert(owner, repo, decision, prNumber, prTitle, prUrl, headSha) {
+  try {
+    if (!decision || decision.conclusion !== 'failure') return;
+
+    let sb;
+    try {
+      sb = getSupabase();
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      console.warn('guard-webhook: slack alert skipped:', msg);
+      return;
+    }
+
+    // 1s DB-lookup budget — same shape as recordVerdictSnapshots. A slow
+    // Supabase must not push us past the Check Run round-trip.
+    const lookupPromise = sb
+      .from('notifications')
+      .select('slack_webhook_url')
+      .eq('owner', owner)
+      .eq('repo', repo)
+      .maybeSingle();
+    const lookupTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('slack_lookup_timeout')), 1000),
+    );
+
+    let row;
+    try {
+      const result = await Promise.race([lookupPromise, lookupTimeout]);
+      if (result && result.error) {
+        console.warn(
+          'guard-webhook: slack notifications lookup error:',
+          result.error.message,
+        );
+        return;
+      }
+      row = result && result.data;
+    } catch (err) {
+      console.warn(
+        'guard-webhook: slack notifications lookup timed out or threw:',
+        err && err.message ? err.message : err,
+      );
+      return;
+    }
+
+    if (!row || !row.slack_webhook_url) {
+      // No row → repo never configured Slack. NULL URL → notifications
+      // intentionally disabled (row kept for audit). Either way, silent.
+      return;
+    }
+
+    const url = row.slack_webhook_url;
+    if (typeof url !== 'string' || !url.startsWith('https://hooks.slack.com/services/')) {
+      // Defense in depth: a malformed or spoofed value can't redirect
+      // alerts to an attacker-controlled host.
+      console.warn(
+        'guard-webhook: slack url rejected (bad prefix)',
+        { owner, repo, headSha: typeof headSha === 'string' ? headSha.slice(0, 7) : null },
+      );
+      return;
+    }
+
+    const blockerCount = Array.isArray(decision.blockedDeps) ? decision.blockedDeps.length : 0;
+    const hasTitle = typeof prTitle === 'string' && prTitle.length > 0;
+    // Slack `text` mode uses `<url|label>` for inline links — Markdown's
+    // `[label](url)` is ignored. Backticks render as code, same as Markdown.
+    const linkLabel = hasTitle ? `#${prNumber} ${prTitle}` : `PR #${prNumber}`;
+    const text = `:warning: OpenSoyce Guard found ${blockerCount} blocker(s) in <${prUrl}|${linkLabel}> on \`${owner}/${repo}\``;
+    const payload = { text };
+
+    // 2s fetch budget — Slack incoming webhooks normally respond in <500ms.
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 2000);
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      if (err && err.name === 'AbortError') {
+        console.warn('guard-webhook: slack post timed out (>2s)');
+      } else {
+        console.warn('guard-webhook: slack post fetch failed:', msg);
+      }
+      return;
+    } finally {
+      clearTimeout(fetchTimeout);
+    }
+
+    if (!resp.ok) {
+      let bodyText = '';
+      try {
+        bodyText = (await resp.text()).slice(0, 200);
+      } catch {
+        // Body unreadable — log just the status.
+      }
+      console.warn(
+        'guard-webhook: slack post non-2xx:',
+        { status: resp.status, body: bodyText },
+      );
+      return;
+    }
+  } catch (err) {
+    // Catch-all guard: contract is "never throws".
+    console.error(
+      'guard-webhook: slack alert unexpected failure:',
+      err && err.message ? err.message : err,
+    );
+  }
+}
+
+/**
  * Format an exception's `expires_at` timestamp (ISO string) as a bare date
  * for the comment annotation. Falls back gracefully on malformed input.
  */
@@ -1206,6 +1333,10 @@ async function handlePullRequest(payload) {
   const repo = payload?.repository?.name;
   const prNumber = payload?.pull_request?.number;
   const headSha = payload?.pull_request?.head?.sha;
+  // Sprint+5 PR 1: surface these to the Slack alert path. Both may be
+  // missing on edge-case payloads — maybePostSlackAlert handles falsy values.
+  const prTitle = payload?.pull_request?.title;
+  const prUrl = payload?.pull_request?.html_url;
 
   if (!installationId || !owner || !repo || typeof prNumber !== 'number' || !headSha) {
     console.error('guard-webhook: payload missing fields', { installationId, owner, repo, prNumber, headSha });
@@ -1253,13 +1384,14 @@ async function handlePullRequest(payload) {
   try {
     return await runPullRequestScan({
       token, owner, repo, prNumber, headSha, existingRun, memoizedCommentId,
+      prTitle, prUrl,
     });
   } finally {
     IN_FLIGHT_RUNS.delete(inFlightKey);
   }
 }
 
-async function runPullRequestScan({ token, owner, repo, prNumber, headSha, existingRun, memoizedCommentId }) {
+async function runPullRequestScan({ token, owner, repo, prNumber, headSha, existingRun, memoizedCommentId, prTitle, prUrl }) {
   // If we already have an in-progress/queued check run for this head SHA
   // (crash recovery, or duplicate-event race), PATCH it rather than POST
   // a new one. Applies to both the no-lockfile and lockfile-found paths.
@@ -1460,9 +1592,14 @@ async function runPullRequestScan({ token, owner, repo, prNumber, headSha, exist
   // recordVerdictSnapshots never throws — its contract is to swallow every
   // failure mode (env missing, insert error, 1s timeout) into a console.warn —
   // so plain Promise.all is safe here without a wrapping try/catch.
+  // maybePostSlackAlert follows the same contract (Sprint+5 PR 1): it
+  // short-circuits when conclusion !== 'failure' (no DB call) and absorbs
+  // every error path (missing env, DB timeout, missing/disabled config,
+  // bad URL prefix, Slack 4xx/5xx, fetch timeout) into a log + return.
   await Promise.all([
     commentPromise,
     recordVerdictSnapshots(owner, repo, agg),
+    maybePostSlackAlert(owner, repo, decision, prNumber, prTitle, prUrl, headSha),
   ]);
 
   return {
