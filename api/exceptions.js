@@ -13,10 +13,10 @@
  *   GET    /api/exceptions?action=my-repos        — repos the signed-in user can manage
  *   POST   /api/exceptions?action=auth-callback   — exchange OAuth code, mint cookie
  *   POST   /api/exceptions?action=logout          — clear the session cookie
- *   GET    /api/exceptions?action=watchlist-list     — Sprint+4: signed-in user's package watchlist + latest verdicts
- *   GET    /api/exceptions?action=watchlist-changes  — Sprint+4: recent degradations across watched packages
- *   POST   /api/exceptions?action=watchlist-add      — Sprint+4: add a package to the user's watchlist
- *   POST   /api/exceptions?action=watchlist-remove   — Sprint+4: remove a package from the user's watchlist
+ *   GET    /api/exceptions?action=watchlist-list     — Sprint+6: org-scoped package watchlist + latest verdicts
+ *   GET    /api/exceptions?action=watchlist-changes  — Sprint+6: recent degradations across watched packages (org-scoped)
+ *   POST   /api/exceptions?action=watchlist-add      — Sprint+6: add a package to an org's watchlist (requires owner_org)
+ *   POST   /api/exceptions?action=watchlist-remove   — Sprint+6: remove a package from an org's watchlist
  *   GET    /api/exceptions?action=notifications-get  — Sprint+5: whether Slack is configured for (owner, repo); URL never returned
  *   POST   /api/exceptions?action=notifications-set  — Sprint+5: upsert Slack webhook URL (or null to disable)
  *
@@ -106,13 +106,19 @@ function base64urlDecode(s) {
 /**
  * Mint an osg_session token using the same scheme verifySessionToken accepts:
  *   <base64url(payloadJSON)>.<hex(hmacSha256(payloadJSON, key))>
- * Payload: { login, exp (unix seconds) }.
+ * Payload: { login, orgs, exp (unix seconds) }.
+ *
+ * Sprint+6: `orgs` is the list of GitHub org logins the user can operate as,
+ * with the user's own login prepended (an individual user behaves as a
+ * one-person org owning their <login>/* repos). Old session tokens predating
+ * this change have no `orgs` field and verifySessionToken treats them as [].
  */
-export function signSessionToken({ login, ttlSec = 28800 }, key) {
+export function signSessionToken({ login, orgs = [], ttlSec = 28800 }, key) {
   if (!key || typeof key !== 'string') throw new Error('HMAC_KEY_MISSING');
   if (!login || typeof login !== 'string') throw new Error('LOGIN_MISSING');
+  if (!Array.isArray(orgs)) throw new Error('ORGS_MUST_BE_ARRAY');
   const now = Math.floor(Date.now() / 1000);
-  const payload = { login, exp: now + ttlSec };
+  const payload = { login, orgs, exp: now + ttlSec };
   const json = JSON.stringify(payload);
   const enc = base64urlEncode(json);
   const sig = crypto.createHmac('sha256', key).update(json).digest('hex');
@@ -153,7 +159,16 @@ export function verifySessionToken(token, key, opts = {}) {
   if (!payload || typeof payload.login !== 'string' || typeof payload.exp !== 'number') return null;
   const now = typeof opts.now === 'number' ? opts.now : Math.floor(Date.now() / 1000);
   if (now >= payload.exp) return null;
-  return { login: payload.login };
+  // Sprint+6: orgs is the org-scope list. Old tokens (pre-Sprint+6) have no
+  // orgs field — decode them as orgs:[] so all watchlist endpoints return
+  // empty results until the user re-auths. Each entry must be a string;
+  // anything malformed is silently dropped (defensive: a tampered payload
+  // would already have failed the HMAC check, but we still don't trust it).
+  let orgs = [];
+  if (Array.isArray(payload.orgs)) {
+    orgs = payload.orgs.filter((o) => typeof o === 'string' && o.length > 0);
+  }
+  return { login: payload.login, orgs };
 }
 
 function parseCookieHeader(raw) {
@@ -501,6 +516,69 @@ async function handleLogout(req, res) {
   return sendJson(res, 200, { ok: true });
 }
 
+// ---------------------------------------------------------------------------
+// Sprint+6: fetch the user's GitHub org memberships during sign-in.
+//
+// Walks /user/orgs pagination (cap 3 pages = 90 orgs — typical users have <30).
+// Total budget 5s, each page 2s via AbortController. On ANY failure (4xx, 5xx,
+// network, timeout) we log + return [] so sign-in still completes; the user
+// will see only their personal namespace until they re-auth successfully.
+//
+// Note: /user/orgs returns only orgs the user has consented to expose. Without
+// the read:org scope it returns public orgs only. The user's own login is NOT
+// in this response — handleAuthCallback prepends it separately.
+// ---------------------------------------------------------------------------
+const USER_ORGS_TOTAL_BUDGET_MS = 5000;
+const USER_ORGS_PER_PAGE_BUDGET_MS = 2000;
+const USER_ORGS_PAGE_CAP = 3;
+const USER_ORGS_PER_PAGE = 30;
+
+async function fetchUserOrgs(accessToken) {
+  if (typeof accessToken !== 'string' || !accessToken) return [];
+  const start = Date.now();
+  const out = [];
+  for (let page = 1; page <= USER_ORGS_PAGE_CAP; page += 1) {
+    const elapsed = Date.now() - start;
+    if (elapsed >= USER_ORGS_TOTAL_BUDGET_MS) {
+      console.warn('exceptions fetchUserOrgs: total budget exhausted before page', page);
+      break;
+    }
+    const remainingTotal = USER_ORGS_TOTAL_BUDGET_MS - elapsed;
+    const perPageBudget = Math.min(USER_ORGS_PER_PAGE_BUDGET_MS, remainingTotal);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), perPageBudget);
+    let body;
+    try {
+      const resp = await fetch(`https://api.github.com/user/orgs?per_page=${USER_ORGS_PER_PAGE}&page=${page}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'opensoyce-exceptions',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: ctrl.signal,
+      });
+      if (!resp.ok) {
+        console.warn('exceptions fetchUserOrgs: /user/orgs status', resp.status, 'page', page);
+        return [];
+      }
+      body = await resp.json().catch(() => null);
+    } catch (e) {
+      console.warn('exceptions fetchUserOrgs: page', page, 'threw', e && e.message);
+      return [];
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!Array.isArray(body)) break;
+    for (const o of body) {
+      if (o && typeof o.login === 'string' && o.login.length > 0) out.push(o.login);
+    }
+    // Short-circuit when GitHub returns less than a full page (no more pages).
+    if (body.length < USER_ORGS_PER_PAGE) break;
+  }
+  return out;
+}
+
 async function handleAuthCallback(req, res) {
   let body;
   try {
@@ -579,9 +657,17 @@ async function handleAuthCallback(req, res) {
     return err(res, 502, 'USER_LOOKUP_FAILED', 'could not reach GitHub to read your identity');
   }
 
-  const token = signSessionToken({ login, ttlSec: 28800 }, dashboardSecret);
+  // Sprint+6: pull the user's GitHub org memberships and bake them into the
+  // session token. The user's own login is prepended so an individual GitHub
+  // user behaves as a one-person org — matches the migration's backfill of
+  // owner_org = user_login. fetchUserOrgs swallows all errors and returns [],
+  // so a /user/orgs failure does not block sign-in.
+  const rawOrgs = await fetchUserOrgs(accessToken);
+  const orgs = [login, ...rawOrgs.filter((o) => o !== login)];
+
+  const token = signSessionToken({ login, orgs, ttlSec: 28800 }, dashboardSecret);
   setSessionCookie(res, token, 28800);
-  return sendJson(res, 200, { ok: true, login });
+  return sendJson(res, 200, { ok: true, login, orgs });
 }
 
 // ---------------------------------------------------------------------------
@@ -742,10 +828,17 @@ async function handleWatchlistList(req, res, session) {
     return err(res, 500, 'DB_ERROR', 'database not configured');
   }
 
+  // Sprint+6: scope watchlist by org membership instead of user_login. Empty
+  // orgs (old session token) returns no rows by construction — .in() with an
+  // empty list yields zero matches.
+  const orgs = Array.isArray(session.orgs) ? session.orgs : [];
+  if (orgs.length === 0) return sendJson(res, 200, { watched: [] });
+
   const { data: watched, error: wErr } = await sb
     .from('watched_packages')
-    .select('id, package_name, ecosystem, created_at')
-    .eq('user_login', session.login)
+    .select('id, owner_org, package_name, ecosystem, created_at')
+    .in('owner_org', orgs)
+    .order('owner_org', { ascending: true })
     .order('created_at', { ascending: false });
 
   if (wErr) {
@@ -757,8 +850,9 @@ async function handleWatchlistList(req, res, session) {
 
   // For each watched package, fetch recent snapshots ordered by scanned_at desc
   // and de-dupe by (owner, repo) keeping the first occurrence (== most recent).
-  // Sequential queries — MVE only; if a user watches >20 packages this gets
-  // chatty. Batch via a single IN() query later.
+  // Sprint+6: snapshots are additionally filtered to owner = w.owner_org so we
+  // only surface verdicts on repos owned by the same org as the watchlist row.
+  // acme-corp's watchlist for react never bleeds into freewho99/* repos.
   const out = [];
   for (const w of rows) {
     const { data: snaps, error: sErr } = await sb
@@ -766,6 +860,7 @@ async function handleWatchlistList(req, res, session) {
       .select('owner, repo, label, scanned_at')
       .eq('package_name', w.package_name)
       .eq('ecosystem', w.ecosystem)
+      .eq('owner', w.owner_org)
       .order('scanned_at', { ascending: false })
       .limit(WATCHLIST_SNAPSHOT_FETCH_LIMIT);
 
@@ -786,6 +881,7 @@ async function handleWatchlistList(req, res, session) {
 
     out.push({
       id: w.id,
+      owner_org: w.owner_org,
       package_name: w.package_name,
       ecosystem: w.ecosystem,
       created_at: w.created_at,
@@ -805,10 +901,14 @@ async function handleWatchlistChanges(req, res, session) {
     return err(res, 500, 'DB_ERROR', 'database not configured');
   }
 
+  // Sprint+6: org-scoped. Empty orgs (old session token) returns no changes.
+  const orgs = Array.isArray(session.orgs) ? session.orgs : [];
+  if (orgs.length === 0) return sendJson(res, 200, { changes: [] });
+
   const { data: watched, error: wErr } = await sb
     .from('watched_packages')
-    .select('package_name, ecosystem')
-    .eq('user_login', session.login);
+    .select('owner_org, package_name, ecosystem')
+    .in('owner_org', orgs);
 
   if (wErr) {
     console.error('exceptions watchlist-changes: watched_packages query failed', wErr.message);
@@ -821,11 +921,15 @@ async function handleWatchlistChanges(req, res, session) {
   const changes = [];
 
   for (const w of rows) {
+    // Sprint+6: filter snapshots to owner = w.owner_org so degradations only
+    // surface on in-org repos. acme-corp's watchlist for react never reports
+    // degradations on freewho99/foo.
     const { data: snaps, error: sErr } = await sb
       .from('verdict_snapshots')
       .select('owner, repo, label, scanned_at')
       .eq('package_name', w.package_name)
       .eq('ecosystem', w.ecosystem)
+      .eq('owner', w.owner_org)
       .gte('scanned_at', sinceIso)
       .order('scanned_at', { ascending: false })
       .limit(WATCHLIST_SNAPSHOT_FETCH_LIMIT);
@@ -857,6 +961,7 @@ async function handleWatchlistChanges(req, res, session) {
       if (typeof latestRank !== 'number' || typeof priorRank !== 'number') continue;
       if (latestRank > priorRank) {
         changes.push({
+          owner_org: w.owner_org,
           package_name: w.package_name,
           ecosystem: w.ecosystem,
           owner: latest.owner,
@@ -897,6 +1002,19 @@ async function handleWatchlistAdd(req, res, session) {
   if (validated.error) return err(res, 400, 'BAD_REQUEST', validated.error);
   const { packageName, ecosystem } = validated.value;
 
+  // Sprint+6: owner_org is required and must be one of the user's session orgs.
+  // We validate the shape with the same isValidGithubName rule used for repo
+  // owner names, then check membership against session.orgs. An empty
+  // session.orgs (old token) trivially fails .includes — user must re-auth.
+  const ownerOrg = body && typeof body.owner_org === 'string' ? body.owner_org.trim() : '';
+  if (!ownerOrg || !isValidGithubName(ownerOrg)) {
+    return err(res, 400, 'BAD_REQUEST', 'owner_org is missing or not a valid GitHub identifier');
+  }
+  const sessionOrgs = Array.isArray(session.orgs) ? session.orgs : [];
+  if (!sessionOrgs.includes(ownerOrg)) {
+    return err(res, 403, 'FORBIDDEN', 'you are not a member of that GitHub org');
+  }
+
   let sb;
   try {
     sb = getSupabase();
@@ -908,16 +1026,18 @@ async function handleWatchlistAdd(req, res, session) {
   const { data, error } = await sb
     .from('watched_packages')
     .insert({
+      owner_org: ownerOrg,
       user_login: session.login,
       package_name: packageName,
       ecosystem,
     })
-    .select('id, package_name, ecosystem, created_at')
+    .select('id, owner_org, package_name, ecosystem, created_at')
     .single();
 
   if (error) {
-    // Postgres unique_violation == 23505. Duplicate add is an idempotent no-op
-    // (the dashboard "add" button should be safe to click twice).
+    // Postgres unique_violation == 23505. Sprint+6: constraint is now
+    // (owner_org, package_name, ecosystem). Duplicate add is an idempotent
+    // no-op (the dashboard "add" button should be safe to click twice).
     if (error.code === '23505') {
       return sendJson(res, 200, { ok: true, already_watched: true });
     }
@@ -936,6 +1056,7 @@ async function handleWatchlistRemove(req, res, session) {
   }
 
   const id = body && typeof body.id === 'string' ? body.id.trim() : '';
+  const ownerOrg = body && typeof body.owner_org === 'string' ? body.owner_org.trim() : '';
   const packageName = body && typeof body.package_name === 'string' ? body.package_name.trim() : '';
   const ecosystem = body && typeof body.ecosystem === 'string' ? body.ecosystem.trim() : '';
 
@@ -947,32 +1068,70 @@ async function handleWatchlistRemove(req, res, session) {
     return err(res, 500, 'DB_ERROR', 'database not configured');
   }
 
-  // Accept either { id } or { package_name, ecosystem }. Always scope the
-  // delete to the signed-in user so cross-user removal is impossible.
-  let query = sb.from('watched_packages').delete().eq('user_login', session.login);
+  // Sprint+6: org-scoped removal. Accept either { id } (UI path — look the row
+  // up, gate on its owner_org against session.orgs) or
+  // { owner_org, package_name, ecosystem } (field-tuple — validate org
+  // membership directly). 404 if no matching row exists. Cross-org removal is
+  // impossible because every path verifies session.orgs.includes(target org).
+  const sessionOrgs = Array.isArray(session.orgs) ? session.orgs : [];
 
   if (id) {
     if (!UUID_RE.test(id)) return err(res, 400, 'BAD_REQUEST', 'id is not a valid UUID');
-    query = query.eq('id', id);
-  } else if (packageName || ecosystem) {
-    const validated = validateWatchlistPackage({ package_name: packageName, ecosystem });
-    if (validated.error) return err(res, 400, 'BAD_REQUEST', validated.error);
-    query = query
-      .eq('package_name', validated.value.packageName)
-      .eq('ecosystem', validated.value.ecosystem);
-  } else {
-    return err(res, 400, 'BAD_REQUEST', 'either id or (package_name, ecosystem) is required');
+    const { data: row, error: selErr } = await sb
+      .from('watched_packages')
+      .select('id, owner_org')
+      .eq('id', id)
+      .maybeSingle();
+    if (selErr) {
+      console.error('exceptions watchlist-remove: select failed', selErr.message);
+      return err(res, 500, 'DB_ERROR', 'database query failed');
+    }
+    if (!row) return err(res, 404, 'NOT_FOUND', 'watchlist entry not found');
+    if (!sessionOrgs.includes(row.owner_org)) {
+      return err(res, 403, 'FORBIDDEN', 'you are not a member of that GitHub org');
+    }
+    const { data: deleted, error: delErr } = await sb
+      .from('watched_packages')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (delErr) {
+      console.error('exceptions watchlist-remove: delete failed', delErr.message);
+      return err(res, 500, 'DB_ERROR', 'database write failed');
+    }
+    if (!Array.isArray(deleted) || deleted.length === 0) {
+      return err(res, 404, 'NOT_FOUND', 'watchlist entry not found');
+    }
+    return sendJson(res, 200, { ok: true });
   }
 
-  const { data, error } = await query.select('id');
-  if (error) {
-    console.error('exceptions watchlist-remove: delete failed', error.message);
-    return err(res, 500, 'DB_ERROR', 'database write failed');
+  if (ownerOrg || packageName || ecosystem) {
+    if (!ownerOrg || !isValidGithubName(ownerOrg)) {
+      return err(res, 400, 'BAD_REQUEST', 'owner_org is missing or not a valid GitHub identifier');
+    }
+    if (!sessionOrgs.includes(ownerOrg)) {
+      return err(res, 403, 'FORBIDDEN', 'you are not a member of that GitHub org');
+    }
+    const validated = validateWatchlistPackage({ package_name: packageName, ecosystem });
+    if (validated.error) return err(res, 400, 'BAD_REQUEST', validated.error);
+    const { data: deleted, error: delErr } = await sb
+      .from('watched_packages')
+      .delete()
+      .eq('owner_org', ownerOrg)
+      .eq('package_name', validated.value.packageName)
+      .eq('ecosystem', validated.value.ecosystem)
+      .select('id');
+    if (delErr) {
+      console.error('exceptions watchlist-remove: delete failed', delErr.message);
+      return err(res, 500, 'DB_ERROR', 'database write failed');
+    }
+    if (!Array.isArray(deleted) || deleted.length === 0) {
+      return err(res, 404, 'NOT_FOUND', 'watchlist entry not found');
+    }
+    return sendJson(res, 200, { ok: true });
   }
-  if (!Array.isArray(data) || data.length === 0) {
-    return err(res, 404, 'NOT_FOUND', 'watchlist entry not found');
-  }
-  return sendJson(res, 200, { ok: true });
+
+  return err(res, 400, 'BAD_REQUEST', 'either id or (owner_org, package_name, ecosystem) is required');
 }
 
 // ---------------------------------------------------------------------------
