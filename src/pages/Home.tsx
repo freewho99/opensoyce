@@ -73,7 +73,7 @@ const REMIX_PROJECTS = [
 // avoid drift vs. live /api/analyze; click-through goes to /lookup for the live scan.
 const TRENDING_DATA = [
   { owner: 'paul-gauthier', repo: 'aider', band: 'USE READY', tagline: 'Terminal-based AI pair programmer', signals: ['FRESH', 'MOMENTUM'], category: 'skills-agents', hotLine: '↑ Best-in-class terminal coding experience' },
-  { owner: 'opendevin', repo: 'OpenHands', band: 'USE READY', tagline: 'Autonomous software engineering agent', signals: ['MOMENTUM', 'FORKABLE'], category: 'skills-agents', hotLine: '↑ Autonomous dev workflows surging' },
+  { owner: 'OpenHands', repo: 'OpenHands', band: 'USE READY', tagline: 'Autonomous software engineering agent', signals: ['MOMENTUM', 'FORKABLE'], category: 'skills-agents', hotLine: '↑ Autonomous dev workflows surging' },
   { owner: 'langchain-ai', repo: 'langgraph', band: 'USE READY', tagline: 'Controllable agent workflows', signals: ['FRESH', 'DOCS STRONG'], category: 'skills-agents', hotLine: '↑ Advanced stateful orchestration' },
   { owner: 'vercel', repo: 'next.js', band: 'USE READY', tagline: 'The React Framework for the Web', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Commit velocity sustained · New App Router patterns shipping' },
   { owner: 'withastro', repo: 'astro', band: 'USE READY', tagline: 'The web framework for content-driven websites', signals: ['FRESH', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Content site benchmark · v5 content collections reshaping DX' },
