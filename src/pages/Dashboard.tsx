@@ -18,7 +18,7 @@
  * forgery blast radius. Server-signed state is a follow-up.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Github, Shield, Trash2, RefreshCw, AlertTriangle, Plus, LogOut, ChevronRight, Eye } from 'lucide-react';
+import { Github, Shield, Trash2, RefreshCw, AlertTriangle, Plus, LogOut, ChevronRight, Eye, Bell } from 'lucide-react';
 
 type ExceptionRow = {
   id: string;
@@ -60,6 +60,12 @@ type WatchChange = {
   scanned_at: string;
 };
 
+type NotificationsState = {
+  configured: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+
 type Phase =
   | 'loading'
   | 'oauth-callback'
@@ -72,6 +78,10 @@ const EXPIRY_OPTIONS = [7, 14, 30, 60, 90];
 const REASON_MIN = 10;
 const REASON_MAX = 2000;
 const OAUTH_STATE_KEY = 'dashboard_oauth_state';
+// Mirrors api/exceptions.js SLACK_WEBHOOK_URL_PREFIX. Client-side validation
+// is advisory only — the backend re-validates and is the source of truth.
+const SLACK_WEBHOOK_URL_PREFIX = 'https://hooks.slack.com/services/';
+const SLACK_WEBHOOK_URL_MAX = 500;
 
 function classifyStatus(row: ExceptionRow): 'active' | 'expired' | 'revoked' {
   if (row.revoked_at) return 'revoked';
@@ -170,6 +180,15 @@ export default function Dashboard() {
   const [watchEcosystem, setWatchEcosystem] = useState<typeof ECOSYSTEMS[number]>('npm');
   const [watchAdding, setWatchAdding] = useState(false);
   const [watchAddError, setWatchAddError] = useState<string | null>(null);
+
+  // Notifications state (Sprint+5 PR 3). Per-repo Slack webhook config.
+  const [notif, setNotif] = useState<NotificationsState | null>(null);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
+  const [notifReadOnly, setNotifReadOnly] = useState(false);
+  const [notifWebhookInput, setNotifWebhookInput] = useState('');
+  const [notifEditing, setNotifEditing] = useState(false);
+  const [notifSaving, setNotifSaving] = useState(false);
 
   // ------------------------------------------------------------- bootstrap
   useEffect(() => {
@@ -416,6 +435,121 @@ export default function Dashboard() {
       setListError('Network error revoking exception.');
     }
   }, [selectedRepo, refreshExceptions]);
+
+  // --------------------------------------------------------- notifications
+
+  // Fetch the per-repo Slack config. The API never returns the URL itself —
+  // only { configured, updated_by, updated_at }. State B (not configured) is
+  // an empty row, missing row, OR a row whose url was nulled by DISABLE.
+  const refreshNotifications = useCallback(async (repo: RepoRef) => {
+    setNotifLoading(true);
+    setNotifError(null);
+    setNotifEditing(false);
+    setNotifWebhookInput('');
+    try {
+      const url = `/api/exceptions?action=notifications-get&owner=${encodeURIComponent(repo.owner)}&repo=${encodeURIComponent(repo.repo)}`;
+      const resp = await fetch(url, { credentials: 'same-origin' });
+      if (resp.status === 404) {
+        setNotifError('Guard isn’t installed on this repo.');
+        setNotif(null);
+        return;
+      }
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        setNotifError((body && body.message) || `Failed to load notifications (${resp.status}).`);
+        setNotif(null);
+        return;
+      }
+      const body = await resp.json();
+      setNotif({
+        configured: Boolean(body.configured),
+        updated_by: typeof body.updated_by === 'string' ? body.updated_by : null,
+        updated_at: typeof body.updated_at === 'string' ? body.updated_at : null,
+      });
+    } catch {
+      setNotifError('Network error loading notifications.');
+      setNotif(null);
+    } finally {
+      setNotifLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRepo) {
+      setNotif(null);
+      setNotifError(null);
+      setNotifEditing(false);
+      setNotifWebhookInput('');
+      setNotifReadOnly(false);
+      return;
+    }
+    // Reset read-only flag whenever we navigate to a different repo; it
+    // gets set sticky if a write attempt later returns 403.
+    setNotifReadOnly(false);
+    refreshNotifications(selectedRepo);
+  }, [selectedRepo, refreshNotifications]);
+
+  // Save (enable or change). url = null means DISABLE.
+  const saveNotifications = useCallback(async (url: string | null) => {
+    if (!selectedRepo) return;
+    setNotifSaving(true);
+    setNotifError(null);
+    try {
+      const resp = await fetch('/api/exceptions?action=notifications-set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          owner: selectedRepo.owner,
+          repo: selectedRepo.repo,
+          slack_webhook_url: url,
+        }),
+      });
+      if (resp.status === 403) {
+        setNotifReadOnly(true);
+        setNotifError('You need write access on this repo to change notifications.');
+        return;
+      }
+      if (resp.status === 404) {
+        setNotifError('Guard isn’t installed on this repo.');
+        return;
+      }
+      if (resp.status >= 500) {
+        setNotifError('Couldn’t save — try again.');
+        return;
+      }
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        setNotifError((body && body.message) || `Failed to save (${resp.status}).`);
+        return;
+      }
+      // Success path: refetch so we render the canonical server state
+      // (rather than guessing locally). This is also where State B -> C
+      // and C -> B transitions visibly flip.
+      await refreshNotifications(selectedRepo);
+    } catch {
+      setNotifError('Couldn’t save — try again.');
+    } finally {
+      setNotifSaving(false);
+    }
+  }, [selectedRepo, refreshNotifications]);
+
+  const handleNotifSave = useCallback(async () => {
+    const trimmed = notifWebhookInput.trim();
+    if (!trimmed.startsWith(SLACK_WEBHOOK_URL_PREFIX)) {
+      setNotifError(`URL must start with ${SLACK_WEBHOOK_URL_PREFIX}`);
+      return;
+    }
+    if (trimmed.length > SLACK_WEBHOOK_URL_MAX) {
+      setNotifError(`URL must be ≤ ${SLACK_WEBHOOK_URL_MAX} chars.`);
+      return;
+    }
+    await saveNotifications(trimmed);
+  }, [notifWebhookInput, saveNotifications]);
+
+  const handleNotifDisable = useCallback(async () => {
+    await saveNotifications(null);
+  }, [saveNotifications]);
 
   // ----------------------------------------------------------- watchlist
 
@@ -777,6 +911,164 @@ export default function Dashboard() {
               )}
             </section>
           </div>
+
+          {/* ------------------------------------------ notifications panel */}
+          <section className="mt-8 bg-white border-4 border-soy-bottle p-6 shadow-[8px_8px_0px_#000]">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h2 className="text-xl font-black uppercase italic tracking-tight flex items-center gap-2">
+                <Bell size={20} /> Notifications
+              </h2>
+              {notif && (
+                <span
+                  className={`text-[9px] font-black uppercase tracking-widest border-2 px-2 py-0.5 flex-shrink-0 ${
+                    notif.configured
+                      ? 'bg-emerald-500 text-white border-black'
+                      : 'bg-soy-label/40 text-soy-bottle border-soy-bottle'
+                  }`}
+                >
+                  {notif.configured ? 'CONFIGURED' : 'NOT CONFIGURED'}
+                </span>
+              )}
+            </div>
+
+            {notifLoading ? (
+              <p className="text-xs font-black uppercase tracking-widest opacity-60">
+                LOADING NOTIFICATION SETTINGS…
+              </p>
+            ) : (
+              <>
+                {notifError && (
+                  <div className="bg-soy-red text-white border-2 border-soy-bottle p-3 mb-4 text-[10px] font-black uppercase tracking-widest flex items-start gap-2">
+                    <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {notifError}
+                  </div>
+                )}
+
+                {notif && notif.configured ? (
+                  // ----------------------------------------- State C: configured
+                  <div className="space-y-4">
+                    <div className="border-2 border-soy-bottle bg-soy-label/10 p-4">
+                      <p className="text-sm font-black uppercase tracking-widest mb-1">
+                        <span className="text-emerald-600">✓</span> Slack alerts are active
+                      </p>
+                      {notif.updated_by && notif.updated_at && (
+                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
+                          Configured by <span className="text-soy-red">@{notif.updated_by}</span>{' '}
+                          on {formatExpires(notif.updated_at)}
+                        </p>
+                      )}
+                    </div>
+
+                    {notifEditing ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest mb-1">
+                            New Slack webhook URL
+                          </label>
+                          <input
+                            type="url"
+                            value={notifWebhookInput}
+                            onChange={e => setNotifWebhookInput(e.target.value)}
+                            placeholder="https://hooks.slack.com/services/..."
+                            className="w-full border-2 border-soy-bottle bg-soy-label/10 px-3 py-2 text-xs font-mono focus:outline-none focus:bg-white"
+                            maxLength={SLACK_WEBHOOK_URL_MAX + 50}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleNotifSave}
+                            disabled={
+                              notifSaving ||
+                              notifReadOnly ||
+                              !notifWebhookInput.trim().startsWith(SLACK_WEBHOOK_URL_PREFIX)
+                            }
+                            title={notifReadOnly ? 'You need write access to change this.' : undefined}
+                            className="bg-soy-red text-white py-2 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-soy-bottle transition-all disabled:opacity-50 border-2 border-soy-bottle"
+                          >
+                            {notifSaving ? 'SAVING…' : 'SAVE'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setNotifEditing(false); setNotifWebhookInput(''); setNotifError(null); }}
+                            disabled={notifSaving}
+                            className="border-2 border-soy-bottle px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-soy-label transition-colors disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={handleNotifDisable}
+                          disabled={notifSaving || notifReadOnly}
+                          title={notifReadOnly ? 'You need write access to change this.' : undefined}
+                          className="border-2 border-soy-bottle px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-red hover:text-white hover:border-soy-red transition-colors disabled:opacity-50"
+                        >
+                          {notifSaving ? 'SAVING…' : 'DISABLE'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setNotifEditing(true); setNotifWebhookInput(''); setNotifError(null); }}
+                          disabled={notifSaving || notifReadOnly}
+                          title={notifReadOnly ? 'You need write access to change this.' : undefined}
+                          className="border-2 border-soy-bottle px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-soy-label transition-colors disabled:opacity-50"
+                        >
+                          Change URL
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : notif ? (
+                  // -------------------------------- State B: not configured (or disabled)
+                  <div className="space-y-4">
+                    <p className="text-xs leading-relaxed">
+                      No Slack alerts configured for this repo.
+                    </p>
+                    {notif.updated_by && notif.updated_at && (
+                      <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
+                        Last disabled by <span className="text-soy-red">@{notif.updated_by}</span>{' '}
+                        on {formatExpires(notif.updated_at)}
+                      </p>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest mb-1">
+                        Slack webhook URL
+                      </label>
+                      <input
+                        type="url"
+                        value={notifWebhookInput}
+                        onChange={e => setNotifWebhookInput(e.target.value)}
+                        placeholder="https://hooks.slack.com/services/..."
+                        className="w-full border-2 border-soy-bottle bg-soy-label/10 px-3 py-2 text-xs font-mono focus:outline-none focus:bg-white disabled:opacity-50"
+                        maxLength={SLACK_WEBHOOK_URL_MAX + 50}
+                        disabled={notifReadOnly}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleNotifSave}
+                      disabled={
+                        notifSaving ||
+                        notifReadOnly ||
+                        !notifWebhookInput.trim().startsWith(SLACK_WEBHOOK_URL_PREFIX)
+                      }
+                      title={notifReadOnly ? 'You need write access to change this.' : undefined}
+                      className="bg-soy-red text-white py-2 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-soy-bottle transition-all disabled:opacity-50 border-2 border-soy-bottle"
+                    >
+                      {notifSaving ? 'SAVING…' : 'SAVE'}
+                    </button>
+                    <p className="text-[10px] leading-relaxed opacity-70 border-t-2 border-dashed border-soy-bottle/30 pt-3">
+                      Guard will POST a one-line alert to this URL when a PR ends with a failure
+                      conclusion (an un-excepted BLOCK verdict). The URL is stored in Supabase,
+                      never displayed back, and never returned by the API.
+                    </p>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </section>
         </>
       )}
 
