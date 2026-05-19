@@ -13,22 +13,22 @@ import { useProjects } from '../context/ProjectContext';
 import { CATEGORIES } from '../data/categories';
 import { trackEvent } from '../utils/analytics';
 
-const CATEGORY_USE_CASES: Record<string, { use: string; fork: string }> = {
-  'next.js': { use: "Full-stack web apps", fork: "Headless storefront engine" },
-  'react': { use: "Any UI layer", fork: "Component marketplace" },
-  'vite': { use: "Blazing dev builds", fork: "Custom bundler preset" },
-  'astro': { use: "Content-heavy sites", fork: "Visual CMS builder" },
-  'biome': { use: "Linting + formatting", fork: "Team code-quality CLI" },
-  'deno': { use: "Secure server runtime", fork: "Edge function toolkit" },
-  'bun': { use: "Fast Node replacement", fork: "Serverless runtime platform" },
-  'ui': { use: "Drop-in UI components", fork: "Branded design system" },
-  'hono': { use: "Ultra-fast API layer", fork: "Edge API gateway" },
-  'trpc': { use: "Type-safe API calls", fork: "API-as-a-product starter" },
-  'prisma': { use: "Type-safe DB queries", fork: "Multi-tenant SaaS ORM" },
-  'supabase': { use: "Instant backend layer", fork: "White-label BaaS" },
-  'aider': { use: "AI pair programming in the terminal", fork: "Team-specific coding agents" },
-  'openhands': { use: "Autonomous software engineering tasks", fork: "Internal dev automation platforms" },
-  'langgraph': { use: "Controllable, stateful agent workflows", fork: "Visual agent orchestration tools" },
+const CATEGORY_USE_CASES: Record<string, { use: string; fork: string; grow: string }> = {
+  'next.js': { use: "Full-stack web apps", fork: "Headless storefront engine", grow: "Star it, open issues, sponsor Vercel OSS" },
+  'react': { use: "Any UI layer", fork: "Component marketplace", grow: "Contribute RFCs, triage issues, write examples" },
+  'vite': { use: "Blazing dev builds", fork: "Custom bundler preset", grow: "Sponsor the team, submit plugins, report bugs" },
+  'astro': { use: "Content-heavy sites", fork: "Visual CMS builder", grow: "Add integrations, write tutorials, file issues" },
+  'biome': { use: "Linting + formatting", fork: "Team code-quality CLI", grow: "Sponsor contributors, add lint rules, translate docs" },
+  'deno': { use: "Secure server runtime", fork: "Edge function toolkit", grow: "Build Deno modules, report compat issues, star" },
+  'bun': { use: "Fast Node replacement", fork: "Serverless runtime platform", grow: "Report issues, build plugins, share benchmarks" },
+  'ui': { use: "Drop-in UI components", fork: "Branded design system", grow: "Submit themes, add components, improve docs" },
+  'hono': { use: "Ultra-fast API layer", fork: "Edge API gateway", grow: "Add middleware, contribute adapters, write guides" },
+  'trpc': { use: "Type-safe API calls", fork: "API-as-a-product starter", grow: "Contribute adapters, improve types, share examples" },
+  'prisma': { use: "Type-safe DB queries", fork: "Multi-tenant SaaS ORM", grow: "Open bugs, add provider support, sponsor" },
+  'supabase': { use: "Instant backend layer", fork: "White-label BaaS", grow: "Build extensions, submit integrations, star" },
+  'aider': { use: "AI pair programming in the terminal", fork: "Team-specific coding agents", grow: "Star the repo, test LLM integrations, report bugs" },
+  'openhands': { use: "Autonomous software engineering tasks", fork: "Internal dev automation platforms", grow: "Contribute skills, report task failures, sponsor" },
+  'langgraph': { use: "Controllable, stateful agent workflows", fork: "Visual agent orchestration tools", grow: "Share graphs, add nodes, improve tutorials" },
 };
 
 const STALE_PROJECTS = [
@@ -72,7 +72,7 @@ const REMIX_PROJECTS = [
 // against curated scores. Numeric scores are intentionally NOT shown on the card to
 // avoid drift vs. live /api/analyze; click-through goes to /lookup for the live scan.
 const TRENDING_DATA = [
-  { owner: 'paul-gauthier', repo: 'aider', band: 'USE READY', tagline: 'Terminal-based AI pair programmer', signals: ['FRESH', 'MOMENTUM'], category: 'skills-agents', hotLine: '↑ Best-in-class terminal coding experience' },
+  { owner: 'Aider-AI', repo: 'aider', band: 'USE READY', tagline: 'Terminal-based AI pair programmer', signals: ['FRESH', 'MOMENTUM'], category: 'skills-agents', hotLine: '↑ Best-in-class terminal coding experience' },
   { owner: 'OpenHands', repo: 'OpenHands', band: 'USE READY', tagline: 'Autonomous software engineering agent', signals: ['MOMENTUM', 'FORKABLE'], category: 'skills-agents', hotLine: '↑ Autonomous dev workflows surging' },
   { owner: 'langchain-ai', repo: 'langgraph', band: 'USE READY', tagline: 'Controllable agent workflows', signals: ['FRESH', 'DOCS STRONG'], category: 'skills-agents', hotLine: '↑ Advanced stateful orchestration' },
   { owner: 'vercel', repo: 'next.js', band: 'USE READY', tagline: 'The React Framework for the Web', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Commit velocity sustained · New App Router patterns shipping' },
@@ -590,7 +590,7 @@ export default function Home() {
 }
 
 function OpportunityCard({ trend }: { trend: any, key?: any }) {
-  const useCases = CATEGORY_USE_CASES[trend.repo.toLowerCase()] || { use: "Generic development", fork: "Custom ecosystem component" };
+  const useCases = CATEGORY_USE_CASES[trend.repo.toLowerCase()] || { use: "Generic development", fork: "Custom ecosystem component", grow: "Star and contribute upstream" };
 
   // Band is baked at curation time via verdictFor() — see TRENDING_DATA.
   // Numeric scores are deliberately not displayed here to avoid drift vs.
@@ -663,6 +663,10 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
           <div className="flex items-start gap-3">
             <span className="text-[10px] font-black text-soy-red border border-soy-red px-1.5 py-0.5 shrink-0">FORK</span>
             <span className="text-xs font-bold uppercase tracking-tight italic">{useCases.fork}</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-[10px] font-black text-green-700 border border-green-700 px-1.5 py-0.5 shrink-0">GROW</span>
+            <span className="text-xs font-bold uppercase tracking-tight text-green-700">{useCases.grow}</span>
           </div>
         </div>
       </div>
