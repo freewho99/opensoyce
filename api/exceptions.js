@@ -17,6 +17,8 @@
  *   GET    /api/exceptions?action=watchlist-changes  — Sprint+4: recent degradations across watched packages
  *   POST   /api/exceptions?action=watchlist-add      — Sprint+4: add a package to the user's watchlist
  *   POST   /api/exceptions?action=watchlist-remove   — Sprint+4: remove a package from the user's watchlist
+ *   GET    /api/exceptions?action=notifications-get  — Sprint+5: whether Slack is configured for (owner, repo); URL never returned
+ *   POST   /api/exceptions?action=notifications-set  — Sprint+5: upsert Slack webhook URL (or null to disable)
  *
  * Auth: dashboard session token (osg_session cookie or Authorization: Bearer),
  * HMAC-signed with OPENSOYCE_DASHBOARD_SECRET. Minting happens in the
@@ -974,6 +976,137 @@ async function handleWatchlistRemove(req, res, session) {
 }
 
 // ---------------------------------------------------------------------------
+// Sprint+5: Slack notifications config (notifications table)
+//
+// One row per (owner, repo). slack_webhook_url is nullable so disabling is a
+// null write that preserves audit context (updated_by, updated_at). The URL
+// itself never leaves the server — notifications-get returns only metadata.
+// ---------------------------------------------------------------------------
+
+const SLACK_WEBHOOK_URL_PREFIX = 'https://hooks.slack.com/services/';
+const SLACK_WEBHOOK_URL_MAX = 500;
+
+async function handleNotificationsGet(req, res, session) {
+  const q = getQuery(req);
+  const owner = typeof q.owner === 'string' ? q.owner : '';
+  const repo = typeof q.repo === 'string' ? q.repo : '';
+  if (!owner || !isValidGithubName(owner)) return err(res, 400, 'BAD_REQUEST', 'owner is missing or invalid');
+  if (!repo || !isValidGithubName(repo)) return err(res, 400, 'BAD_REQUEST', 'repo is missing or invalid');
+
+  // Read access suffices: even read-only users see whether Slack is configured.
+  // They just can't change it (notifications-set requires write+).
+  const perm = await getRepoPermissionForUser(owner, repo, session.login);
+  if (perm === 'none') return err(res, 404, 'NOT_FOUND', 'Guard is not installed on this repo, or you have no access');
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions notifications-get: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const { data, error } = await sb
+    .from('notifications')
+    .select('slack_webhook_url, updated_by, updated_at')
+    .eq('owner', owner)
+    .eq('repo', repo)
+    .maybeSingle();
+
+  if (error) {
+    console.error('exceptions notifications-get: supabase query failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+  if (!data) return sendJson(res, 200, { configured: false });
+
+  // Row exists but URL may be null (disabled). Either way, never echo the URL.
+  return sendJson(res, 200, {
+    configured: typeof data.slack_webhook_url === 'string' && data.slack_webhook_url.length > 0,
+    updated_by: data.updated_by,
+    updated_at: data.updated_at,
+  });
+}
+
+function validateNotificationsSetBody(body) {
+  const owner = body && typeof body.owner === 'string' ? body.owner.trim() : '';
+  const repo = body && typeof body.repo === 'string' ? body.repo.trim() : '';
+  if (!owner || !isValidGithubName(owner)) return { error: 'owner is missing or not a valid GitHub identifier' };
+  if (!repo || !isValidGithubName(repo)) return { error: 'repo is missing or not a valid GitHub identifier' };
+
+  // slack_webhook_url must be explicitly present in the body. null disables;
+  // a string must match the Slack prefix and length bounds. Anything else 400.
+  if (!body || !Object.prototype.hasOwnProperty.call(body, 'slack_webhook_url')) {
+    return { error: 'slack_webhook_url is required (string or null)' };
+  }
+  const raw = body.slack_webhook_url;
+  let slackWebhookUrl;
+  if (raw === null) {
+    slackWebhookUrl = null;
+  } else if (typeof raw === 'string') {
+    if (raw.length < 1 || raw.length > SLACK_WEBHOOK_URL_MAX) {
+      return { error: `slack_webhook_url must be 1-${SLACK_WEBHOOK_URL_MAX} chars` };
+    }
+    if (!raw.startsWith(SLACK_WEBHOOK_URL_PREFIX)) {
+      return { error: `slack_webhook_url must start with ${SLACK_WEBHOOK_URL_PREFIX}` };
+    }
+    slackWebhookUrl = raw;
+  } else {
+    return { error: 'slack_webhook_url must be a string or null' };
+  }
+  return { value: { owner, repo, slackWebhookUrl } };
+}
+
+async function handleNotificationsSet(req, res, session) {
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+  const validated = validateNotificationsSetBody(body);
+  if (validated.error) return err(res, 400, 'BAD_REQUEST', validated.error);
+  const { owner, repo, slackWebhookUrl } = validated.value;
+
+  const perm = await getRepoPermissionForUser(owner, repo, session.login);
+  if (perm === 'none') return err(res, 404, 'NOT_FOUND', 'Guard is not installed on this repo, or you have no access');
+  if (perm !== 'write' && perm !== 'admin') return err(res, 403, 'FORBIDDEN', 'you need write or admin permission on this repo');
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions notifications-set: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const updatedAt = new Date().toISOString();
+  const { data, error } = await sb
+    .from('notifications')
+    .upsert({
+      owner,
+      repo,
+      slack_webhook_url: slackWebhookUrl,
+      updated_by: session.login,
+      updated_at: updatedAt,
+    }, { onConflict: 'owner,repo' })
+    .select('updated_by, updated_at')
+    .single();
+
+  if (error) {
+    console.error('exceptions notifications-set: supabase upsert failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database write failed');
+  }
+
+  // Never echo the URL back, even on success.
+  return sendJson(res, 200, {
+    ok: true,
+    configured: slackWebhookUrl !== null,
+    updated_by: data ? data.updated_by : session.login,
+    updated_at: data ? data.updated_at : updatedAt,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -998,6 +1131,8 @@ export default async function handler(req, res) {
     if (method === 'GET' && action === 'watchlist-changes') return await handleWatchlistChanges(req, res, session);
     if (method === 'POST' && action === 'watchlist-add') return await handleWatchlistAdd(req, res, session);
     if (method === 'POST' && action === 'watchlist-remove') return await handleWatchlistRemove(req, res, session);
+    if (method === 'GET' && action === 'notifications-get') return await handleNotificationsGet(req, res, session);
+    if (method === 'POST' && action === 'notifications-set') return await handleNotificationsSet(req, res, session);
 
     if (method === 'GET') return await handleList(req, res, session);
     if (method === 'POST') return await handleGrant(req, res, session);
