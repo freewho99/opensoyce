@@ -508,7 +508,13 @@ function clearSessionCookie(res) {
 }
 
 async function handleWhoami(req, res, session) {
-  return sendJson(res, 200, { login: session.login });
+  // Sprint+6 PR 3: expose session.orgs so the dashboard's org picker can show
+  // every org the user belongs to — not just orgs that already have watched
+  // packages (which is what watchlist-list rows would imply). Without this,
+  // first-add to a fresh org is impossible. `|| []` defaults to empty for old
+  // session tokens that predate Sprint+6 (verifySessionToken already coerces
+  // missing payload.orgs to []; this fallback is belt-and-suspenders).
+  return sendJson(res, 200, { login: session.login, orgs: session.orgs || [] });
 }
 
 async function handleLogout(req, res) {
