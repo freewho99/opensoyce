@@ -32,6 +32,10 @@
  * @property {number}   contributors Number of contributors observed (capped by fetch page size)
  * @property {AdvisorySummary | null} advisories  null when the advisory fetch failed; populated summary (possibly all zeroes) when it succeeded
  * @property {MaintenanceBreakdown} maintenanceBreakdown  always populated; `triageDataAvailable` indicates whether the triage sub-score is real or a fallback zero
+ * @property {boolean}  hasDependabot
+ * @property {boolean}  hasSast
+ * @property {boolean}  busFactorHealthy
+ * @property {number | null} avgResolutionDays
  *
  * @typedef {Object} ScoreResult
  * @property {number}          total      0.0 - 10.0, sum of all pillars, rounded to 1 decimal
@@ -53,9 +57,11 @@
  * @param {any | null} [latestRelease]     GET /repos/{owner}/{repo}/releases/latest (may be null when no releases)
  * @param {any[] | null} [repoAdvisories]  GET /repos/{owner}/{repo}/security-advisories (null on fetch failure, [] when none)
  * @param {any[] | null} [recentIssues]    GET /repos/{owner}/{repo}/issues?state=all&since=<90d>&per_page=100 (null on fetch failure, [] when quiet). Caller supplies the `since` cutoff — the scorer is pure.
+ * @param {any | null} [workflows]         GET /repos/{owner}/{repo}/actions/workflows (may be null)
+ * @param {boolean} [hasDependabot]        Whether dependabot/renovate configuration exists
  * @returns {ScoreResult}
  */
-export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues) {
+export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues, workflows, hasDependabot) {
   const now = new Date();
   const safeCommits = Array.isArray(commits) ? commits : [];
   const safeContributors = Array.isArray(contributors) ? contributors : [];
@@ -78,7 +84,27 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   else commitRecency = 0.1;
 
   const releaseRecency = scoreReleaseRecency(latestRelease, now);
-  const issueTriage = scoreIssueTriage(recentIssues, now);
+
+  // Calculate average resolution days (CHAOSS Metric)
+  let avgResolutionDays = null;
+  const issuesOnly = Array.isArray(recentIssues) ? recentIssues.filter(a => a && !a.pull_request) : [];
+  const closedIssues = issuesOnly.filter(a => a.state === 'closed' && a.closed_at && a.created_at);
+  if (closedIssues.length > 0) {
+    const totalMs = closedIssues.reduce((acc, a) => {
+      return acc + (new Date(a.closed_at).getTime() - new Date(a.created_at).getTime());
+    }, 0);
+    avgResolutionDays = (totalMs / closedIssues.length) / 86400000;
+  }
+
+  let issueTriage = scoreIssueTriage(recentIssues, now);
+  if (avgResolutionDays !== null) {
+    if (avgResolutionDays <= 7) {
+      issueTriage += 0.1; // Bonus for fast resolution
+    } else if (avgResolutionDays > 30) {
+      issueTriage -= 0.1; // Penalty for slow resolution
+    }
+  }
+
   const maintenance = Math.min(3.0, commitRecency + releaseRecency + issueTriage);
 
   // 2. COMMUNITY (max 2.5) - stars (log-scaled to 500k), contributor count, fork milestone
@@ -95,7 +121,20 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   else if (contributorCount >= 2) community += 0.1;
 
   if ((repoData.forks_count || 0) >= 1000) community += 0.5;
-  community = Math.min(2.5, community);
+
+  // Calculate Bus Factor (CHAOSS Metric)
+  const totalContributions = safeContributors.reduce((acc, c) => acc + (c.contributions || 0), 0);
+  let busFactorHealthy = true;
+  if (safeContributors.length >= 3 && totalContributions > 0) {
+    const topContributions = safeContributors[0].contributions || 0;
+    const ratio = topContributions / totalContributions;
+    if (ratio > 0.8) {
+      busFactorHealthy = false;
+      community -= 0.2; // Penalty for high concentration bottleneck
+    }
+  }
+
+  community = Math.max(0, Math.min(2.5, community));
 
   // 3. SECURITY (max 2.0) - license, issue load, SECURITY.md, advisories
   // Phase-2 recalibration: license rewards halved (0.4→0.2 each). Paperwork
@@ -123,6 +162,12 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
 
   security += scoreSecurityExtras(communityProfile);
   security += scoreRepoAdvisories(repoAdvisories, now);
+
+  // OpenSSF Scorecard bonuses
+  const hasSast = !!(workflows && workflows.workflows && Array.isArray(workflows.workflows) && workflows.workflows.length > 0);
+  if (hasDependabot) security += 0.25;
+  if (hasSast) security += 0.25;
+
   if (security < 0) security = 0;
   security = Math.min(2.0, security);
 
@@ -184,6 +229,10 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
         triage: round1(issueTriage),
         triageDataAvailable: Array.isArray(recentIssues),
       },
+      hasDependabot: !!hasDependabot,
+      hasSast,
+      busFactorHealthy,
+      avgResolutionDays: avgResolutionDays !== null ? round1(avgResolutionDays) : null,
     },
   };
 }

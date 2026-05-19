@@ -100,7 +100,12 @@ export default function Lookup() {
         lastCommit: data.meta.lastCommit,
         advisories: data.meta.advisories ?? null,
         maintenanceBreakdown: data.meta.maintenanceBreakdown ?? null,
+        hasDependabot: data.meta.hasDependabot,
+        hasSast: data.meta.hasSast,
+        busFactorHealthy: data.meta.busFactorHealthy,
+        avgResolutionDays: data.meta.avgResolutionDays,
       });
+
       
       showToast('Analysis complete!');
     } catch (err: any) {
@@ -276,29 +281,40 @@ export default function Lookup() {
                             └ COMMIT {result.maintenanceBreakdown.commit.toFixed(1)}
                             {' · '}RELEASE {result.maintenanceBreakdown.release.toFixed(1)}
                             {' · '}TRIAGE {result.maintenanceBreakdown.triageDataAvailable ? result.maintenanceBreakdown.triage.toFixed(1) : 'N/A'}
+                            {result.avgResolutionDays !== null && result.avgResolutionDays !== undefined && (
+                              <span className="text-soy-red">{' · '}RESOLUTION {result.avgResolutionDays.toFixed(1)}d</span>
+                            )}
                           </div>
                         )}
+
                         <PillarRow label="Community" value={result.score.community} raw={result.score.raw?.community} max={2.5} />
+                        {result.busFactorHealthy === false ? (
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic text-soy-red -mt-2 pl-1">
+                            ⚠️ CHAOSS ALERT: HIGH MAINTAINER CONCENTRATION (BUS FACTOR BOTTLENECK)
+                          </div>
+                        ) : (
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-60 -mt-2 pl-1">
+                            └ HEALTHY CONTRIBUTOR DISTRIBUTION (LOW BOTTLENECK RISK)
+                          </div>
+                        )}
+
                         <PillarRow label="Security" value={result.score.security} raw={result.score.raw?.security} max={2.0} />
                         {result.advisories === undefined ? null : result.advisories === null ? (
                           <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-30 -mt-2 pl-1">
                             └ ADVISORY DATA UNAVAILABLE
                           </div>
-                        ) : result.advisories.total === 0 ? (
-                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-50 -mt-2 pl-1">
-                            └ NO KNOWN ADVISORIES
-                          </div>
                         ) : (
-                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic -mt-2 pl-1">
-                            └ <span className={result.advisories.recentOpen > 0 ? 'text-soy-red' : 'opacity-60'}>
-                                {result.advisories.openCount} OPEN / {result.advisories.total} TOTAL
-                              </span>
-                            {(result.advisories.critical ?? 0) > 0 && <span className="ml-2 bg-soy-red text-white px-1.5 py-0.5">CRIT {result.advisories.critical}</span>}
+                          <div className="text-[9px] font-black uppercase tracking-[0.2em] italic opacity-60 -mt-2 pl-1 break-words">
+                            └ {result.advisories.total === 0 ? 'NO CVEs' : `${result.advisories.openCount} CVEs`}
+                            {' · '}DEPENDABOT {result.hasDependabot ? '✓' : '✗'}
+                            {' · '}SAST/CI {result.hasSast ? '✓' : '✗'}
                           </div>
                         )}
+
                         <PillarRow label="Documentation" value={result.score.documentation} raw={result.score.raw?.documentation} max={1.5} />
                         <PillarRow label="Activity" value={result.score.activity || 0} raw={result.score.raw?.activity} max={1.0} />
                        </div>
+
                     </div>
 
                     <div className="space-y-4">

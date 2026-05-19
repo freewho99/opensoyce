@@ -2,7 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CATEGORIES, Category } from '../data/categories';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, ArrowUpRight, Crown, Loader2, Zap, Rocket, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Crown, Loader2, Zap, Rocket, ShieldCheck,
+  FlaskConical, Palette, Layers, Database, Bot, Cpu, PenTool, Brain
+} from 'lucide-react';
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  FlaskConical, Palette, Zap, Layers, Database, Bot, Cpu, PenTool, Brain
+};
 
 export default function Compare() {
   const { slug } = useParams();
@@ -19,6 +25,178 @@ export default function Compare() {
   return <CategoryComparison category={category} />;
 }
 
+function CustomCompareSection() {
+  const [repoA, setRepoA] = useState('');
+  const [repoB, setRepoB] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dataA, setDataA] = useState<any | null>(null);
+  const [dataB, setDataB] = useState<any | null>(null);
+
+  const handleCompare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!repoA.includes('/') || !repoB.includes('/')) {
+      setError('Format must be owner/repo (e.g. facebook/react)');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setDataA(null);
+    setDataB(null);
+
+    try {
+      const fetchRepo = async (path: string) => {
+        const [owner, repo] = path.split('/');
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ owner: owner.trim(), repo: repo.trim() })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || `Failed to analyze ${path}`);
+        }
+        return res.json();
+      };
+
+      const [resA, resB] = await Promise.all([
+        fetchRepo(repoA),
+        fetchRepo(repoB)
+      ]);
+
+      setDataA(resA);
+      setDataB(resB);
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during comparison');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000] mb-16">
+      <h2 className="text-3xl font-black uppercase italic tracking-tight mb-6">Direct Compare</h2>
+      <form onSubmit={handleCompare} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center mb-6">
+        <div className="md:col-span-5">
+          <label className="block text-[10px] font-bold uppercase tracking-widest opacity-40 mb-2">REPOSITORY A</label>
+          <input
+            type="text"
+            value={repoA}
+            onChange={(e) => setRepoA(e.target.value)}
+            placeholder="e.g. facebook/react"
+            className="w-full bg-soy-label/20 border-4 border-black p-4 font-black outline-none focus:bg-white"
+            required
+          />
+        </div>
+        <div className="md:col-span-2 text-center text-3xl font-black italic text-soy-red pt-4">VS</div>
+        <div className="md:col-span-5">
+          <label className="block text-[10px] font-bold uppercase tracking-widest opacity-40 mb-2">REPOSITORY B</label>
+          <input
+            type="text"
+            value={repoB}
+            onChange={(e) => setRepoB(e.target.value)}
+            placeholder="e.g. angular/angular"
+            className="w-full bg-soy-label/20 border-4 border-black p-4 font-black outline-none focus:bg-white"
+            required
+          />
+        </div>
+        <div className="md:col-span-12 mt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-black text-white hover:bg-soy-red py-4 text-lg font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="animate-spin" /> : 'RUN COMPARISON GRID'}
+          </button>
+        </div>
+      </form>
+
+      {error && (
+        <div className="p-4 bg-soy-red/10 border-2 border-soy-red text-soy-red font-bold mb-6">
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex flex-col items-center justify-center py-12 gap-3">
+          <Loader2 className="animate-spin text-soy-red" size={48} />
+          <span className="text-sm font-black uppercase tracking-widest opacity-60">Parsing code DNA...</span>
+        </div>
+      )}
+
+      {dataA && dataB && (
+        <div className="border-4 border-black overflow-x-auto mt-8 shadow-[4px_4px_0px_#000]">
+          <table className="w-full border-collapse text-left min-w-[600px]">
+            <thead>
+              <tr className="bg-black text-white font-black uppercase italic text-sm border-b-4 border-black">
+                <th className="p-4 w-1/3">METRIC / PILLAR</th>
+                <th className="p-4 w-1/3 text-center">{dataA.repo.owner}/{dataA.repo.name}</th>
+                <th className="p-4 w-1/3 text-center">{dataB.repo.owner}/{dataB.repo.name}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y-2 divide-black/10 font-bold text-sm">
+              <tr>
+                <td className="p-4 bg-soy-label/10">OVERALL SOYCE SCORE</td>
+                <td className="p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5">{dataA.total.toFixed(1)} / 10.0</td>
+                <td className="p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5">{dataB.total.toFixed(1)} / 10.0</td>
+              </tr>
+              <tr>
+                <td className="p-4">MAINTENANCE (Max 3.0)</td>
+                <td className="p-4 text-center">
+                  <div>{dataA.breakdown?.maintenance?.toFixed(1) ?? '0.0'} / 3.0</div>
+                  <div className="text-[10px] opacity-60">Resolution Time: {typeof dataA.meta?.avgResolutionDays === 'number' ? `${dataA.meta.avgResolutionDays.toFixed(1)}d` : 'N/A'}</div>
+                </td>
+                <td className="p-4 text-center">
+                  <div>{dataB.breakdown?.maintenance?.toFixed(1) ?? '0.0'} / 3.0</div>
+                  <div className="text-[10px] opacity-60">Resolution Time: {typeof dataB.meta?.avgResolutionDays === 'number' ? `${dataB.meta.avgResolutionDays.toFixed(1)}d` : 'N/A'}</div>
+                </td>
+              </tr>
+              <tr>
+                <td className="p-4">COMMUNITY (Max 2.5)</td>
+                <td className="p-4 text-center">
+                  <div>{dataA.breakdown?.community?.toFixed(1) ?? '0.0'} / 2.5</div>
+                  <div className="text-[10px] opacity-60">Stars: {typeof dataA.meta?.totalStars === 'number' ? `${(dataA.meta.totalStars / 1000).toFixed(1)}k` : '0.0k'}</div>
+                  {dataA.meta?.busFactorHealthy === false && (
+                    <div className="text-[9px] text-soy-red font-black">⚠️ HIGH BOTTLENECK RISK</div>
+                  )}
+                </td>
+                <td className="p-4 text-center">
+                  <div>{dataB.breakdown?.community?.toFixed(1) ?? '0.0'} / 2.5</div>
+                  <div className="text-[10px] opacity-60">Stars: {typeof dataB.meta?.totalStars === 'number' ? `${(dataB.meta.totalStars / 1000).toFixed(1)}k` : '0.0k'}</div>
+                  {dataB.meta?.busFactorHealthy === false && (
+                    <div className="text-[9px] text-soy-red font-black">⚠️ HIGH BOTTLENECK RISK</div>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td className="p-4">SECURITY (Max 2.0)</td>
+                <td className="p-4 text-center">
+                  <div>{dataA.breakdown?.security?.toFixed(1) ?? '0.0'} / 2.0</div>
+                  <div className="text-[10px] opacity-60">Dependabot: {dataA.meta?.hasDependabot ? '✓' : '✗'} | SAST/CI: {dataA.meta?.hasSast ? '✓' : '✗'}</div>
+                </td>
+                <td className="p-4 text-center">
+                  <div>{dataB.breakdown?.security?.toFixed(1) ?? '0.0'} / 2.0</div>
+                  <div className="text-[10px] opacity-60">Dependabot: {dataB.meta?.hasDependabot ? '✓' : '✗'} | SAST/CI: {dataB.meta?.hasSast ? '✓' : '✗'}</div>
+                </td>
+              </tr>
+              <tr>
+                <td className="p-4">DOCUMENTATION (Max 1.5)</td>
+                <td className="p-4 text-center">{dataA.breakdown.documentation.toFixed(1)} / 1.5</td>
+                <td className="p-4 text-center">{dataB.breakdown.documentation.toFixed(1)} / 1.5</td>
+              </tr>
+              <tr>
+                <td className="p-4">ACTIVITY (Max 1.0)</td>
+                <td className="p-4 text-center">{dataA.breakdown.activity.toFixed(1)} / 1.0</td>
+                <td className="p-4 text-center">{dataB.breakdown.activity.toFixed(1)} / 1.0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CompareIndex() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-16">
@@ -30,6 +208,8 @@ function CompareIndex() {
           BATTLE-TESTED DATA. REAL SCORES. NO OPINIONS.
         </p>
       </div>
+
+      <CustomCompareSection />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
         {CATEGORIES.map((cat, idx) => (
@@ -43,7 +223,15 @@ function CompareIndex() {
             <Link to={`/compare/${cat.slug}`} className="block h-full">
               <div className="bg-white border-4 border-black p-8 h-full flex flex-col justify-between hover:translate-y-[-8px] hover:translate-x-[4px] transition-all shadow-[8px_8px_0px_#000] group-hover:shadow-[4px_4px_0px_#E63322]">
                 <div>
-                   <div className="text-4xl mb-4">{cat.icon}</div>
+                   <div className="text-4xl mb-4 text-soy-red">
+                     {(() => {
+                       if (typeof cat.icon === 'string' && cat.icon.startsWith('/icons/')) {
+                         return <img src={cat.icon} alt={cat.title} className="w-16 h-16 object-contain" />;
+                       }
+                       const IconComp = ICON_MAP[cat.icon];
+                       return IconComp ? <IconComp size={40} strokeWidth={2.5} /> : cat.icon;
+                     })()}
+                   </div>
                    <h3 className="text-2xl font-black uppercase italic tracking-tight mb-2 leading-none group-hover:text-soy-red transition-colors">
                      {cat.title}
                    </h3>
@@ -120,7 +308,15 @@ function CategoryComparison({ category }: { category: Category }) {
       {/* Header Section */}
       <div className="mb-12 border-b-8 border-black pb-8">
         <div className="flex items-start gap-4 mb-4">
-          <span className="text-6xl">{category.icon}</span>
+          <div className="text-soy-red">
+            {(() => {
+              if (typeof category.icon === 'string' && category.icon.startsWith('/icons/')) {
+                return <img src={category.icon} alt={category.title} className="w-24 h-24 object-contain" />;
+              }
+              const IconComp = ICON_MAP[category.icon];
+              return IconComp ? <IconComp size={64} strokeWidth={2.5} /> : category.icon;
+            })()}
+          </div>
           <div>
             <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-none">
               {category.title}

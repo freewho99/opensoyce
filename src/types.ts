@@ -49,7 +49,12 @@ export type Project = {
   lastCommit?: string;
   advisories?: AdvisorySummary | null;
   maintenanceBreakdown?: MaintenanceBreakdown | null;
+  hasDependabot?: boolean;
+  hasSast?: boolean;
+  busFactorHealthy?: boolean;
+  avgResolutionDays?: number | null;
   parentId?: string; // ID of the original project if this is a fork
+
   parentName?: string;
   parentOwner?: string;
   isFork?: boolean;

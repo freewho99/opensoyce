@@ -104,4 +104,17 @@ export class GitHubService {
   async searchRepos(query: string) {
     return this.fetchGH(`/search/repositories?q=${encodeURIComponent(query)}+in:name,description&sort=stars&order=desc&per_page=8`);
   }
+
+  async checkDependabot(owner: string, repo: string): Promise<boolean> {
+    try {
+      const res = await this.fetchGH(`/repos/${owner}/${repo}/contents/.github/dependabot.yml`);
+      if (res) return true;
+    } catch {}
+    try {
+      const res = await this.fetchGH(`/repos/${owner}/${repo}/contents/renovate.json`);
+      if (res) return true;
+    } catch {}
+    return false;
+  }
 }
+

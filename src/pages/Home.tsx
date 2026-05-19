@@ -4,8 +4,13 @@ import { Link } from 'react-router-dom';
 import {
   ArrowRight, ShieldCheck, Zap, Star,
   ArrowUpRight, Rocket, Skull, AlertCircle, Info,
-  Flame, TrendingUp, RefreshCw
+  Flame, TrendingUp, RefreshCw,
+  FlaskConical, Palette, Layers, Database, Bot, Cpu, PenTool, Brain
 } from 'lucide-react';
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  FlaskConical, Palette, Zap, Layers, Database, Bot, Cpu, PenTool, Brain
+};
 import NutritionLabel from '../components/NutritionLabel';
 import ProjectCard from '../components/ProjectCard';
 import Soycie from '../components/Soycie';
@@ -342,7 +347,15 @@ export default function Home() {
                 className="group border-4 border-black p-8 bg-soy-label/20 hover:shadow-[8px_8px_0px_#000] hover:-translate-y-1 transition-all flex flex-col justify-between"
               >
                 <div>
-                  <div className="text-4xl mb-4 group-hover:scale-110 transition-transform origin-left">{cat.icon}</div>
+                  <div className="text-4xl mb-4 text-soy-red group-hover:scale-110 transition-transform origin-left">
+                    {(() => {
+                      if (typeof cat.icon === 'string' && cat.icon.startsWith('/icons/')) {
+                        return <img src={cat.icon} alt={cat.title} className="w-16 h-16 object-contain" />;
+                      }
+                      const IconComp = ICON_MAP[cat.icon];
+                      return IconComp ? <IconComp size={40} strokeWidth={2.5} /> : cat.icon;
+                    })()}
+                  </div>
                   <h3 className="text-2xl font-black uppercase italic tracking-tight mb-2">{cat.title}</h3>
                   <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest leading-relaxed mb-6 italic">"{cat.tagline}"</p>
                 </div>

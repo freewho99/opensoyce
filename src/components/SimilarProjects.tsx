@@ -2,7 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getSimilarProjects, CategoryProject } from '../data/categories';
 import { motion } from 'motion/react';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles,
+  FlaskConical, Palette, Layers, Database, Bot, Cpu, PenTool, Brain, Zap
+} from 'lucide-react';
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  FlaskConical, Palette, Zap, Layers, Database, Bot, Cpu, PenTool, Brain
+};
 
 interface Props {
   owner: string;
@@ -23,7 +29,15 @@ export default function SimilarProjects({ owner, repo, topics = [] }: Props) {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
           <h3 className="text-2xl font-black uppercase italic tracking-tighter flex items-center gap-3">
-            <span className="text-soy-red">{category.icon}</span> 
+            <span className="text-soy-red">
+              {(() => {
+                if (typeof category.icon === 'string' && category.icon.startsWith('/icons/')) {
+                  return <img src={category.icon} alt={category.title} className="w-8 h-8 object-contain inline-block" />;
+                }
+                const IconComp = ICON_MAP[category.icon];
+                return IconComp ? <IconComp size={28} strokeWidth={2.5} /> : category.icon;
+              })()}
+            </span> 
             SIMILAR PROJECTS IN: {category.title}
           </h3>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 italic mt-1">

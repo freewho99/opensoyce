@@ -32,7 +32,7 @@ export const CATEGORIES: Category[] = [
     slug: 'testing-harnesses',
     title: 'TESTING HARNESSES',
     tagline: 'Pick wrong and you rewrite 10,000 tests.',
-    icon: '🧪',
+    icon: '/icons/cat_testing.png',
     keywords: ['testing', 'test-runner', 'e2e', 'unit-testing', 'integration-testing', 'playwright', 'cypress', 'jest', 'vitest'],
     projects: [
       { 
@@ -71,7 +71,7 @@ export const CATEGORIES: Category[] = [
     slug: 'ui-libraries',
     title: 'UI & DESIGN SYSTEMS',
     tagline: 'Your components are only as healthy as their foundation.',
-    icon: '🎨',
+    icon: '/icons/cat_ui.png',
     keywords: ['ui', 'components', 'design-system', 'react-components', 'component-library', 'shadcn', 'radix', 'mui', 'chakra', 'tailwind'],
     projects: [
       { 
@@ -100,7 +100,7 @@ export const CATEGORIES: Category[] = [
     slug: 'build-tools',
     title: 'BUILD TOOLS',
     tagline: 'Milliseconds matter when you ship 100 times a day.',
-    icon: '⚡',
+    icon: '/icons/cat_build.png',
     keywords: ['bundler', 'build-tool', 'vite', 'webpack', 'rollup', 'esbuild', 'turbopack', 'parcel', 'build'],
     projects: [
       { owner: 'vitejs', repo: 'vite', name: 'VITE', tagline: 'The build tool that made webpack feel old overnight.', badge: 'FASTEST GROWING' },
@@ -119,7 +119,7 @@ export const CATEGORIES: Category[] = [
     slug: 'meta-frameworks',
     title: 'META-FRAMEWORKS',
     tagline: 'The decision that shapes your entire architecture.',
-    icon: '🏗️',
+    icon: '/icons/cat_frameworks.png',
     keywords: ['framework', 'meta-framework', 'nextjs', 'astro', 'nuxt', 'sveltekit', 'remix', 'react', 'full-stack'],
     projects: [
       { 
@@ -158,7 +158,7 @@ export const CATEGORIES: Category[] = [
     slug: 'orm-database',
     title: 'ORM & DATABASE LAYER',
     tagline: 'Your data layer outlives every framework decision.',
-    icon: '🗄️',
+    icon: '/icons/cat_database.png',
     keywords: ['orm', 'database', 'prisma', 'drizzle', 'typeorm', 'sequelize', 'mongoose', 'sql', 'postgres'],
     projects: [
       { owner: 'prisma', repo: 'prisma', name: 'PRISMA', tagline: 'Type-safe database access with a great DX.', badge: 'TYPE-SAFE' },
@@ -177,7 +177,7 @@ export const CATEGORIES: Category[] = [
     slug: 'ai-sdks',
     title: 'AI SDK LANDSCAPE',
     tagline: 'The fastest moving category in open source. Score carefully.',
-    icon: '🤖',
+    icon: '/icons/cat_aisdks.png',
     keywords: ['ai', 'llm', 'openai', 'langchain', 'ai-sdk', 'machine-learning', 'agents', 'rag'],
     projects: [
       { owner: 'vercel', repo: 'ai', name: 'VERCEL AI SDK', tagline: 'Stream-first AI for React and Node. Dead simple.', badge: 'VERCEL BACKED' },
@@ -196,7 +196,7 @@ export const CATEGORIES: Category[] = [
     slug: 'ai-agent-harnesses',
     title: 'AI AGENT HARNESSES',
     tagline: 'PICK WRONG AND YOUR AGENTS GO ROGUE.',
-    icon: '⚙️',
+    icon: '/icons/cat_aiagents.png',
     keywords: ['ai-agent', 'harness', 'yaml', 'coding-automation', 'llm', 'agentic', 'declarative', 'orchestration', 'observability', 'production', 'autonomous', 'coding', 'issue-tracker'],
     projects: [
       { owner: 'coleam00', repo: 'archon', name: 'ARCHON', tagline: 'YAML-DEFINED AI CODING WORKFLOWS', badge: 'HARNESS PIONEER' },
@@ -214,7 +214,7 @@ export const CATEGORIES: Category[] = [
     slug: 'claude-design-alternatives',
     title: 'CLAUDE DESIGN ALTERNATIVES',
     tagline: 'PROMPT-TO-PRODUCT. YOUR MODEL. YOUR MACHINE.',
-    icon: '🎨',
+    icon: '/icons/cat_design.png',
     keywords: ['design', 'ui', 'figma', 'claude', 'claude-design', 'local-first', 'ai-design', 'open-source', 'model-agnostic', 'desktop', 'multi-provider', 'ollama', 'openai', 'design-tool', 'clone', 'community', 'fig-files'],
     projects: [
       { owner: 'nicholasgasior', repo: 'open-design', name: 'OPEN DESIGN', tagline: 'LOCAL-FIRST CLAUDE DESIGN CLONE. ANY MODEL.', badge: 'APACHE 2.0', earlyBreakout: true, momentumNote: 'GOING VIRAL — COMMUNITY BUILT IN DAYS' },
@@ -232,7 +232,7 @@ export const CATEGORIES: Category[] = [
     slug: 'skills-agents',
     title: 'SKILLS & AGENTS',
     tagline: 'Reusable capabilities and autonomous workers for AI-native workflows.',
-    icon: '🧠',
+    icon: '/icons/cat_skills.png',
     keywords: ['ai-agent', 'agents', 'skills', 'autonomous', 'workflow', 'automation', 'coding-assistant', 'orchestration', 'multi-agent', 'langgraph', 'crewai', 'autogen'],
     projects: [
       { 

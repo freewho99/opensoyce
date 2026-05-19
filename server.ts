@@ -69,7 +69,18 @@ async function startServer() {
     const hit = cacheGet(key);
     if (hit) return hit;
 
-    const [repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues] = await Promise.all([
+    const [
+      repoData,
+      commits,
+      contributors,
+      readme,
+      communityProfile,
+      latestRelease,
+      repoAdvisories,
+      recentIssues,
+      workflows,
+      hasDependabot
+    ] = await Promise.all([
       gh.getRepo(owner, repo),
       gh.getCommits(owner, repo),
       gh.getContributors(owner, repo),
@@ -77,7 +88,9 @@ async function startServer() {
       gh.getCommunityProfile(owner, repo),
       gh.getLatestRelease(owner, repo),
       gh.getRepoAdvisories(owner, repo),
-      gh.getRecentIssues(owner, repo)
+      gh.getRecentIssues(owner, repo),
+      gh.getWorkflows(owner, repo).catch(() => null),
+      gh.checkDependabot(owner, repo).catch(() => false)
     ]);
     if (!repoData) return null;
 
@@ -92,7 +105,18 @@ async function startServer() {
       }
     }
 
-    const scoreResult = calculateSoyceScore(repoData, commits || [], contributors || [], readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
+    const scoreResult = calculateSoyceScore(
+      repoData,
+      commits || [],
+      contributors || [],
+      readme,
+      communityProfile,
+      latestRelease,
+      repoAdvisories,
+      recentIssues,
+      workflows,
+      hasDependabot
+    );
     const data = {
       ...scoreResult,
       repo: {
@@ -107,6 +131,7 @@ async function startServer() {
     cacheSet(key, data);
     return data;
   }
+
 
   // API Routes
   app.get("/api/health", (req, res) => {
