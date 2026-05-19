@@ -709,7 +709,7 @@ function ActionBtn({ label, repo }: { label: string, repo: string }) {
   return (
     <button 
       onClick={() => trackEvent(`${label.toLowerCase()}_click`, { repo, page: '/' })}
-     {styles[label] ?? styles.GROW}
+       className={styles[label] ?? styles.GROW}
     >
       {label}
     </button>
