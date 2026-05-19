@@ -44,6 +44,7 @@ type WatchVerdict = {
 
 type WatchedRow = {
   id: string;
+  owner_org: string;
   package_name: string;
   ecosystem: string;
   created_at: string;
@@ -51,6 +52,7 @@ type WatchedRow = {
 };
 
 type WatchChange = {
+  owner_org?: string;
   package_name: string;
   ecosystem: string;
   owner: string;
@@ -154,6 +156,11 @@ export default function Dashboard() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [login, setLogin] = useState<string | null>(null);
+  // Sprint+6: org memberships baked into the session by the auth-callback. An
+  // empty array signals a stale (pre-Sprint+6) session token; we surface a
+  // re-auth banner in that state instead of just showing an empty watchlist.
+  const [orgs, setOrgs] = useState<string[]>([]);
+  const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
   const [oauthClientId, setOauthClientId] = useState<string | null>(null);
   const [repos, setRepos] = useState<RepoRef[] | null>(null);
   const [reposLoading, setReposLoading] = useState(false);
@@ -232,6 +239,7 @@ export default function Dashboard() {
           const body = await resp.json();
           if (cancelled) return;
           setLogin(body.login || null);
+          setOrgs(Array.isArray(body.orgs) ? body.orgs.filter((o: unknown) => typeof o === 'string') : []);
           setPhase('auth');
           return;
         } catch (e: unknown) {
@@ -249,6 +257,10 @@ export default function Dashboard() {
         if (resp.ok) {
           const body = await resp.json();
           setLogin(body.login || null);
+          // Sprint+6: whoami may or may not echo orgs depending on whether the
+          // backend rolled forward. Treat a missing/non-array field as "stale
+          // session" (orgs: []) and let the re-auth banner do the talking.
+          setOrgs(Array.isArray(body.orgs) ? body.orgs.filter((o: unknown) => typeof o === 'string') : []);
           setPhase('auth');
         } else {
           setPhase('unauth');
@@ -355,7 +367,11 @@ export default function Dashboard() {
     const params = new URLSearchParams({
       client_id: oauthClientId,
       redirect_uri: redirectUri,
-      scope: 'read:user',
+      // Sprint+6: read:org lets /user/orgs return private org memberships so
+      // the auth-callback can bake them into session.orgs. GitHub's OAuth spec
+      // requires scopes to be SPACE-separated (not comma-separated — that's a
+      // common footgun for this endpoint).
+      scope: 'read:user read:org',
       state,
       allow_signup: 'false',
     });
@@ -369,9 +385,13 @@ export default function Dashboard() {
       // best-effort; we still tear down local state.
     }
     setLogin(null);
+    setOrgs([]);
+    setSelectedOrg(null);
     setRepos(null);
     setSelectedRepo(null);
     setExceptions([]);
+    setWatched(null);
+    setChanges([]);
     setPhase('unauth');
   }, []);
 
@@ -561,6 +581,8 @@ export default function Dashboard() {
       if (resp.status === 401) {
         // Session expired mid-session — tear down so the user is prompted to sign in again.
         setLogin(null);
+        setOrgs([]);
+        setSelectedOrg(null);
         setRepos(null);
         setSelectedRepo(null);
         setExceptions([]);
@@ -615,13 +637,20 @@ export default function Dashboard() {
       setWatchAddError('Package name is required.');
       return;
     }
+    // Sprint+6: org-scoped add. The selected org becomes the row's owner_org.
+    // PR 1's backend rejects 403 if it isn't in session.orgs, so this is also
+    // a defense-in-depth check — the picker only lists session.orgs anyway.
+    if (!selectedOrg) {
+      setWatchAddError('Pick an org first.');
+      return;
+    }
     setWatchAdding(true);
     try {
       const resp = await fetch('/api/exceptions?action=watchlist-add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ package_name: trimmed, ecosystem: watchEcosystem }),
+        body: JSON.stringify({ owner_org: selectedOrg, package_name: trimmed, ecosystem: watchEcosystem }),
       });
       if (resp.status === 201 || resp.status === 200) {
         // 201 == new row, 200 with already_watched == duplicate. Either way
@@ -639,7 +668,7 @@ export default function Dashboard() {
     } finally {
       setWatchAdding(false);
     }
-  }, [watchPkgName, watchEcosystem, refreshWatched]);
+  }, [watchPkgName, watchEcosystem, selectedOrg, refreshWatched]);
 
   const handleUnwatch = useCallback(async (id: string) => {
     try {
@@ -664,6 +693,46 @@ export default function Dashboard() {
   // ------------------------------------------------------------- render
   const reasonLen = reason.trim().length;
   const sortedRepos = useMemo(() => repos || [], [repos]);
+
+  // Sprint+6: stable alphabetical sort for the org picker so the default
+  // selection is deterministic regardless of the order /user/orgs returned.
+  const sortedOrgs = useMemo<string[]>(() => {
+    const dedup: string[] = Array.from(new Set(orgs.filter(o => typeof o === 'string' && o.length > 0)));
+    dedup.sort((a, b) => a.localeCompare(b));
+    return dedup;
+  }, [orgs]);
+
+  // Stale-session detection. If we're authed but the session has no orgs,
+  // the cookie predates Sprint+6's read:org scope upgrade. The user needs to
+  // sign out and back in to grant the new scope and repopulate session.orgs.
+  const staleSession = phase === 'auth' && sortedOrgs.length === 0;
+
+  // Default-select the first org alphabetically once orgs land, and keep the
+  // selection valid if the orgs list ever changes (e.g. fresh sign-in).
+  useEffect(() => {
+    if (sortedOrgs.length === 0) {
+      if (selectedOrg !== null) setSelectedOrg(null);
+      return;
+    }
+    if (!selectedOrg || !sortedOrgs.includes(selectedOrg)) {
+      setSelectedOrg(sortedOrgs[0]);
+    }
+  }, [sortedOrgs, selectedOrg]);
+
+  // Client-side org filter for the watchlist. The backend already returns
+  // rows scoped to session.orgs (via the IN(...) query); this narrows to the
+  // currently-picked org so a user in many orgs sees a focused view.
+  const visibleWatched = useMemo(() => {
+    if (!watched || !selectedOrg) return [];
+    return watched.filter(w => w.owner_org === selectedOrg);
+  }, [watched, selectedOrg]);
+
+  // Same idea for the degradations banner. MVE: filter to the selected org so
+  // the banner matches the list below it.
+  const visibleChanges = useMemo(() => {
+    if (!selectedOrg) return [];
+    return changes.filter(c => !c.owner_org || c.owner_org === selectedOrg);
+  }, [changes, selectedOrg]);
 
   if (phase === 'loading' || phase === 'oauth-callback') {
     return (
@@ -1087,8 +1156,49 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Recent degradations banner */}
-        {changes.length > 0 && (
+        {/* Sprint+6: stale-session banner. Sits above everything else in the
+            watchlist section so the empty-list confusion never gets a chance
+            to mislead the user. */}
+        {staleSession && (
+          <div className="bg-amber-400 text-soy-bottle border-4 border-soy-bottle p-4 mb-6 shadow-[6px_6px_0px_#000] flex items-start gap-3">
+            <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-[11px] font-bold uppercase tracking-widest leading-relaxed">
+              Your sign-in is on an older permission set and can&apos;t see your organization watchlists.
+              {' '}
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="underline decoration-2 underline-offset-4 hover:text-soy-red font-black"
+              >
+                Sign out
+              </button>
+              {' '}and back in to upgrade.
+            </div>
+          </div>
+        )}
+
+        {/* Sprint+6: org picker. Always renders when the user has at least one
+            org so even a single-org user knows what they're scoped to. */}
+        {!staleSession && sortedOrgs.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <label className="text-[10px] font-black uppercase tracking-widest" htmlFor="watchlist-org-picker">
+              Showing watchlist for:
+            </label>
+            <select
+              id="watchlist-org-picker"
+              value={selectedOrg ?? sortedOrgs[0]}
+              onChange={e => setSelectedOrg(e.target.value)}
+              className="border-2 border-soy-bottle bg-soy-label/10 px-3 py-1.5 text-xs font-mono font-black uppercase tracking-widest focus:outline-none focus:bg-white"
+            >
+              {sortedOrgs.map(o => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Recent degradations banner (filtered to selected org). */}
+        {!staleSession && visibleChanges.length > 0 && (
           <div className="bg-soy-red text-white border-4 border-soy-bottle p-4 mb-6 shadow-[6px_6px_0px_#000]">
             <button
               type="button"
@@ -1096,15 +1206,15 @@ export default function Dashboard() {
               className="w-full flex items-center justify-between gap-3 text-left"
             >
               <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest">
-                <AlertTriangle size={16} /> [!] {changes.length} watched package{changes.length === 1 ? '' : 's'} degraded recently
+                <AlertTriangle size={16} /> [!] {visibleChanges.length} watched package{visibleChanges.length === 1 ? '' : 's'} degraded recently
               </span>
               <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
                 {changesExpanded ? 'HIDE' : 'SHOW'}
               </span>
             </button>
-            {(changesExpanded || changes.length <= 3) && (
+            {(changesExpanded || visibleChanges.length <= 3) && (
               <ul className="mt-3 space-y-2 border-t-2 border-white/40 pt-3">
-                {changes.map((c, i) => (
+                {visibleChanges.map((c, i) => (
                   <li key={`${c.package_name}-${c.ecosystem}-${c.owner}-${c.repo}-${i}`} className="text-[11px] font-mono">
                     <span className="font-black">{c.package_name}</span>
                     <span className="opacity-80"> ({c.ecosystem})</span>
@@ -1127,7 +1237,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {watchedLoading && watched === null ? (
+        {staleSession ? null : watchedLoading && watched === null ? (
           <p className="text-xs font-black uppercase tracking-widest opacity-60 text-center py-8">LOADING WATCHLIST...</p>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -1166,33 +1276,34 @@ export default function Dashboard() {
                 )}
                 <button
                   type="submit"
-                  disabled={watchAdding}
+                  disabled={watchAdding || !selectedOrg}
                   className="w-full bg-soy-red text-white py-3 text-xs font-black uppercase tracking-widest hover:bg-soy-bottle transition-all disabled:opacity-50 border-2 border-soy-bottle"
                 >
-                  {watchAdding ? 'ADDING...' : 'ADD TO WATCHLIST'}
+                  {watchAdding
+                    ? 'ADDING...'
+                    : selectedOrg
+                      ? `ADD TO ${selectedOrg.toUpperCase()} WATCHLIST`
+                      : 'PICK AN ORG FIRST'}
                 </button>
               </form>
             </section>
 
             {/* List */}
             <section className="lg:col-span-3 bg-white border-4 border-soy-bottle p-6 shadow-[8px_8px_0px_#000]">
-              <h3 className="text-xl font-black uppercase italic tracking-tighter mb-4">Your watchlist</h3>
-              {(watched === null || watched.length === 0) && changes.length === 0 ? (
+              <h3 className="text-xl font-black uppercase italic tracking-tighter mb-4">
+                {selectedOrg ? `${selectedOrg}'s watchlist` : 'Watchlist'}
+              </h3>
+              {visibleWatched.length === 0 ? (
                 <div className="bg-soy-label/20 border-2 border-soy-bottle p-6">
                   <p className="text-xs font-bold uppercase tracking-widest opacity-70 leading-relaxed">
-                    YOU&apos;RE NOT WATCHING ANY PACKAGES YET. ADD A PACKAGE TO THE LEFT TO GET
-                    NOTIFICATIONS WHEN ITS VERDICT DEGRADES ON ANY OF YOUR GUARD-INSTALLED REPOS.
-                  </p>
-                </div>
-              ) : watched && watched.length === 0 ? (
-                <div className="bg-soy-label/20 border-2 border-soy-bottle p-6">
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-70">
-                    NO PACKAGES WATCHED.
+                    {selectedOrg
+                      ? `NO PACKAGES WATCHED FOR ${selectedOrg.toUpperCase()} YET. ADD ONE ABOVE.`
+                      : 'NO PACKAGES WATCHED.'}
                   </p>
                 </div>
               ) : (
                 <ul className="space-y-3">
-                  {(watched || []).map(w => (
+                  {visibleWatched.map(w => (
                     <li key={w.id} className="border-2 border-soy-bottle p-4 bg-white">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="min-w-0 flex-1">
