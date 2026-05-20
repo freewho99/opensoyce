@@ -15,6 +15,7 @@ import NutritionLabel from '../components/NutritionLabel';
 import ProjectCard from '../components/ProjectCard';
 import Soycie from '../components/Soycie';
 import { useProjects } from '../context/ProjectContext';
+import { useWatchlist } from '../context/WatchlistContext';
 import { CATEGORIES } from '../data/categories';
 import { trackEvent } from '../utils/analytics';
 
@@ -473,7 +474,7 @@ export default function Home() {
             Ready to add <span className="text-soy-red">Extra Sauce</span> to your repo?
           </h2>
           <p className="text-lg md:text-xl font-medium opacity-80 mb-10 text-center">
-            Join 1,000+ maintainers building trust with OpenSoyce. 
+            Early access is now open for maintainers building trust with OpenSoyce. 
             Get your badge, verify your ownership, and boost your discovery.
           </p>
           <button 
@@ -498,6 +499,19 @@ export default function Home() {
 
 function OpportunityCard({ trend }: { trend: any, key?: any }) {
   const useCases = CATEGORY_USE_CASES[trend.repo.toLowerCase()] || { use: "Generic development", fork: "Custom ecosystem component" };
+  const { isWatching, addToWatchlist, removeFromWatchlist } = useWatchlist();
+  const watching = isWatching(trend.owner, trend.repo);
+
+  const toggleWatch = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (watching) {
+      removeFromWatchlist(trend.owner, trend.repo);
+      trackEvent('watchlist_remove_click', { repo: `${trend.owner}/${trend.repo}`, source: 'opportunity_card' });
+    } else {
+      addToWatchlist(trend.owner, trend.repo, trend.score);
+      trackEvent('watchlist_add_click', { repo: `${trend.owner}/${trend.repo}`, source: 'opportunity_card' });
+    }
+  };
   
   const getBadge = () => {
     if (trend.score < 5.0 || trend.stale) return { text: "STALE", bg: "bg-gray-600", textCol: "text-white" };
@@ -516,6 +530,17 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
       <div className={`absolute top-0 right-0 px-2 py-0.5 ${badge.bg} ${badge.textCol} text-[8px] font-black uppercase tracking-widest border border-black shadow-[-2px_2px_0px_#000]`}>
         {badge.text}
       </div>
+
+      {/* Star button */}
+      <button 
+        onClick={toggleWatch}
+        className={`absolute top-2 left-2 p-1.5 border-2 border-black transition-all ${
+          watching ? 'bg-yellow-400 text-black shadow-[2px_2px_0px_#000]' : 'bg-white text-black hover:bg-yellow-50'
+        }`}
+        title={watching ? "Remove from watchlist" : "Add to watchlist"}
+      >
+        <Star size={12} fill={watching ? "currentColor" : "none"} strokeWidth={2.5} />
+      </button>
 
       <div className="flex-1">
         <div className="flex justify-between items-center mb-1">

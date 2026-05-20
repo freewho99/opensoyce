@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, X, ArrowRight, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Link } from 'react-router-dom';
 
 const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -169,14 +170,43 @@ export default function Pricing() {
               ))}
             </div>
 
-            <button className={`w-full py-5 text-xl font-black uppercase tracking-widest border-4 border-soy-bottle transition-all relative group ${
-              tier.highlighted 
-                ? 'bg-soy-red text-white hover:bg-soy-bottle' 
-                : 'bg-soy-bottle text-soy-label hover:bg-soy-red hover:text-white'
-            }`}>
-              {tier.cta}
-              <ArrowRight className="inline ml-2 group-hover:translate-x-2 transition-transform" />
-            </button>
+            {tier.name === 'FREE' ? (
+              <Link 
+                to="/scan"
+                className={`w-full py-5 text-xl font-black uppercase tracking-widest border-4 border-soy-bottle transition-all relative group text-center block ${
+                  tier.highlighted 
+                    ? 'bg-soy-red text-white hover:bg-soy-bottle' 
+                    : 'bg-soy-bottle text-soy-label hover:bg-soy-red hover:text-white'
+                }`}
+              >
+                {tier.cta}
+                <ArrowRight className="inline ml-2 group-hover:translate-x-2 transition-transform" />
+              </Link>
+            ) : tier.name === 'PRO' ? (
+              <Link 
+                to="/claim"
+                className={`w-full py-5 text-xl font-black uppercase tracking-widest border-4 border-soy-bottle transition-all relative group text-center block ${
+                  tier.highlighted 
+                    ? 'bg-soy-red text-white hover:bg-soy-bottle' 
+                    : 'bg-soy-bottle text-soy-label hover:bg-soy-red hover:text-white'
+                }`}
+              >
+                {tier.cta}
+                <ArrowRight className="inline ml-2 group-hover:translate-x-2 transition-transform" />
+              </Link>
+            ) : (
+              <a 
+                href="mailto:sales@opensoyce.com"
+                className={`w-full py-5 text-xl font-black uppercase tracking-widest border-4 border-soy-bottle transition-all relative group text-center block ${
+                  tier.highlighted 
+                    ? 'bg-soy-red text-white hover:bg-soy-bottle' 
+                    : 'bg-soy-bottle text-soy-label hover:bg-soy-red hover:text-white'
+                }`}
+              >
+                {tier.cta}
+                <ArrowRight className="inline ml-2 group-hover:translate-x-2 transition-transform" />
+              </a>
+            )}
           </div>
         ))}
       </div>
@@ -211,11 +241,22 @@ export default function Pricing() {
       <div className="mt-32 p-12 bg-soy-bottle text-soy-label border-4 border-soy-bottle shadow-[12px_12px_0px_#E63322] flex flex-col md:flex-row items-center justify-between gap-12">
         <div className="max-w-xl">
           <h2 className="text-4xl font-black uppercase italic tracking-tighter mb-4 text-white">Scale your dependency intelligence</h2>
-          <p className="font-bold opacity-60 uppercase tracking-widest leading-relaxed">Join 12,000+ engineers who use OpenSoyce to secure their production supply chains every day.</p>
+          <p className="font-bold opacity-60 uppercase tracking-widest leading-relaxed">Powering modern software engineering teams to secure their production supply chains.</p>
         </div>
-        <button className="bg-soy-red text-white px-12 py-6 text-2xl font-black uppercase italic hover:scale-105 transition-transform whitespace-nowrap">
-          GET STARTED NOW
-        </button>
+        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+          <Link 
+            to="/scan"
+            className="bg-soy-red text-white px-8 py-4 text-xl font-black uppercase italic hover:scale-105 transition-transform whitespace-nowrap text-center border-2 border-white shadow-[4px_4px_0px_#000]"
+          >
+            SCAN CODEBASE
+          </Link>
+          <Link 
+            to="/claim"
+            className="bg-white text-soy-bottle px-8 py-4 text-xl font-black uppercase italic hover:scale-105 transition-transform whitespace-nowrap text-center border-2 border-soy-bottle shadow-[4px_4px_0px_#000]"
+          >
+            CLAIM PROJECT
+          </Link>
+        </div>
       </div>
     </div>
   );

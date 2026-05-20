@@ -434,6 +434,16 @@ export default function Scanner() {
           {result && !errorState && (
             <ResultsPanel result={result} counts={counts} totalVulns={totalVulns} grouped={grouped!} />
           )}
+
+          {!result && !scanning && !errorState && (
+            <div className="mt-8 flex flex-col items-center justify-center p-12 border-4 border-dashed border-soy-bottle/20 rounded-xl text-center">
+              <ShieldCheck size={48} className="opacity-15 mb-4 text-soy-bottle" />
+              <p className="text-lg font-bold uppercase italic tracking-widest opacity-35">Awaiting Lockfile Upload</p>
+              <p className="text-xs font-medium opacity-35 max-w-xs mt-2">
+                Paste or upload a package-lock.json above to scan your dependency tree against the OSV vulnerability registry.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

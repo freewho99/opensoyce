@@ -21,5 +21,14 @@
   body.dark-sauce-mode {
     filter: invert(1) hue-rotate(180deg);
   }
+  
+  body.ide-view-active footer {
+    display: none !important;
+  }
+
+  body.ide-view-active {
+    overflow: hidden !important;
+  }
 }
+
 

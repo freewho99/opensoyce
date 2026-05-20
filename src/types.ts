@@ -53,7 +53,9 @@ export type Project = {
   hasSast?: boolean;
   busFactorHealthy?: boolean;
   avgResolutionDays?: number | null;
+  contributors?: number;
   parentId?: string; // ID of the original project if this is a fork
+
 
   parentName?: string;
   parentOwner?: string;

@@ -11,6 +11,7 @@ import Lookup from './pages/Lookup';
 import Watchlist from './pages/Watchlist';
 import CLI from './pages/CLI';
 import Scanner from './pages/Scanner';
+import Guard from './pages/Guard';
 import Compare from './pages/Compare';
 import Recommend from './pages/Recommend';
 import Pricing from './pages/Pricing';
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/cli" element={<CLI />} />
           <Route path="/scan" element={<Scan />} />
           <Route path="/scanner" element={<Scanner />} />
+          <Route path="/guard" element={<Guard />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/recommend" element={<Recommend />} />
           <Route path="/recipes" element={<Recommend />} />
