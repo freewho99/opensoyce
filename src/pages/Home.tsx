@@ -380,13 +380,29 @@ export default function Home() {
             </div>
           </div>
 
-          <div 
-            ref={scrollRef}
-            className="flex overflow-x-auto gap-8 pb-12 scrollbar-hide snap-x"
-          >
-            {filteredTrending.map((trend, i) => (
-              <OpportunityCard key={i} trend={trend} />
-            ))}
+          <div className="relative">
+            <button
+              onClick={() => scrollRef.current?.scrollBy({ left: -420, behavior: 'smooth' })}
+              className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-10 h-10 bg-black text-white items-center justify-center border-2 border-black hover:bg-soy-red transition-colors shadow-[2px_2px_0px_#666] text-2xl font-bold"
+              aria-label="Scroll left"
+            >
+              &#8249;
+            </button>
+            <div 
+              ref={scrollRef}
+              className="flex overflow-x-auto gap-8 pb-12 scrollbar-hide snap-x"
+            >
+              {filteredTrending.map((trend, i) => (
+                <OpportunityCard key={i} trend={trend} />
+              ))}
+            </div>
+            <button
+              onClick={() => scrollRef.current?.scrollBy({ left: 420, behavior: 'smooth' })}
+              className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-10 h-10 bg-black text-white items-center justify-center border-2 border-black hover:bg-soy-red transition-colors shadow-[2px_2px_0px_#666] text-2xl font-bold"
+              aria-label="Scroll right"
+            >
+              &#8250;
+            </button>
           </div>
 
           {/* Ticker Rail */}
