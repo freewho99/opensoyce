@@ -246,7 +246,7 @@ export default function Home() {
               return (
                 <Link
                   key={i}
-                  to={`/lookup?q=${pkg.owner}/${pkg.repo}`}
+                  to={`/lookup/${pkg.owner}/${pkg.repo}`}
                   onClick={() => trackEvent('ai_band_card_click', { repo: `${pkg.owner}/${pkg.repo}`, source: 'ai_framing_band' })}
                   className="group bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000] hover:shadow-[10px_10px_0px_#D12D2D] hover:-translate-y-1 transition-all flex flex-col"
                 >
@@ -512,7 +512,7 @@ export default function Home() {
                   </p>
                 </div>
                 <Link
-                  to={`/lookup?q=${remix.owner}/${remix.repo}`}
+                  to={`/lookup/${remix.owner}/${remix.repo}`}
                   className="relative z-10 inline-flex items-center gap-3 bg-black text-white px-8 py-4 text-xs font-black uppercase tracking-[0.2em] transform group-hover:scale-105 transition-all w-fit"
                 >
                   FORK THIS <ArrowRight size={16} />
@@ -720,7 +720,7 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
           <ActionBtn label="GROW" repo={`${trend.owner}/${trend.repo}`} />
         </div>
         <Link
-          to={`/lookup?q=${trend.owner}/${trend.repo}`}
+          to={`/lookup/${trend.owner}/${trend.repo}`}
           onClick={() => trackEvent('analyze_project_click', { repo: `${trend.owner}/${trend.repo}`, source: 'opportunity_card' })}
           className="w-full bg-black text-white py-3 text-[10px] font-black uppercase tracking-widest italic hover:bg-soy-red transition-all text-center flex items-center justify-center gap-2"
         >

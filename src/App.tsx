@@ -49,6 +49,7 @@ export function AppRoutes() {
         <Route index element={<Home />} />
         <Route path="/leaderboards" element={<Leaderboard />} />
         <Route path="/lookup" element={<Lookup />} />
+        <Route path="/lookup/:owner/:repo" element={<Lookup />} />
         <Route path="/watchlist" element={<Watchlist />} />
         <Route path="/cli" element={<CLI />} />
         <Route path="/scan" element={<Scan />} />

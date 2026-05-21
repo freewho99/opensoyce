@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { Search, Github, AlertCircle, Loader2, Copy, Check, Eye, EyeOff, ArrowRight, ArrowUpRight } from 'lucide-react';
 import NutritionLabel from '../components/NutritionLabel';
 import SimilarProjects from '../components/SimilarProjects';
@@ -11,8 +11,19 @@ import { useWatchlist } from '../context/WatchlistContext';
 import { trackEvent } from '../utils/analytics';
 
 export default function Lookup() {
+  const { owner: routeOwner, repo: routeRepo } = useParams<{ owner?: string; repo?: string }>();
   const [searchParams] = useSearchParams();
-  const [input, setInput] = useState(searchParams.get('q') || '');
+  const navigate = useNavigate();
+
+  // Initialize input state based on route params or search params
+  const getInitialInput = () => {
+    if (routeOwner && routeRepo) {
+      return `${routeOwner}/${routeRepo}`;
+    }
+    return searchParams.get('q') || '';
+  };
+
+  const [input, setInput] = useState(getInitialInput);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Project | null>(null);
@@ -48,19 +59,30 @@ export default function Lookup() {
     };
   }, [result, viewMode]);
 
-  // Deep-link auto-run. If the URL carries ?q=owner/repo on mount, kick off
-  // analysis immediately so search-engine results, share links, and badge
-  // clicks land on the rendered nutrition label rather than an empty form.
+  // Load analysis whenever route parameters or search parameters change.
+  // This makes the page fully reactive to URL deep links and sharing.
   React.useEffect(() => {
-    const q = searchParams.get('q');
-    if (!q || !q.includes('/')) return;
-    const parts = q.split('/');
-    const o = parts[0]?.trim() || '';
-    const r = parts[1]?.trim() || '';
-    if (o && r) {
-      runAnalysis(o, r);
+    if (routeOwner && routeRepo) {
+      const q = `${routeOwner}/${routeRepo}`;
+      setInput(q);
+      runAnalysis(routeOwner, routeRepo);
+    } else {
+      const q = searchParams.get('q');
+      if (q && q.includes('/')) {
+        setInput(q);
+        const parts = q.split('/');
+        const o = parts[0]?.trim() || '';
+        const r = parts[1]?.trim() || '';
+        if (o && r) {
+          runAnalysis(o, r);
+        }
+      } else {
+        // If navigating back to root lookup page (without query or route params), clear results
+        setResult(null);
+        setInput('');
+      }
     }
-  }, []);
+  }, [routeOwner, routeRepo, searchParams]);
 
   const showToast = (message: string) => {
     setToast({ message, show: true });
@@ -69,7 +91,9 @@ export default function Lookup() {
 
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
-    runAnalysis(owner, repo);
+    if (isValid) {
+      navigate(`/lookup/${owner}/${repo}`);
+    }
   };
 
   const runAnalysis = async (ownerArg: string, repoArg: string) => {
@@ -298,6 +322,7 @@ export default function Lookup() {
                         onClick={() => {
                           setResult(null);
                           setInput('');
+                          navigate('/lookup');
                         }}
                         className="px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all cursor-pointer border-l-4 border-soy-bottle bg-soy-bottle text-soy-label hover:bg-soy-red hover:text-white"
                       >
@@ -315,6 +340,7 @@ export default function Lookup() {
                     onSearchNew={() => {
                       setResult(null);
                       setInput('');
+                      navigate('/lookup');
                     }}
                   />
                 ) : (
@@ -336,7 +362,7 @@ export default function Lookup() {
                                 <>
                                   migrated to{' '}
                                   <Link
-                                    to={`/lookup?q=${result.migration.successor.owner}/${result.migration.successor.repo}`}
+                                    to={`/lookup/${result.migration.successor.owner}/${result.migration.successor.repo}`}
                                     className="font-bold underline"
                                     onClick={() =>
                                       trackEvent('migration_successor_click', {
