@@ -57,11 +57,12 @@ export default function Challenge() {
     setIsSubmitted(false);
   };
 
+  // HIGH MOMENTUM omitted — editorial-only tier, not a public verdict band.
+  // See src/shared/verdict.js for the rationale.
   const labels = [
     'USE READY',
     'FORKABLE',
     'WATCHLIST',
-    'HIGH MOMENTUM',
     'RISKY BUT HOT',
     'STALE',
     'GRAVEYARD'

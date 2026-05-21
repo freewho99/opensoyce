@@ -81,12 +81,12 @@ export default function Methodology() {
             <div className="bg-black text-white p-12 shadow-[12px_12px_0px_#E63322]">
               <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-8 text-soy-red">SCORE RANGES</h3>
               <div className="space-y-8">
-                 <ScoreRange label="8.5+" status="USE READY" desc="Production grade. Real CVE hygiene, active maintenance, strong docs." color="text-green-500" />
-                 <ScoreRange label="7.0 – 8.4" status="FORKABLE" desc="Mature core infrastructure. Minor gaps in one or two pillars." color="text-blue-500" />
-                 <ScoreRange label="5.5 – 6.9" status="STABLE" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
-                 <ScoreRange label="4.0 – 5.4" status="WATCHLIST" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
-                 <ScoreRange label="2.5 – 3.9" status="RISKY" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." color="text-orange-500" />
-                 <ScoreRange label="BELOW 2.5" status="STALE" desc="Effectively abandoned. No recent commits, no releases, no triage." color="text-soy-red" />
+                 <ScoreRange label="8.5+" status="USE READY" subLabel="Safe to adopt — strong across all pillars" desc="Production grade. Real CVE hygiene, active maintenance, strong docs." color="text-green-500" />
+                 <ScoreRange label="7.0 – 8.4" status="FORKABLE" subLabel="Healthy and trustworthy — fork-worthy as a base" desc="Mature core infrastructure. Minor gaps in one or two pillars." color="text-blue-500" />
+                 <ScoreRange label="6.0 – 6.9" status="STABLE" subLabel="Mature, lower-velocity, still maintained" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
+                 <ScoreRange label="4.0 – 5.9" status="WATCHLIST" subLabel="Real issues; verify before adoption" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
+                 <ScoreRange label="2.5 – 3.9" status="RISKY" subLabel="Multiple bands flag concerns" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." color="text-orange-500" />
+                 <ScoreRange label="BELOW 2.5" status="STALE" subLabel="Abandoned or dormant" desc="Effectively abandoned. No recent commits, no releases, no triage." color="text-soy-red" />
               </div>
             </div>
           </div>
@@ -152,15 +152,125 @@ export default function Methodology() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            <VocabCard title="USE READY" score="≥ 8.5" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
-            <VocabCard title="FORKABLE" score="7.0–8.4" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
-            <VocabCard title="HIGH MOMENTUM" score="earlyBreakout override" desc="A sub-8.5 project with strong rising-signal curation. GitHub stats catching up to real adoption." />
-            <VocabCard title="STABLE" score="5.5–6.9" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
-            <VocabCard title="WATCHLIST" score="4.0–5.4" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
-            <VocabCard title="RISKY" score="2.5–3.9" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
-            <VocabCard title="STALE" score="< 2.5" desc="Effectively abandoned. No recent commits, no releases, no triage." />
+            <VocabCard title="USE READY" score="≥ 8.5" subLabel="Safe to adopt — strong across all pillars" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
+            <VocabCard title="FORKABLE" score="7.0–8.4" subLabel="Healthy and trustworthy — fork-worthy as a base" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
+            <VocabCard title="STABLE" score="6.0–6.9" subLabel="Mature, lower-velocity, still maintained" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
+            <VocabCard title="WATCHLIST" score="4.0–5.9" subLabel="Real issues; verify before adoption" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
+            <VocabCard title="RISKY" score="2.5–3.9" subLabel="Multiple bands flag concerns" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
+            <VocabCard title="STALE" score="< 2.5" subLabel="Abandoned or dormant" desc="Effectively abandoned. No recent commits, no releases, no triage." />
             <VocabCard title="GRAVEYARD" score="Deprecated" desc="Shaped the ecosystem. Now a museum piece. Some have forkable infrastructure." />
           </div>
+
+          <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">
+            Editorial tiers (e.g. HIGH MOMENTUM for hand-curated rising stars) are not shown in the public score card. A real momentum heuristic is on the roadmap — until then, the algorithm only earns the bands above.
+          </p>
+        </div>
+      </section>
+
+      {/* KNOWN LIMITATIONS — AI ECOSYSTEM CAVEATS */}
+      <section className="py-24 px-4 bg-white border-y-4 border-black">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <div className="inline-block bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.4em] mb-6">
+              OPEN SCIENTIFIC LIMITATIONS
+            </div>
+            <h2 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter mb-4">KNOWN LIMITATIONS</h2>
+            <p className="text-xl font-bold uppercase tracking-widest text-soy-red italic">What this scanner does not see — named out loud.</p>
+            <p className="mt-6 text-sm font-medium opacity-70 max-w-3xl mx-auto leading-relaxed italic">
+              Honest disclosure, not marketing. The AI tooling ecosystem moves faster than any static scoring model, and several failure modes are specific to it. Below is what we know we don't yet cover, and where a mitigation exists, the commit that ships it.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <LimitationCard
+              tag="VELOCITY"
+              title="AI ecosystem velocity"
+              body="Projects like LangChain and HuggingFace move weekly. Soyce scores reflect signals as of the most recent scan; a single bad release week can shift a score and a single good triage day can shift it back. Maintainers shouldn't read short-term score drift as a signal about the project's long-term health."
+              status="OPEN"
+            />
+            <LimitationCard
+              tag="BUS FACTOR"
+              title="Single-maintainer projects with massive adoption"
+              body="@huggingface/transformers.js has 18M monthly downloads and one primary maintainer. The current scoring model doesn't separately penalize bus-factor risk on these projects beyond the generic contributor-count signal. We see this as a real gap and a research direction for v0.x."
+              status="RESEARCH DIRECTION"
+            />
+            <LimitationCard
+              tag="NAMESPACE"
+              title="Federation of @scope/pkg namespaces"
+              body="@huggingface/* on npm is not the same as huggingface/* on GitHub. The resolver maps via the npm `repository` field but doesn't verify that the GitHub org name matches the npm scope. We cross-check package.json#name (P0-AI-2) but namespace-level verification is not yet enforced."
+              status="PARTIAL · 8c0d6ab"
+            />
+            <LimitationCard
+              tag="TYPO-SQUAT"
+              title="Typo-squat homoglyph detection (informational only)"
+              body="Each scanned package name is reduced to a Unicode-TR39 confusables skeleton (Cyrillic/Greek/fullwidth lookalikes of common ASCII letters, plus the digit/letter confusables 0→o, 1→l, etc.) and compared against a curated ~100-entry protected-names list (src/data/protectedPackageNames.js: top npm installs + AI/ML/security-critical names). When a scanned name's skeleton collides with a protected name AND the byte sequences differ, the inventory / vuln / selected-health rows get a ⚠ POSSIBLE TYPO-SQUAT chip pointing at the suspected target (e.g. `l&#1072;ngchain` → langchain). Self-match is byte-exact: a legitimate `langchain` install never fires the chip. The chip is informational only — it does NOT contribute to the composite score, does NOT cap the verdict band, and does NOT raise any Risk Profile dimension. Bounds: we ship ~200 high-value confusables (not the full ~6000-entry TR39 table) and a hand-curated protected-names list (not exhaustive); a homoglyph attack against an off-list name will pass through silently. Borrowed-trust attacks against the resolver are separately mitigated by the package.json cross-check (8c0d6ab)."
+              status="SHIPPED · v0"
+            />
+            <LimitationCard
+              tag="CROSS-ECOSYSTEM"
+              title="Cross-ecosystem bridge attacks (curated map v0)"
+              body="When an npm package transitively installs a Python package via Python bindings (or vice-versa), a single-ecosystem scan misses the OTHER half — PyPI dependency confusion against `langchain` can't be caught from `package-lock.json` alone. v0 ships a curated, bidirectional npm ↔ PyPI sibling map (~40 entries focused on the AI/ML ecosystem: LangChain, LlamaIndex, transformers, the major LLM provider SDKs, vector DBs, observability tooling, plus a few high-traffic cloud SDKs). When a scanned package matches an entry, inventory / vuln / selected-health rows get a sky-blue `⚠ CROSS-ECOSYSTEM BRIDGE` chip pointing at the sibling in the other ecosystem. Asymmetric names are explicit table entries — e.g. npm `@anthropic-ai/sdk` ↔ PyPI `anthropic`. The chip is informational only: it does NOT contribute to the composite score, does NOT band-cap the verdict, and does NOT raise any Risk Profile dimension — its job is 'did you scan the other side too?', not 'this is dangerous'. The user remains responsible for actually scanning both lockfiles when both ecosystems are in play. The deeper algorithmic version (static analysis of `postinstall` scripts for `pip install` invocations) is deferred to v0.1+."
+              status="SHIPPED · v0"
+            />
+            <LimitationCard
+              tag="WEIGHTS"
+              title="huggingface_hub and model weights (model-file scanning)"
+              body="OpenSoyce scores the maintainer + code health of repos. It does NOT analyze actual model weight files (pickle opcode scanning of .pt / .bin / .pkl payloads downloaded by `from_pretrained()` — different input format, different threat class). The pickle-opcode RCE scanner is a planned v1+ product. v0 ships a separate posture chip (see MODEL WEIGHTS card below) that fires on package presence."
+              status="OUT OF SCOPE · v0"
+            />
+            <LimitationCard
+              tag="MODEL WEIGHTS"
+              title="Model-weight loader posture (informational only)"
+              body="AI projects load model weights via `huggingface_hub.from_pretrained()` and `torch.load()`, which historically default to pickle format. Pickle is a code-execution format — loading untrusted weights can run arbitrary code at load time (real attack class: malicious safetensors-impersonating pickle on Hugging Face Hub, malicious .pt files in public model repos, the 2024 PyTorch pickle CVEs). The safer alternatives are safetensors (binary, no code execution) and `torch.load(..., weights_only=True)`. When an inventory contains a curated model-loading package (huggingface_hub, transformers, diffusers, torch, tensorflow, pickle, cloudpickle, @huggingface/transformers, @xenova/transformers — list in src/data/modelWeightLoaders.js), inventory + vuln + selected-health rows surface a ⚠ USE SAFETENSORS chip (AMBER). Packages that ARE the safer choice (safetensors, onnxruntime-node) surface a ✓ SAFE MODEL FORMAT chip (GREEN). Three risk tiers: `load_pickle`, `torch_load`, `safe`. Scope honesty: chip fires on package presence ONLY — we do NOT inspect model files, do NOT scan pickle opcodes, do NOT verify which format the project actually loads at runtime. Pickle opcode analysis is a separate scanner (different input format, different tools, different output shape) planned for v1+. The chip is purely informational — does NOT contribute to the composite score, does NOT cap the verdict band, does NOT raise any Risk Profile dimension. Ecosystem-aware: huggingface_hub fires only on PyPI scans; @huggingface/transformers fires only on npm scans."
+              status="SHIPPED · v0 (POSTURE ONLY)"
+            />
+            <LimitationCard
+              tag="PYPI"
+              title="PyPI coverage edge cases"
+              body="For poetry.lock without a companion pyproject.toml, we cannot reliably tell direct vs transitive dependencies. The Risk Profile surfaces this honestly via the `directUnknown` caveat in the Tree Complexity dimension."
+              status="SURFACED · 2c07e54"
+            />
+            <LimitationCard
+              tag="VERDICT BAND"
+              title="Verdict bands cap on hidden vulns"
+              body="If a repo's composite score is high (≥7.0) but the repo has 3+ open HIGH/CRITICAL advisories on its own code, the verdict band is capped at WATCHLIST. This is intentional honesty (P0-AI-1) but it means a repo with strong maintenance + many self-disclosed CVEs may score lower in the band display than its raw composite would suggest."
+              status="BY DESIGN · 8c0d6ab"
+            />
+            <LimitationCard
+              tag="MAINTAINER CONCENTRATION"
+              title="Single-maintainer band-cap (AI signals v0.1)"
+              body="When >85% of recent commits come from one contributor AND there are ≤2 non-bot contributors AND the last commit was >30 days ago, the verdict band caps from USE READY to FORKABLE. Composite score is unchanged — only the band label moves. Vendor-official SDKs (curated allowlist in src/data/vendorSdks.ts) are suppressed from this cap; a small in-house team maintaining the official OpenAI SDK is a different bus-factor story than a hobby project with one author. Bot detection is heuristic — we filter [bot] suffix, common logins (dependabot, renovate, github-actions, snyk-bot), and the GitHub type:Bot flag; some bot accounts will pass through as humans. The 85% / 2-contributor / 30-day thresholds are conservative — we prefer false-negatives (missing the cap) over false-positives."
+              status="BY DESIGN · v0.1"
+            />
+            <LimitationCard
+              tag="INTEGRITY"
+              title="Signed reports (Ed25519)"
+              body="Reports emitted by --out, --json, and --sarif flags are cryptographically signed with OpenSoyce's Ed25519 signing key. The signature lives inside each report (top-level `signature` field for JSON; `runs[0].properties.signature` for SARIF) and is computed over a sorted-keys JSON canonicalization. Anyone can verify a report wasn't tampered with via `node scripts/opensoyce-scan-report.mjs --verify report.json` (exit 0 OK, exit 1 INVALID) or by POSTing the report to https://www.opensoyce.com/api/verify-report. The public key is published at https://www.opensoyce.com/.well-known/opensoyce-signing-key.pem so external auditors can verify locally with no OpenSoyce account. Signature proves artifact integrity + OpenSoyce origin only — it does NOT vouch for the upstream scan data (OSV, GitHub, npm). Retention and SOC 2 compliance are tracked separately and not part of v0."
+              status="SHIPPED · v0"
+            />
+            <LimitationCard
+              tag="MIGRATION"
+              title="Fork-velocity-of-namesake (migration detection)"
+              body="When a queried repo's verdict is low (WATCHLIST / RISKY / STALE) AND it's dormant (>180 days since last commit) AND a top-3 fork has recent activity (≤90 days) plus at least 10% of the original's stars, OpenSoyce surfaces a 'possible migration' banner. The score is NOT changed by this signal — only the informational banner moves. Confidence is HIGH for curated entries (src/data/repoMigrations.js, e.g. xenova/transformers → huggingface/transformers.js) and MEDIUM for algorithmic fork-chain detection. False-positive risk: a popular fork that took off without an actual upstream-maintainer handoff could be mis-flagged as a successor. Failure-isolated: any GitHub error returns null and the banner simply doesn't render."
+              status="SHIPPED · v0"
+            />
+            <LimitationCard
+              tag="INSTALL SCRIPTS"
+              title="Postinstall script detection (informational only)"
+              body="npm preinstall / install / postinstall hooks run arbitrary code on `npm install` — the attack vector behind event-stream, ua-parser-js, colors.js, and faker.js. Inventory + vuln rows surface a ⚠ INSTALL SCRIPT chip when the lockfile flags `hasInstallScript: true` (npm v1/v2/v3) or `requiresBuild: true` (pnpm). A curated allowlist (src/data/trustedInstallScripts.js) suppresses the chip for ~30 packages where install scripts are expected and legitimate (TypeScript, esbuild, sharp, husky, electron, puppeteer, …). The chip is informational only — it does NOT contribute to the Risk Profile, does NOT band-cap the verdict, and does NOT change the composite score. Coverage gaps: yarn-v1 lockfiles don't expose the flag, and Python lockfiles (uv.lock, poetry.lock) have no equivalent — both are documented in docs/ci-reporter.md and reported as hasInstallScript: false."
+              status="BY DESIGN · v0"
+            />
+            <LimitationCard
+              tag="DEP CONFUSION"
+              title="Dependency confusion detection (user-declared private list)"
+              body="Birsan 2021 attack: an attacker publishes a package on public PyPI / npm matching your private package name, and misconfigured index priority pulls the public copy into your CI. There is no public registry of 'this name is private to my company' — the user has to declare it. v0 ships a `.opensoyce-private` file (gitignore-flavored, auto-discovered next to the lockfile, override with --private). Names listed there are flagged with a ⚠ POSSIBLE DEP CONFUSION chip (MEDIUM, static match). When the public registry returns 200 for that same name, the chip escalates to ⚠ ACTIVE DEP CONFUSION (HIGH — an attacker may already be squatting). Scope: npm + PyPI only. No inference — zero false positives if the list is correct. Active checks are 24h-cached per (ecosystem, name); a failed probe leaves the static MEDIUM signal in place. Informational only — does NOT contribute to the composite score, Risk Profile, or verdict band."
+              status="SHIPPED · v0"
+            />
+          </div>
+
+          <p className="mt-12 text-xs font-bold uppercase tracking-widest text-soy-bottle/60 text-center max-w-3xl mx-auto">
+            If you find a failure mode that isn't listed here, that's a bug in our disclosure — please open an issue.
+          </p>
         </div>
       </section>
 
@@ -209,26 +319,45 @@ export default function Methodology() {
   );
 }
 
-function ScoreRange({ label, status, desc, color }: { label: string, status: string, desc: string, color: string }) {
+function ScoreRange({ label, status, subLabel, desc, color }: { label: string, status: string, subLabel?: string, desc: string, color: string }) {
   return (
     <div className="flex flex-col md:flex-row md:items-start gap-4">
       <div className={`text-2xl font-black italic min-w-[120px] ${color}`}>{label}</div>
       <div>
         <div className="text-sm font-black uppercase tracking-widest mb-1">{status}</div>
+        {subLabel && (
+          <p className="text-[11px] italic font-medium opacity-60 mb-1 leading-snug">{subLabel}</p>
+        )}
         <p className="text-[10px] font-bold uppercase tracking-widest opacity-40 leading-relaxed">{desc}</p>
       </div>
     </div>
   );
 }
 
-function VocabCard({ title, score, desc }: { title: string, score: string, desc: string }) {
+function VocabCard({ title, score, subLabel, desc }: { title: string, score: string, subLabel?: string, desc: string }) {
   return (
     <div className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000]">
       <div className="mb-4">
         <h3 className="text-2xl font-black uppercase italic tracking-tight mb-1">{title}</h3>
         <div className="text-soy-red font-black text-xs uppercase tracking-widest">{score}</div>
       </div>
+      {subLabel && (
+        <p className="text-xs font-medium italic opacity-60 mb-3 leading-snug">{subLabel}</p>
+      )}
       <p className="text-sm font-medium opacity-80 leading-relaxed italic">"{desc}"</p>
+    </div>
+  );
+}
+
+function LimitationCard({ tag, title, body, status }: { tag: string, title: string, body: string, status: string }) {
+  return (
+    <div className="bg-soy-label border-4 border-black p-8 shadow-[8px_8px_0px_#000] flex flex-col">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <span className="inline-block bg-black text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.3em]">{tag}</span>
+        <span className="inline-block bg-soy-red text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em]">{status}</span>
+      </div>
+      <h3 className="text-xl font-black uppercase italic tracking-tight mb-3 leading-tight">{title}</h3>
+      <p className="text-sm font-medium opacity-80 leading-relaxed">{body}</p>
     </div>
   );
 }

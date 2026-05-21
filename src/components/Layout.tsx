@@ -6,10 +6,8 @@ import {
   Trophy,
   Shuffle,
   BookOpen,
-  Send,
   Search,
   Newspaper,
-  Star,
   DollarSign,
   Terminal,
   Skull,
@@ -18,49 +16,65 @@ import {
   Wand2,
   GitCompare,
   Info,
-  Settings,
   LifeBuoy,
   ArrowRight,
   Menu,
   X,
   Shield,
-  Swords,
-  BadgeCheck,
-  FileText,
   HelpCircle,
+  BarChart3,
   LayoutDashboard,
-  BarChart2,
+  ChevronDown,
+  type LucideIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
 declare function trackEvent(name: string, props?: Record<string, unknown>): void;
 
-const PAGES = [
-  { label: 'Scanner', path: '/scan', hint: 'Deep scan a repository' },
-  { label: 'Guard', path: '/guard', hint: 'Protect your repositories' },
-  { label: 'Watchlist', path: '/watchlist', hint: 'Track your favorite repos' },
-  { label: 'Compare', path: '/compare', hint: 'Side-by-side repo comparison' },
-  { label: 'Pricing', path: '/pricing', hint: 'Plans and pricing' },
-  { label: 'Leaderboards', path: '/leaderboards', hint: 'Top ranked open-source projects' },
-  { label: 'Heat Check', path: '/heat-check', hint: 'Trending right now' },
-  { label: 'Graveyard', path: '/graveyard', hint: 'Abandoned projects' },
-  { label: 'Blog', path: '/blog', hint: 'News and updates' },
-  { label: 'AI Recipes', path: '/recommend', hint: 'AI-powered stack recommendations' },
-  { label: 'Lookup', path: '/lookup', hint: 'Analyze any GitHub repo' },
-  { label: 'Remix', path: '/remix', hint: 'Remix and fork projects' },
-  { label: 'Submit', path: '/submit-project', hint: 'Add your project' },
-  { label: 'Challenge', path: '/challenge', hint: 'Open source challenges' },
-  { label: 'Methodology', path: '/methodology', hint: 'How we score projects' },
-  { label: 'Proof', path: '/proof', hint: 'Verification and proofs' },
-  { label: 'Claim', path: '/claim', hint: 'Claim your project' },
-  { label: 'About', path: '/about', hint: 'About OpenSoyce' },
-  { label: 'FAQ', path: '/faq', hint: 'Frequently asked questions' },
-  { label: 'CLI', path: '/cli', hint: 'Command line tool' },
-  { label: 'Dashboard', path: '/dashboard', hint: 'Developer dashboard' },
-  { label: 'Analytics', path: '/analytics', hint: 'Detailed analytics' },
-  { label: 'Settings', path: '/settings', hint: 'Your account settings' },
+type NavGroup = 'CORE' | 'DISCOVER' | 'COMMUNITY' | 'TRUST' | 'DEVELOPER';
+
+type NavItem = {
+  label: string;
+  path: string;
+  hint: string;
+  icon: LucideIcon;
+  group: NavGroup;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  // CORE (4) — the money path
+  { label: 'Scanner',     path: '/scanner',    hint: 'Deep scan a repository',          icon: ScanLine,      group: 'CORE' },
+  { label: 'Guard',       path: '/guard',      hint: 'PR-time supply-chain checks',     icon: Shield,        group: 'CORE' },
+  { label: 'Compare',     path: '/compare',    hint: 'Side-by-side repo comparison',    icon: GitCompare,    group: 'CORE' },
+  { label: 'Pricing',     path: '/pricing',    hint: 'Plans and pricing',               icon: DollarSign,    group: 'CORE' },
+
+  // DISCOVER (4) — exploration surfaces
+  { label: 'Leaderboards', path: '/leaderboards', hint: 'Top ranked open-source projects', icon: Trophy,   group: 'DISCOVER' },
+  { label: 'Heat Check',   path: '/heat-check',   hint: 'Trending right now',              icon: Flame,    group: 'DISCOVER' },
+  { label: 'Graveyard',    path: '/graveyard',    hint: 'Abandoned projects',              icon: Skull,    group: 'DISCOVER' },
+  { label: 'Lookup',       path: '/lookup',       hint: 'Analyze any GitHub repo',         icon: Search,   group: 'DISCOVER' },
+
+  // COMMUNITY (3) — content & participation
+  { label: 'Blog',        path: '/blog',      hint: 'News and updates',                  icon: Newspaper, group: 'COMMUNITY' },
+  { label: 'AI Recipes',  path: '/recipes',   hint: 'AI-powered stack recommendations',  icon: Wand2,     group: 'COMMUNITY' },
+  { label: 'Remix',       path: '/remix',     hint: 'Remix and fork projects',           icon: Shuffle,   group: 'COMMUNITY' },
+
+  // TRUST (3) — credibility surfaces
+  { label: 'Methodology', path: '/methodology', hint: 'How we score projects',           icon: BookOpen,  group: 'TRUST' },
+  { label: 'About',       path: '/about',       hint: 'About OpenSoyce',                 icon: Info,      group: 'TRUST' },
+  { label: 'FAQ',         path: '/faq',         hint: 'Frequently asked questions',      icon: HelpCircle, group: 'TRUST' },
+
+  // DEVELOPER (3) — auth-gated, collapsible
+  { label: 'Dashboard',  path: '/dashboard',  hint: 'Your Guard dashboard',  icon: LayoutDashboard, group: 'DEVELOPER' },
+  { label: 'Analytics',  path: '/analytics',  hint: 'Usage analytics',       icon: BarChart3,       group: 'DEVELOPER' },
+  { label: 'CLI',        path: '/cli',        hint: 'Command line tool',     icon: Terminal,        group: 'DEVELOPER' },
 ];
+
+const NAV_GROUP_ORDER: NavGroup[] = ['CORE', 'DISCOVER', 'COMMUNITY', 'TRUST', 'DEVELOPER'];
+
+// Kept for the header search dropdown — same shape as before.
+const PAGES = NAV_ITEMS.map(({ label, path, hint }) => ({ label, path, hint }));
 
 export default function Layout() {
   const { isLoggedIn, user, login, logout, isLoading } = useAuth();
@@ -73,10 +87,14 @@ export default function Layout() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [focused, setFocused] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // DEVELOPER section: auto-expand when signed in, collapsed by default for guests
+  const [devExpanded, setDevExpanded] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
+  // Expand DEVELOPER when user signs in; collapse when they sign out
+  useEffect(() => { setDevExpanded(isLoggedIn); }, [isLoggedIn]);
 
   const isRepo = (q: string) => /^[\w.-]+\/[\w.-]+$/.test(q.trim());
 
@@ -254,90 +272,86 @@ export default function Layout() {
         />
       )}
 
-      {/* Left Sidebar — drawer on <lg, permanent at lg+ */}
+      {/* Left Sidebar */}
       <aside className={`fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-64 lg:w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden transform transition-transform duration-200 ease-out lg:translate-x-0 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
-          <NavLink to="/scan" className={navLinkClass}>
-            <ScanLine size={13} strokeWidth={2.5} /><span>Scanner</span>
-          </NavLink>
-          <NavLink to="/guard" className={navLinkClass}>
-            <Shield size={13} strokeWidth={2.5} /><span>Guard</span>
-          </NavLink>
-          <NavLink to="/watchlist" className={navLinkClass}>
-            <Star size={13} strokeWidth={2.5} /><span>Watchlist</span>
-          </NavLink>
-          <NavLink to="/compare" className={navLinkClass}>
-            <GitCompare size={13} strokeWidth={2.5} /><span>Compare</span>
-          </NavLink>
-          <NavLink to="/pricing" className={navLinkClass}>
-            <DollarSign size={13} strokeWidth={2.5} /><span>Pricing</span>
-          </NavLink>
+          {NAV_GROUP_ORDER.map((group, idx) => {
+            const items = NAV_ITEMS.filter(i => i.group === group);
+            if (items.length === 0) return null;
 
-          <div className="border-t border-soy-bottle/15 my-3 mx-1" />
-          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-3 mb-1.5">Discover</p>
+            // DEVELOPER: collapsible toggle row
+            if (group === 'DEVELOPER') {
+              return (
+                <div key={group} className="flex flex-col gap-0.5">
+                  <div className="border-t border-soy-bottle/15 my-2 mx-1" />
+                  <button
+                    type="button"
+                    onClick={() => setDevExpanded(v => !v)}
+                    className="flex items-center justify-between px-3 py-[7px] text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 hover:text-soy-bottle/80 transition-colors w-full mt-1 mb-0.5"
+                  >
+                    <span>{group}</span>
+                    <ChevronDown
+                      size={11}
+                      strokeWidth={2.5}
+                      className={`transition-transform duration-200 ${devExpanded ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {devExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className="overflow-hidden flex flex-col gap-0.5"
+                      >
+                        {items.map(item => {
+                          const Icon = item.icon;
+                          return (
+                            <NavLink
+                              key={item.path}
+                              to={item.path}
+                              onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
+                              className={navLinkClass}
+                            >
+                              <Icon size={13} strokeWidth={2.5} />
+                              <span>{item.label}</span>
+                            </NavLink>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            }
 
-          <NavLink to="/leaderboards" onClick={() => trackEvent('leaderboards_click', { source: 'nav' })} className={navLinkClass}>
-            <Trophy size={13} strokeWidth={2.5} /><span>Leaderboards</span>
-          </NavLink>
-          <NavLink to="/heat-check" className={navLinkClass}>
-            <Flame size={13} strokeWidth={2.5} /><span>Heat Check</span>
-          </NavLink>
-          <NavLink to="/graveyard" className={navLinkClass}>
-            <Skull size={13} strokeWidth={2.5} /><span>Graveyard</span>
-          </NavLink>
-          <NavLink to="/blog" onClick={() => trackEvent('blog_click', { source: 'nav' })} className={navLinkClass}>
-            <Newspaper size={13} strokeWidth={2.5} /><span>Blog</span>
-          </NavLink>
-          <NavLink to="/recommend" className={navLinkClass}>
-            <Wand2 size={13} strokeWidth={2.5} /><span>AI Recipes</span>
-          </NavLink>
-          <NavLink to="/lookup" onClick={() => trackEvent('lookup_click', { source: 'nav' })} className={navLinkClass}>
-            <Search size={13} strokeWidth={2.5} /><span>Lookup</span>
-          </NavLink>
-          <NavLink to="/remix" onClick={() => trackEvent('remix_click', { source: 'nav' })} className={navLinkClass}>
-            <Shuffle size={13} strokeWidth={2.5} /><span>Remix</span>
-          </NavLink>
-          <NavLink to="/submit-project" onClick={() => trackEvent('submit_project_click', { source: 'nav' })} className={navLinkClass}>
-            <Send size={13} strokeWidth={2.5} /><span>Submit</span>
-          </NavLink>
-          <NavLink to="/challenge" className={navLinkClass}>
-            <Swords size={13} strokeWidth={2.5} /><span>Challenge</span>
-          </NavLink>
-
-          <div className="border-t border-soy-bottle/15 my-3 mx-1" />
-          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-3 mb-1.5">Trust</p>
-
-          <NavLink to="/methodology" onClick={() => trackEvent('methodology_click', { source: 'nav' })} className={navLinkClass}>
-            <BookOpen size={13} strokeWidth={2.5} /><span>Methodology</span>
-          </NavLink>
-          <NavLink to="/proof" className={navLinkClass}>
-            <BadgeCheck size={13} strokeWidth={2.5} /><span>Proof</span>
-          </NavLink>
-          <NavLink to="/claim" className={navLinkClass}>
-            <FileText size={13} strokeWidth={2.5} /><span>Claim</span>
-          </NavLink>
-          <NavLink to="/about" className={navLinkClass}>
-            <Info size={13} strokeWidth={2.5} /><span>About</span>
-          </NavLink>
-          <NavLink to="/faq" className={navLinkClass}>
-            <HelpCircle size={13} strokeWidth={2.5} /><span>FAQ</span>
-          </NavLink>
-
-          <div className="border-t border-soy-bottle/15 my-3 mx-1" />
-          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 px-3 mb-1.5">Developer</p>
-
-          <NavLink to="/cli" className={navLinkClass}>
-            <Terminal size={13} strokeWidth={2.5} /><span>CLI</span>
-          </NavLink>
-          <NavLink to="/dashboard" className={navLinkClass}>
-            <LayoutDashboard size={13} strokeWidth={2.5} /><span>Dashboard</span>
-          </NavLink>
-          <NavLink to="/analytics" className={navLinkClass}>
-            <BarChart2 size={13} strokeWidth={2.5} /><span>Analytics</span>
-          </NavLink>
+            return (
+              <div key={group} className="flex flex-col gap-0.5">
+                {idx > 0 && <div className="border-t border-soy-bottle/15 my-2 mx-1" />}
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 px-3 mt-1 mb-1">
+                  {group}
+                </p>
+                {items.map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
+                      className={navLinkClass}
+                    >
+                      <Icon size={13} strokeWidth={2.5} />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            );
+          })}
         </nav>
         <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-2 flex-shrink-0">
-          <a href="mailto:support@opensoyce.com" className={navLinkClass({ isActive: false })} onClick={() => trackEvent('support_click', { source: 'nav' })}>
+          <a href="mailto:support@opensoyce.com" className={bottomLinkClass} onClick={() => trackEvent('support_click', { source: 'nav' })}>
             <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
           </a>
         </div>
@@ -359,7 +373,7 @@ export default function Layout() {
         <main><Outlet /></main>
         <footer className="border-t-4 border-soy-bottle bg-soy-label mt-20">
           <div className="max-w-7xl mx-auto px-4 py-12">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
               <div className="col-span-1 md:col-span-2">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="bg-soy-bottle p-1"><Sauce size={20} className="text-white" /></div>
@@ -371,11 +385,23 @@ export default function Layout() {
                 </div>
               </div>
               <div>
-                <h4 className="font-black uppercase tracking-widest text-xs mb-4">Product</h4>
+                <h4 className="font-black uppercase tracking-widest text-xs mb-4">Tools</h4>
                 <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
+                  <Link to="/scanner" className="hover:text-soy-red hover:opacity-100 transition-colors">Scanner</Link>
+                  <Link to="/guard" className="hover:text-soy-red hover:opacity-100 transition-colors">Guard</Link>
+                  <Link to="/compare" className="hover:text-soy-red hover:opacity-100 transition-colors">Compare</Link>
+                  <Link to="/heat-check" className="hover:text-soy-red hover:opacity-100 transition-colors">Heat Check</Link>
+                  <Link to="/graveyard" className="hover:text-soy-red hover:opacity-100 transition-colors">Graveyard</Link>
                   <Link to="/leaderboards" className="hover:text-soy-red hover:opacity-100 transition-colors">Leaderboards</Link>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-black uppercase tracking-widest text-xs mb-4">Discover</h4>
+                <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
+                  <Link to="/blog" className="hover:text-soy-red hover:opacity-100 transition-colors">Blog</Link>
+                  <Link to="/recipes" className="hover:text-soy-red hover:opacity-100 transition-colors">AI Recipes</Link>
+                  <Link to="/remix" className="hover:text-soy-red hover:opacity-100 transition-colors">Remix</Link>
                   <Link to="/lookup" className="hover:text-soy-red hover:opacity-100 transition-colors">Lookup</Link>
-                  <Link to="/methodology" className="hover:text-soy-red hover:opacity-100 transition-colors">Methodology</Link>
                   <Link to="/pricing" className="hover:text-soy-red hover:opacity-100 transition-colors">Pricing</Link>
                 </div>
               </div>
@@ -383,7 +409,10 @@ export default function Layout() {
                 <h4 className="font-black uppercase tracking-widest text-xs mb-4">Company</h4>
                 <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
                   <Link to="/about" className="hover:text-soy-red hover:opacity-100 transition-colors">About</Link>
-                  <Link to="/submit-project" className="hover:text-soy-red hover:opacity-100 transition-colors">Submit a Project</Link>
+                  <Link to="/faq" className="hover:text-soy-red hover:opacity-100 transition-colors">FAQ</Link>
+                  <Link to="/methodology" className="hover:text-soy-red hover:opacity-100 transition-colors">Methodology</Link>
+                  <Link to="/claim" className="hover:text-soy-red hover:opacity-100 transition-colors">Claim a Project</Link>
+                  <Link to="/cli" className="hover:text-soy-red hover:opacity-100 transition-colors">CLI</Link>
                 </div>
               </div>
             </div>

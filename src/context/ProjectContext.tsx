@@ -13,6 +13,7 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [projects, setProjects] = useState<Project[]>(() => {
+    if (typeof window === 'undefined') return MOCK_PROJECTS;
     try {
       const saved = localStorage.getItem('opensoyce-projects');
       if (saved) {
@@ -26,7 +27,9 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
   const saveProjects = (newProjects: Project[]) => {
     setProjects(newProjects);
-    localStorage.setItem('opensoyce-projects', JSON.stringify(newProjects));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('opensoyce-projects', JSON.stringify(newProjects));
+    }
   };
 
   const updateProject = (id: string, updates: Partial<Project>) => {

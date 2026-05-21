@@ -90,7 +90,7 @@ test('PATCH_AVAILABLE: decision/dimensions/coverage/action present', () => {
   contains(md, '- Remediation Readiness:', 'remediation dim');
   contains(md, '- Maintainer Trust:', 'maintainer dim');
   contains(md, '- Tree Complexity:', 'tree dim');
-  contains(md, '- Transparency:', 'transparency dim');
+  contains(md, '- Identity Resolution:', 'identity resolution dim');
   contains(md, 'Selected dependency health scored 4 of 80 installed dependencies.', 'coverage sentence');
   contains(md, '### Recommended next action', 'action header');
   contains(md, 'Upgrade the listed packages to their fixed versions.', 'patch action');
@@ -134,7 +134,27 @@ test('REVIEW_REQUIRED no-fix HIGH: action mentions "No fix available for N"', ()
   const b = bundle(vulns, inventory, selHealth());
   const md = buildMarkdownReport({ ...b });
   contains(md, 'Decision:** REVIEW REQUIRED', 'review required');
-  contains(md, 'No fix available for 2 high/critical advisory(ies)', 'no-fix action');
+  contains(md, 'No fix available for 2 high/critical advisories', 'no-fix action');
+  notContains(md, 'advisory(ies)', 'no lazy pluralization');
+});
+
+// ---------------------------------------------------------------------------
+// 3b. REVIEW_REQUIRED + single no-fix HIGH (singular pluralization)
+test('REVIEW_REQUIRED no-fix HIGH (n=1): action says singular "1 high/critical advisory"', () => {
+  const vulns = [
+    vuln({ pkg: 'evil', severity: 'critical', fixedIn: undefined, repoHealth: health('STABLE') }),
+  ];
+  const inventory = inv({
+    packages: [
+      { name: 'evil', versions: ['1.0.0'], direct: true, scope: 'prod', hasLicense: true, hasRepository: true },
+    ],
+    directCount: 5, totalPackages: 30, duplicateCount: 0,
+  });
+  const b = bundle(vulns, inventory, selHealth());
+  const md = buildMarkdownReport({ ...b });
+  contains(md, 'No fix available for 1 high/critical advisory ', 'singular advisory');
+  notContains(md, 'advisory(ies)', 'no lazy pluralization');
+  notContains(md, '1 high/critical advisories', 'no incorrect plural for n=1');
 });
 
 // ---------------------------------------------------------------------------
@@ -276,6 +296,58 @@ test('Empty scan: builders do not throw, markdown is short and honest', () => {
   ok(j && j.schemaVersion === 1, 'json built');
   notContains(md, 'all vulnerabilities', 'no all vulns');
   notContains(md, 'scored the whole tree', 'no whole tree');
+});
+
+// ---------------------------------------------------------------------------
+// 10. OSV error: markdown surfaces uncertainty + "not assessed", no zero lie
+test('OSV error: Uncertainty bullet fires and Evidence says "not assessed"', () => {
+  const inventory = inv({ packages: [], directCount: 0, totalPackages: 0 });
+  const summary = summarizeScan([]);
+  const profile = computeRiskProfile({
+    vulnerabilities: [],
+    inventory,
+    selectedHealth: null,
+    osvError: true,
+  });
+  const md = buildMarkdownReport({
+    summary,
+    profile,
+    vulnerabilities: [],
+    inventory,
+    selectedHealth: null,
+    osvError: true,
+  });
+  contains(md, '### Uncertainty', 'uncertainty header present');
+  contains(md, 'OSV vulnerability data was unavailable for this scan.', 'osv uncertainty bullet');
+  contains(md, '- Known vulnerabilities: not assessed (OSV unavailable)', 'evidence not assessed');
+  notContains(md, '- Known vulnerabilities: 0 (', 'must not print zero count when osv failed');
+});
+
+// ---------------------------------------------------------------------------
+// 11. OSV error: JSON surfaces osvError flag + uncertainty
+test('OSV error: JSON has osvError=true and uncertainty bullet', () => {
+  const inventory = inv({ packages: [], directCount: 0, totalPackages: 0 });
+  const summary = summarizeScan([]);
+  const profile = computeRiskProfile({
+    vulnerabilities: [],
+    inventory,
+    selectedHealth: null,
+    osvError: true,
+  });
+  const j = buildJsonReport({
+    summary,
+    profile,
+    vulnerabilities: [],
+    inventory,
+    selectedHealth: null,
+    osvError: true,
+  });
+  eq(j.osvError, true, 'json osvError flag');
+  ok(Array.isArray(j.uncertainty), 'uncertainty array');
+  ok(j.uncertainty.includes('OSV vulnerability data was unavailable for this scan.'), 'osv bullet in json uncertainty');
+  // And the negative: when osvError is omitted, flag is false.
+  const j2 = buildJsonReport({ summary, profile, vulnerabilities: [], inventory, selectedHealth: null });
+  eq(j2.osvError, false, 'osvError false when not set');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

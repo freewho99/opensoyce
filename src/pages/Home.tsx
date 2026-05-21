@@ -19,22 +19,22 @@ import { useWatchlist } from '../context/WatchlistContext';
 import { CATEGORIES } from '../data/categories';
 import { trackEvent } from '../utils/analytics';
 
-const CATEGORY_USE_CASES: Record<string, { use: string; fork: string }> = {
-  'next.js': { use: "Full-stack web apps", fork: "Headless storefront engine" },
-  'react': { use: "Any UI layer", fork: "Component marketplace" },
-  'vite': { use: "Blazing dev builds", fork: "Custom bundler preset" },
-  'astro': { use: "Content-heavy sites", fork: "Visual CMS builder" },
-  'biome': { use: "Linting + formatting", fork: "Team code-quality CLI" },
-  'deno': { use: "Secure server runtime", fork: "Edge function toolkit" },
-  'bun': { use: "Fast Node replacement", fork: "Serverless runtime platform" },
-  'ui': { use: "Drop-in UI components", fork: "Branded design system" },
-  'hono': { use: "Ultra-fast API layer", fork: "Edge API gateway" },
-  'trpc': { use: "Type-safe API calls", fork: "API-as-a-product starter" },
-  'prisma': { use: "Type-safe DB queries", fork: "Multi-tenant SaaS ORM" },
-  'supabase': { use: "Instant backend layer", fork: "White-label BaaS" },
-  'aider': { use: "AI pair programming in the terminal", fork: "Team-specific coding agents" },
-  'openhands': { use: "Autonomous software engineering tasks", fork: "Internal dev automation platforms" },
-  'langgraph': { use: "Controllable, stateful agent workflows", fork: "Visual agent orchestration tools" },
+const CATEGORY_USE_CASES: Record<string, { use: string; fork: string; grow: string }> = {
+  'next.js': { use: "Full-stack web apps", fork: "Headless storefront engine", grow: "Star it, open issues, sponsor Vercel OSS" },
+  'react': { use: "Any UI layer", fork: "Component marketplace", grow: "Contribute RFCs, triage issues, write examples" },
+  'vite': { use: "Blazing dev builds", fork: "Custom bundler preset", grow: "Sponsor the team, submit plugins, report bugs" },
+  'astro': { use: "Content-heavy sites", fork: "Visual CMS builder", grow: "Add integrations, write tutorials, file issues" },
+  'biome': { use: "Linting + formatting", fork: "Team code-quality CLI", grow: "Sponsor contributors, add lint rules, translate docs" },
+  'deno': { use: "Secure server runtime", fork: "Edge function toolkit", grow: "Build Deno modules, report compat issues, star" },
+  'bun': { use: "Fast Node replacement", fork: "Serverless runtime platform", grow: "Report issues, build plugins, share benchmarks" },
+  'ui': { use: "Drop-in UI components", fork: "Branded design system", grow: "Submit themes, add components, improve docs" },
+  'hono': { use: "Ultra-fast API layer", fork: "Edge API gateway", grow: "Add middleware, contribute adapters, write guides" },
+  'trpc': { use: "Type-safe API calls", fork: "API-as-a-product starter", grow: "Contribute adapters, improve types, share examples" },
+  'prisma': { use: "Type-safe DB queries", fork: "Multi-tenant SaaS ORM", grow: "Open bugs, add provider support, sponsor" },
+  'supabase': { use: "Instant backend layer", fork: "White-label BaaS", grow: "Build extensions, submit integrations, star" },
+  'aider': { use: "AI pair programming in the terminal", fork: "Team-specific coding agents", grow: "Star the repo, test LLM integrations, report bugs" },
+  'openhands': { use: "Autonomous software engineering tasks", fork: "Internal dev automation platforms", grow: "Contribute skills, report task failures, sponsor" },
+  'langgraph': { use: "Controllable, stateful agent workflows", fork: "Visual agent orchestration tools", grow: "Share graphs, add nodes, improve tutorials" },
 };
 
 const STALE_PROJECTS = [
@@ -44,54 +44,56 @@ const STALE_PROJECTS = [
 ];
 
 const REMIX_PROJECTS = [
-  { 
-    name: 'OPEN DESIGN', 
-    owner: 'nicholasgasior', 
-    repo: 'open-design', 
+  {
+    name: 'OPEN DESIGN',
+    owner: 'nicholasgasior',
+    repo: 'open-design',
     idea: 'Turn into Angular 20 design studio',
     why: "A local-first AI design workflow that works with every model — Angular teams have been waiting for this."
   },
-  { 
-    name: 'ASTRO', 
-    owner: 'withastro', 
-    repo: 'astro', 
+  {
+    name: 'ASTRO',
+    owner: 'withastro',
+    repo: 'astro',
     idea: 'Build a visual content CMS',
     why: "Content-first architecture maps perfectly to CMS use cases — the template ecosystem gap is wide open."
   },
-  { 
-    name: 'BIOME', 
-    owner: 'biomejs', 
-    repo: 'biome', 
+  {
+    name: 'BIOME',
+    owner: 'biomejs',
+    repo: 'biome',
     idea: 'Ship as team code-quality CLI',
     why: "One binary, zero config, 100x faster — teams will pay for an opinionated CLI wrapper."
   },
-  { 
-    name: 'ARCHON', 
-    owner: 'coleam00', 
-    repo: 'archon', 
+  {
+    name: 'ARCHON',
+    owner: 'coleam00',
+    repo: 'archon',
     idea: 'Package as AI workflow builder',
     why: "YAML-defined agent workflows are the next Docker Compose — the tooling category is at day one."
   },
 ];
 
+// EDITORIAL PICKS: bands below were baked once via verdictFor() from src/shared/verdict.js
+// against curated scores. Numeric scores are intentionally NOT shown on the card to
+// avoid drift vs. live /api/analyze; click-through goes to /lookup for the live scan.
 const TRENDING_DATA = [
-  { owner: 'paul-gauthier', repo: 'aider', score: 9.3, tagline: 'Terminal-based AI pair programmer', signals: ['FRESH', 'MOMENTUM'], category: 'skills-agents', hotLine: '↑ Best-in-class terminal coding experience' },
-  { owner: 'opendevin', repo: 'OpenHands', score: 9.1, tagline: 'Autonomous software engineering agent', signals: ['MOMENTUM', 'FORKABLE'], category: 'skills-agents', hotLine: '↑ Autonomous dev workflows surging' },
-  { owner: 'langchain-ai', repo: 'langgraph', score: 8.9, tagline: 'Controllable agent workflows', signals: ['FRESH', 'DOCS STRONG'], category: 'skills-agents', hotLine: '↑ Advanced stateful orchestration' },
-  { owner: 'vercel', repo: 'next.js', score: 9.2, tagline: 'The React Framework for the Web', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Commit velocity sustained · New App Router patterns shipping' },
-  { owner: 'withastro', repo: 'astro', score: 9.1, tagline: 'The web framework for content-driven websites', signals: ['FRESH', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Content site benchmark · v5 content collections reshaping DX' },
-  { owner: 'biomejs', repo: 'biome', score: 8.7, tagline: 'One toolchain for your web project', signals: ['FRESH', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ Linting + formatting unified · Fast adoption replacing ESLint' },
-  { owner: 'shadcn-ui', repo: 'ui', score: 9.4, tagline: 'Beautifully designed components', signals: ['HIGH ADOPT', 'DOCS STRONG'], category: 'ui-libraries', hotLine: '↑ Copy-paste model copied everywhere · New registry launched' },
-  { owner: 'honojs', repo: 'hono', score: 9.0, tagline: 'Ultrafast web framework for the Edges', signals: ['MOMENTUM', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Cloudflare Workers standard · 100k weekly downloads milestone' },
-  { owner: 'trpc', repo: 'trpc', score: 8.8, tagline: 'End-to-end typesafe APIs made easy', signals: ['DOCS STRONG', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Type-safe APIs spreading · TanStack integration shipped' },
-  { owner: 'vitejs', repo: 'vite', score: 9.5, tagline: 'Next generation frontend tooling', signals: ['HIGH ADOPT', 'FRESH'], category: 'build-tools', hotLine: '↑ Fastest growing build tool · Vite 6 ecosystem expanding' },
-  { owner: 'facebook', repo: 'react', score: 8.9, tagline: 'A JavaScript library for building user interfaces', signals: ['HIGH ADOPT', 'LOW RISK'], category: 'ui-libraries', hotLine: '↑ React 19 adoption accelerating · Compiler going stable' },
-  { owner: 'denoland', repo: 'deno', score: 8.6, tagline: 'A secure runtime for JavaScript and TypeScript', signals: ['DOCS STRONG', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ npm compat complete · KV store going production' },
-  { owner: 'oven-sh', repo: 'bun', score: 8.5, tagline: 'Incredibly fast JavaScript runtime', signals: ['MOMENTUM', 'FRESH'], category: 'build-tools', hotLine: '↑ Node replacement gaining teams · Bun 2 runtime performance' },
-  { owner: 'prisma', repo: 'prisma', score: 9.0, tagline: 'Next-generation Node.js and TypeScript ORM', signals: ['LOW RISK', 'DOCS STRONG'], category: 'orm-database', hotLine: '↑ Prisma 6 GA · Accelerate edge queries launching' },
-  { owner: 'supabase', repo: 'supabase', score: 8.9, tagline: 'The open source Firebase alternative', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'orm-database', hotLine: '↑ Auth + storage + DB in one · Vector/AI features shipping' },
-  { owner: 'coleam00', repo: 'archon', score: 8.9, tagline: 'YAML-DEFINED AI CODING WORKFLOWS', signals: ['FRESH', 'MOMENTUM'], category: 'ai-agent-harnesses', hotLine: '↑ YAML-defined agent workflows surging' },
-  { owner: 'openharness', repo: 'ohmo', score: 7.2, tagline: 'LIGHTWEIGHT CLI-FIRST HARNESS', signals: ['MOMENTUM', 'FRESH'], category: 'ai-agent-harnesses', earlyBreakout: true, hotLine: '↑ CLI-native agent infra surfacing' },
+  { owner: 'Aider-AI', repo: 'aider', band: 'USE READY', tagline: 'Terminal-based AI pair programmer', signals: ['FRESH', 'MOMENTUM'], category: 'skills-agents', hotLine: '↑ Best-in-class terminal coding experience' },
+  { owner: 'OpenHands', repo: 'OpenHands', band: 'USE READY', tagline: 'Autonomous software engineering agent', signals: ['MOMENTUM', 'FORKABLE'], category: 'skills-agents', hotLine: '↑ Autonomous dev workflows surging' },
+  { owner: 'langchain-ai', repo: 'langgraph', band: 'USE READY', tagline: 'Controllable agent workflows', signals: ['FRESH', 'DOCS STRONG'], category: 'skills-agents', hotLine: '↑ Advanced stateful orchestration' },
+  { owner: 'vercel', repo: 'next.js', band: 'USE READY', tagline: 'The React Framework for the Web', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Commit velocity sustained · New App Router patterns shipping' },
+  { owner: 'withastro', repo: 'astro', band: 'USE READY', tagline: 'The web framework for content-driven websites', signals: ['FRESH', 'FORKABLE'], category: 'meta-frameworks', hotLine: '↑ Content site benchmark · v5 content collections reshaping DX' },
+  { owner: 'biomejs', repo: 'biome', band: 'USE READY', tagline: 'One toolchain for your web project', signals: ['FRESH', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ Linting + formatting unified · Fast adoption replacing ESLint' },
+  { owner: 'shadcn-ui', repo: 'ui', band: 'USE READY', tagline: 'Beautifully designed components', signals: ['HIGH ADOPT', 'DOCS STRONG'], category: 'ui-libraries', hotLine: '↑ Copy-paste model copied everywhere · New registry launched' },
+  { owner: 'honojs', repo: 'hono', band: 'USE READY', tagline: 'Ultrafast web framework for the Edges', signals: ['MOMENTUM', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Cloudflare Workers standard · 100k weekly downloads milestone' },
+  { owner: 'trpc', repo: 'trpc', band: 'USE READY', tagline: 'End-to-end typesafe APIs made easy', signals: ['DOCS STRONG', 'LOW RISK'], category: 'meta-frameworks', hotLine: '↑ Type-safe APIs spreading · TanStack integration shipped' },
+  { owner: 'vitejs', repo: 'vite', band: 'USE READY', tagline: 'Next generation frontend tooling', signals: ['HIGH ADOPT', 'FRESH'], category: 'build-tools', hotLine: '↑ Fastest growing build tool · Vite 6 ecosystem expanding' },
+  { owner: 'facebook', repo: 'react', band: 'USE READY', tagline: 'A JavaScript library for building user interfaces', signals: ['HIGH ADOPT', 'LOW RISK'], category: 'ui-libraries', hotLine: '↑ React 19 adoption accelerating · Compiler going stable' },
+  { owner: 'denoland', repo: 'deno', band: 'USE READY', tagline: 'A secure runtime for JavaScript and TypeScript', signals: ['DOCS STRONG', 'MOMENTUM'], category: 'build-tools', hotLine: '↑ npm compat complete · KV store going production' },
+  { owner: 'oven-sh', repo: 'bun', band: 'USE READY', tagline: 'Incredibly fast JavaScript runtime', signals: ['MOMENTUM', 'FRESH'], category: 'build-tools', hotLine: '↑ Node replacement gaining teams · Bun 2 runtime performance' },
+  { owner: 'prisma', repo: 'prisma', band: 'USE READY', tagline: 'Next-generation Node.js and TypeScript ORM', signals: ['LOW RISK', 'DOCS STRONG'], category: 'orm-database', hotLine: '↑ Prisma 6 GA · Accelerate edge queries launching' },
+  { owner: 'supabase', repo: 'supabase', band: 'USE READY', tagline: 'The open source Firebase alternative', signals: ['HIGH ADOPT', 'FORKABLE'], category: 'orm-database', hotLine: '↑ Auth + storage + DB in one · Vector/AI features shipping' },
+  { owner: 'coleam00', repo: 'archon', band: 'USE READY', tagline: 'YAML-DEFINED AI CODING WORKFLOWS', signals: ['FRESH', 'MOMENTUM'], category: 'ai-agent-harnesses', hotLine: '↑ YAML-defined agent workflows surging' },
 ];
 
 export default function Home() {
@@ -126,8 +128,8 @@ export default function Home() {
     { label: 'TESTING', id: 'testing-harnesses' },
   ];
 
-  const filteredTrending = filter === 'All' 
-    ? TRENDING_DATA 
+  const filteredTrending = filter === 'All'
+    ? TRENDING_DATA
     : TRENDING_DATA.filter(t => t.category === filter);
 
   if (!featured) {
@@ -158,7 +160,7 @@ export default function Home() {
             >
               The Trust Layer is Here
             </motion.div>
-            <motion.h1 
+            <motion.h1
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
@@ -180,8 +182,8 @@ export default function Home() {
               transition={{ delay: 0.3 }}
               className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center lg:justify-start"
             >
-              <Link 
-                to="/leaderboards" 
+              <Link
+                to="/leaderboards"
                 onClick={() => trackEvent('hero_explore_click', { source: 'home' })}
                 className="bg-black text-[#F5F0E8] px-10 py-5 text-sm font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 shadow-[6px_6px_0px_#000]"
               >
@@ -202,12 +204,98 @@ export default function Home() {
             >
               <NutritionLabel project={featured} />
             </motion.div>
-            
+
             <Soycie size="md" className="absolute -bottom-10 -right-10 z-20" mood="cool" />
           </div>
         </div>
-        
+
         <div className="absolute top-0 right-0 w-full h-full opacity-[0.03] pointer-events-none -z-10 bg-[radial-gradient(#302C26_1px,transparent_1px)] [background-size:40px_40px]"></div>
+      </section>
+
+      {/* AI Dependency Framing Band */}
+      <section className="py-16 px-4 bg-white border-b-4 border-black">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-10 flex flex-wrap items-center gap-3">
+            <span className="bg-soy-red text-white px-4 py-2 text-xs font-black uppercase tracking-[0.4em] shadow-[4px_4px_0px_#000]">
+              NOW SCANNING AI DEPS
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic">
+              Verdict bands shown — click any card for the live score.
+            </span>
+          </div>
+
+          <div className="mb-3">
+            <h2 className="text-5xl font-black uppercase italic tracking-tighter leading-none mb-4">
+              BUILT FOR THE AI DEPENDENCY TREE
+            </h2>
+            <p className="text-xl font-bold uppercase tracking-wide opacity-70 italic max-w-3xl">
+              Lockfile-aware scoring across npm, uv, and Poetry — so the models, agents, and SDKs you ship on get the same nutrition label as everything else.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-10">
+            {[
+              { owner: 'langchain-ai', repo: 'langchain', band: 'WATCHLIST', tagline: 'LLM app framework', note: '⚠ 4 OPEN HIGH/CRIT' },
+              { owner: 'huggingface', repo: 'transformers', band: 'USE READY', tagline: 'State-of-the-art ML models', note: 'Reference stack for OSS AI' },
+              { owner: 'vercel', repo: 'ai', band: 'USE READY', tagline: 'AI SDK for TS/React', note: 'Vercel-backed · fast-moving' },
+              { owner: 'openai', repo: 'openai-node', band: 'USE READY', tagline: 'Official OpenAI Node SDK', note: 'First-party SDK · widely used' },
+            ].map((pkg, i) => {
+              const bandStyle = pkg.band === 'WATCHLIST'
+                ? { bg: 'bg-yellow-500', textCol: 'text-black' }
+                : { bg: 'bg-green-600', textCol: 'text-white' };
+              return (
+                <Link
+                  key={i}
+                  to={`/lookup?q=${pkg.owner}/${pkg.repo}`}
+                  onClick={() => trackEvent('ai_band_card_click', { repo: `${pkg.owner}/${pkg.repo}`, source: 'ai_framing_band' })}
+                  className="group bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000] hover:shadow-[10px_10px_0px_#D12D2D] hover:-translate-y-1 transition-all flex flex-col"
+                >
+                  <div className="flex justify-between items-start mb-4 gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-40 leading-none mb-1 truncate">{pkg.owner} /</span>
+                      <h3 className="text-2xl font-black uppercase italic tracking-tighter leading-none group-hover:text-soy-red transition-all truncate">
+                        {pkg.repo}
+                      </h3>
+                    </div>
+                    <div className={`px-2 py-1 ${bandStyle.bg} ${bandStyle.textCol} text-[9px] font-black uppercase tracking-[0.15em] border-2 border-black shadow-[3px_3px_0px_#000] shrink-0`}>
+                      {pkg.band}
+                    </div>
+                  </div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest opacity-60 italic mb-3">
+                    "{pkg.tagline}"
+                  </p>
+                  <p className={`text-[10px] font-black uppercase tracking-wider mt-auto ${pkg.band === 'WATCHLIST' ? 'text-soy-red' : 'opacity-70'}`}>
+                    {pkg.note}
+                  </p>
+                  <div className="mt-4 pt-3 border-t border-black/10 text-[9px] font-black uppercase tracking-[0.2em] text-soy-red flex items-center gap-2">
+                    SCAN LIVE <ArrowRight size={12} />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <p className="mt-8 text-[10px] font-bold uppercase tracking-widest opacity-50 italic">
+            Verdict bands shown; click any card for the live score. Now supports npm, uv, and Poetry lockfiles.
+          </p>
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-4">
+            <Link
+              to="/leaderboard/ai"
+              onClick={() => trackEvent('ai_leaderboard_cta_click', { source: 'ai_framing_band' })}
+              className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest border-b-2 border-black pb-1 hover:text-soy-red hover:border-soy-red transition-all"
+            >
+              See the full AI ecosystem leaderboard <ArrowRight size={14} />
+            </Link>
+            <Link
+              to="/graveyard/ai"
+              onClick={() => trackEvent('ai_graveyard_cta_click', { source: 'ai_framing_band' })}
+              className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest border-b-2 border-black pb-1 hover:text-soy-red hover:border-soy-red transition-all"
+            >
+              Browse the AI graveyard <ArrowRight size={14} />
+            </Link>
+          </div>
+        </div>
       </section>
 
       {/* Features Grid */}
@@ -216,7 +304,7 @@ export default function Home() {
           <div className="mb-16 text-center">
             <h2 className="text-4xl font-bold uppercase tracking-widest border-b-4 border-black inline-block pb-2 mb-4 italic">The Secret Sauce</h2>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-4 border-black">
             <FeatureItem
               icon={<ShieldCheck className="text-soy-red" size={40} />}
@@ -241,7 +329,7 @@ export default function Home() {
       {/* HEAT CHECK Ticker */}
       <div className="bg-black text-white py-3 border-y-4 border-black relative overflow-hidden h-12">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-center h-full">
-          <motion.div 
+          <motion.div
             key={tickerIndex}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -260,10 +348,19 @@ export default function Home() {
       <section className="py-20 px-4 bg-soy-label/20 border-b-4 border-black">
         <div className="max-w-7xl mx-auto">
           <div className="mb-12">
-            <h2 className="text-6xl font-black uppercase italic tracking-tighter mb-8 bg-black text-white inline-block px-6 py-2 transform -skew-x-12">
+            <h2 className="text-6xl font-black uppercase italic tracking-tighter mb-4 bg-black text-white inline-block px-6 py-2 transform -skew-x-12">
               OPEN-SOURCE HEAT CHECK 🔥
             </h2>
-            
+
+            <div className="mb-8 flex flex-wrap items-center gap-3">
+              <span className="bg-soy-red text-white px-4 py-2 text-xs font-black uppercase tracking-[0.4em] shadow-[4px_4px_0px_#000]">
+                EDITORIAL PICKS
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic">
+                Verdict bands are static — click any card for the live score.
+              </span>
+            </div>
+
             {/* Filter Chips */}
             <div className="flex flex-wrap gap-2 mb-12 overflow-x-auto pb-4 scrollbar-hide">
               {categories.map((cat) => (
@@ -280,13 +377,29 @@ export default function Home() {
             </div>
           </div>
 
-          <div 
-            ref={scrollRef}
-            className="flex overflow-x-auto gap-8 pb-12 scrollbar-hide snap-x"
-          >
-            {filteredTrending.map((trend, i) => (
-              <OpportunityCard key={i} trend={trend} />
-            ))}
+          <div className="relative">
+            <button
+              onClick={() => scrollRef.current?.scrollBy({ left: -420, behavior: 'smooth' })}
+              className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-10 h-10 bg-black text-white items-center justify-center border-2 border-black hover:bg-soy-red transition-colors shadow-[2px_2px_0px_#666] text-2xl font-bold"
+              aria-label="Scroll left"
+            >
+              &#8249;
+            </button>
+            <div
+              ref={scrollRef}
+              className="flex overflow-x-auto gap-8 pb-12 scrollbar-hide snap-x"
+            >
+              {filteredTrending.map((trend, i) => (
+                <OpportunityCard key={i} trend={trend} />
+              ))}
+            </div>
+            <button
+              onClick={() => scrollRef.current?.scrollBy({ left: 420, behavior: 'smooth' })}
+              className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-10 h-10 bg-black text-white items-center justify-center border-2 border-black hover:bg-soy-red transition-colors shadow-[2px_2px_0px_#666] text-2xl font-bold"
+              aria-label="Scroll right"
+            >
+              &#8250;
+            </button>
           </div>
 
           {/* Ticker Rail */}
@@ -310,7 +423,7 @@ export default function Home() {
           </div>
         </div>
       </section>
-      
+
       {/* Trending Leaderboard Preview */}
       <section className="py-20 px-4 border-b-4 border-black bg-white">
         <div className="max-w-7xl mx-auto">
@@ -342,8 +455,8 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {CATEGORIES.slice(0, 9).map((cat) => (
-              <Link 
-                key={cat.slug} 
+              <Link
+                key={cat.slug}
                 to={`/compare/${cat.slug}`}
                 className="group border-4 border-black p-8 bg-soy-label/20 hover:shadow-[8px_8px_0px_#000] hover:-translate-y-1 transition-all flex flex-col justify-between"
               >
@@ -398,7 +511,7 @@ export default function Home() {
                     {remix.why}
                   </p>
                 </div>
-                <Link 
+                <Link
                   to={`/lookup?q=${remix.owner}/${remix.repo}`}
                   className="relative z-10 inline-flex items-center gap-3 bg-black text-white px-8 py-4 text-xs font-black uppercase tracking-[0.2em] transform group-hover:scale-105 transition-all w-fit"
                 >
@@ -457,8 +570,8 @@ export default function Home() {
           </div>
 
           <div className="text-center">
-            <Link 
-              to="/graveyard" 
+            <Link
+              to="/graveyard"
               className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest border-b-2 border-white/40 pb-1 hover:text-soy-red hover:border-soy-red transition-all"
             >
               SEE FULL GRAVEYARD <ArrowRight size={14} />
@@ -474,17 +587,17 @@ export default function Home() {
             Ready to add <span className="text-soy-red">Extra Sauce</span> to your repo?
           </h2>
           <p className="text-lg md:text-xl font-medium opacity-80 mb-10 text-center">
-            Early access is now open for maintainers building trust with OpenSoyce. 
+            Early access is now open for maintainers building trust with OpenSoyce.
             Get your badge, verify your ownership, and boost your discovery.
           </p>
-          <button 
+          <button
             onClick={() => trackEvent('start_free_click', { source: 'home' })}
             className="bg-soy-label text-soy-bottle px-12 py-5 text-xl font-bold uppercase tracking-widest hover:bg-soy-red hover:text-white transition-all shadow-[6px_6px_0px_#D12D2D]"
           >
             Start for Free
           </button>
         </div>
-        
+
         {/* Floating elements */}
         <motion.div animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: 'linear' }} className="absolute -top-20 -left-20 opacity-10 pointer-events-none">
           <Star size={300} />
@@ -498,7 +611,11 @@ export default function Home() {
 }
 
 function OpportunityCard({ trend }: { trend: any, key?: any }) {
-  const useCases = CATEGORY_USE_CASES[trend.repo.toLowerCase()] || { use: "Generic development", fork: "Custom ecosystem component" };
+  const useCases = CATEGORY_USE_CASES[trend.repo.toLowerCase()] || {
+    use: "Generic development",
+    fork: "Custom ecosystem component",
+    grow: "Star and contribute upstream"
+  };
   const { isWatching, addToWatchlist, removeFromWatchlist } = useWatchlist();
   const watching = isWatching(trend.owner, trend.repo);
 
@@ -512,14 +629,16 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
       trackEvent('watchlist_add_click', { repo: `${trend.owner}/${trend.repo}`, source: 'opportunity_card' });
     }
   };
-  
+
   const getBadge = () => {
-    if (trend.score < 5.0 || trend.stale) return { text: "STALE", bg: "bg-gray-600", textCol: "text-white" };
-    if (trend.earlyBreakout) return { text: "HIGH MOMENTUM", bg: "bg-orange-500", textCol: "text-white" };
-    if (trend.score >= 9.0) return { text: "USE READY", bg: "bg-green-600", textCol: "text-white" };
-    if (trend.score >= 8.0) return { text: "FORKABLE", bg: "bg-blue-600", textCol: "text-white" };
-    if (trend.score < 7.0) return { text: "WATCHLIST", bg: "bg-yellow-500", textCol: "text-black" };
-    return { text: "FORKABLE", bg: "bg-blue-600", textCol: "text-white" };
+    const band = trend.band || 'FORKABLE';
+    if (band === 'STALE') return { text: 'STALE', bg: 'bg-gray-600', textCol: 'text-white' };
+    if (band === 'USE READY') return { text: 'USE READY', bg: 'bg-green-600', textCol: 'text-white' };
+    if (band === 'FORKABLE') return { text: 'FORKABLE', bg: 'bg-blue-600', textCol: 'text-white' };
+    if (band === 'STABLE') return { text: 'STABLE', bg: 'bg-slate-500', textCol: 'text-white' };
+    if (band === 'WATCHLIST') return { text: 'WATCHLIST', bg: 'bg-yellow-500', textCol: 'text-black' };
+    if (band === 'RISKY') return { text: 'RISKY', bg: 'bg-red-700', textCol: 'text-white' };
+    return { text: band, bg: 'bg-blue-600', textCol: 'text-white' };
   };
 
   const badge = getBadge();
@@ -532,10 +651,10 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
       </div>
 
       {/* Star button */}
-      <button 
+      <button
         onClick={toggleWatch}
         className={`absolute top-2 left-2 p-1.5 border-2 border-black transition-all ${
-          watching ? 'bg-yellow-400 text-black shadow-[2px_2px_0px_#000]' : 'bg-white text-black hover:bg-yellow-50'
+          watching ? 'bg-yellow-400 text-black shadow-[2px_2px_0px_#000]' : 'bg-white text-black hover:bg-yellow-55'
         }`}
         title={watching ? "Remove from watchlist" : "Add to watchlist"}
       >
@@ -543,18 +662,18 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
       </button>
 
       <div className="flex-1">
-        <div className="flex justify-between items-center mb-1">
-          <div className="flex flex-col">
+        <div className="flex justify-between items-start mb-1 gap-4">
+          <div className="flex flex-col min-w-0">
             <span className="text-[10px] font-black uppercase tracking-widest opacity-40 leading-none mb-1">{trend.owner} /</span>
-            <h3 className="text-4xl font-black uppercase italic tracking-tighter leading-none group-hover:text-soy-red transition-all">
+            <h3 className="text-4xl font-black uppercase italic tracking-tighter leading-none group-hover:text-soy-red transition-all truncate">
               {trend.repo}
             </h3>
           </div>
-          <div className="text-5xl font-black italic text-soy-red leading-none">
-            {trend.score.toFixed(1)}
+          <div className={`mt-1 px-3 py-1.5 ${badge.bg} ${badge.textCol} text-[10px] font-black uppercase tracking-[0.2em] border-2 border-black shadow-[3px_3px_0px_#000] shrink-0`}>
+            {badge.text}
           </div>
         </div>
-        
+
         <p className="text-xs font-bold uppercase tracking-widest opacity-60 italic mb-2 truncate">
           "{trend.tagline}"
         </p>
@@ -566,19 +685,15 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
         )}
 
         {/* Signal Pills */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-6">
           {trend.signals.slice(0, 2).map((sig: string) => (
             <span key={sig} className="text-[8px] font-black uppercase tracking-tighter border border-black/20 px-2 py-0.5 opacity-60">
               {sig}
             </span>
           ))}
-        </div>
-
-        {/* Score Strips */}
-        <div className="space-y-3 mb-6 bg-soy-label/10 p-4 border border-black/5">
-          <ScoreStrip label="HEALTH" value={trend.score * 10} />
-          <ScoreStrip label="FORKABILITY" value={(trend.score - 0.5) * 10} />
-          <ScoreStrip label="MOMENTUM" value={(trend.score + 0.2) * 10} />
+          <span className="text-[8px] font-black uppercase tracking-tighter border border-black/20 px-2 py-0.5 opacity-40 italic">
+            EDITORIAL · LIVE SCORE ON CLICK
+          </span>
         </div>
 
         {/* Use / Fork Lines */}
@@ -591,6 +706,10 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
             <span className="text-[10px] font-black text-soy-red border border-soy-red px-1.5 py-0.5 shrink-0">FORK</span>
             <span className="text-xs font-bold uppercase tracking-tight italic">{useCases.fork}</span>
           </div>
+          <div className="flex items-start gap-3">
+            <span className="text-[10px] font-black text-green-700 border border-green-700 px-1.5 py-0.5 shrink-0">GROW</span>
+            <span className="text-xs font-bold uppercase tracking-tight text-green-700">{useCases.grow}</span>
+          </div>
         </div>
       </div>
 
@@ -600,12 +719,12 @@ function OpportunityCard({ trend }: { trend: any, key?: any }) {
           <ActionBtn label="FORK" repo={`${trend.owner}/${trend.repo}`} />
           <ActionBtn label="GROW" repo={`${trend.owner}/${trend.repo}`} />
         </div>
-        <Link 
-          to={`/projects/${trend.owner}/${trend.repo}`}
+        <Link
+          to={`/lookup?q=${trend.owner}/${trend.repo}`}
           onClick={() => trackEvent('analyze_project_click', { repo: `${trend.owner}/${trend.repo}`, source: 'opportunity_card' })}
           className="w-full bg-black text-white py-3 text-[10px] font-black uppercase tracking-widest italic hover:bg-soy-red transition-all text-center flex items-center justify-center gap-2"
         >
-          ANALYZE PROJECT →
+          SCAN LIVE →
         </Link>
       </div>
     </div>
@@ -617,9 +736,9 @@ function ScoreStrip({ label, value }: { label: string; value: number }) {
     <div className="flex items-center gap-3">
       <span className="text-[8px] font-black uppercase tracking-widest opacity-40 w-16">{label}</span>
       <div className="flex-1 h-1.5 bg-black/5 relative overflow-hidden">
-        <motion.div 
+        <motion.div
           initial={{ width: 0 }}
-          whileInView={{ width: `${value}%` }} 
+          whileInView={{ width: `${value}%` }}
           className="absolute inset-y-0 bg-black opacity-60"
         />
       </div>
@@ -628,10 +747,21 @@ function ScoreStrip({ label, value }: { label: string; value: number }) {
 }
 
 function ActionBtn({ label, repo }: { label: string, repo: string }) {
+  const urls: Record<string, string> = {
+    USE:  `https://github.com/${repo}`,
+    FORK: `https://github.com/${repo}/fork`,
+    GROW: `https://github.com/${repo}`,
+  };
+  const styles: Record<string, string> = {
+    USE:  'flex-1 bg-black text-white border-2 border-black py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-red hover:border-soy-red transition-all shadow-[2px_2px_0px_#000]',
+    FORK: 'flex-1 bg-white text-soy-red border-2 border-soy-red py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-red hover:text-white transition-all shadow-[2px_2px_0px_#000]',
+    GROW: 'flex-1 bg-white text-soy-bottle border-2 border-soy-bottle py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-white transition-all shadow-[2px_2px_0px_#000]',
+  };
   return (
-    <button 
-      onClick={() => trackEvent(`${label.toLowerCase()}_click`, { repo, page: '/' })}
-      className="flex-1 border border-black py-2 text-[10px] font-black uppercase tracking-widest hover:bg-soy-red hover:text-white transition-all"
+    <button
+      type="button"
+      onClick={() => { trackEvent(`${label.toLowerCase()}_click`, { repo, page: '/' }); window.open(urls[label] ?? `https://github.com/${repo}`, '_blank'); }}
+      className={styles[label] ?? styles.GROW}
     >
       {label}
     </button>
@@ -649,4 +779,3 @@ function FeatureItem({ icon, title, description, last = false }: { icon: React.R
     </div>
   );
 }
-

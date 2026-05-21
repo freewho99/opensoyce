@@ -148,7 +148,7 @@ export default function SubmitProject() {
                       <option>USE READY</option>
                       <option>FORKABLE</option>
                       <option>WATCHLIST</option>
-                      <option>HIGH MOMENTUM</option>
+                      {/* HIGH MOMENTUM omitted — editorial-only tier, not a public verdict band. */}
                       <option>STALE</option>
                       <option>NOT SURE</option>
                     </select>

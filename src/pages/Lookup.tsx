@@ -10,7 +10,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useWatchlist } from '../context/WatchlistContext';
 import { trackEvent } from '../utils/analytics';
 
-
 export default function Lookup() {
   const [searchParams] = useSearchParams();
   const [input, setInput] = useState(searchParams.get('q') || '');
@@ -21,7 +20,7 @@ export default function Lookup() {
   const [hasToken, setHasToken] = useState<boolean | null>(null);
   const [toast, setToast] = useState<{message: string, show: boolean}>({message: '', show: false});
   const [viewMode, setViewMode] = useState<'ide' | 'standard'>('ide');
-  
+
   const resultsRef = React.useRef<HTMLDivElement>(null);
   const { isWatching, addToWatchlist, removeFromWatchlist } = useWatchlist();
 
@@ -49,14 +48,32 @@ export default function Lookup() {
     };
   }, [result, viewMode]);
 
+  // Deep-link auto-run. If the URL carries ?q=owner/repo on mount, kick off
+  // analysis immediately so search-engine results, share links, and badge
+  // clicks land on the rendered nutrition label rather than an empty form.
+  React.useEffect(() => {
+    const q = searchParams.get('q');
+    if (!q || !q.includes('/')) return;
+    const parts = q.split('/');
+    const o = parts[0]?.trim() || '';
+    const r = parts[1]?.trim() || '';
+    if (o && r) {
+      runAnalysis(o, r);
+    }
+  }, []);
+
   const showToast = (message: string) => {
     setToast({ message, show: true });
     setTimeout(() => setToast({ message: '', show: false }), 3000);
   };
 
-  const handleAnalyze = async (e: React.FormEvent) => {
+  const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValid) {
+    runAnalysis(owner, repo);
+  };
+
+  const runAnalysis = async (ownerArg: string, repoArg: string) => {
+    if (!ownerArg || !repoArg) {
       setError('FORMAT: owner/repo (e.g. facebook/react)');
       return;
     }
@@ -69,7 +86,7 @@ export default function Lookup() {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, repo })
+        body: JSON.stringify({ owner: ownerArg, repo: repoArg })
       });
 
       const data = await res.json();
@@ -85,9 +102,9 @@ export default function Lookup() {
       }
 
       // Map API response to UI state
-      const repoPath = `${owner}/${repo}`;
+      const repoPath = `${ownerArg}/${repoArg}`;
       trackEvent('analyze_project_click', { repo: repoPath, source: 'lookup' });
-      
+
       setResult({
         id: data.repo.id,
         name: data.repo.name,
@@ -119,21 +136,21 @@ export default function Lookup() {
         busFactorHealthy: data.meta.busFactorHealthy,
         avgResolutionDays: data.meta.avgResolutionDays,
         contributors: data.meta.contributors,
+        maintainerConcentration: data.maintainerConcentration ?? null,
+        vendorSdk: data.vendorSdk ?? null,
+        migration: data.migration ?? null,
       });
 
-      
       showToast('Analysis complete!');
     } catch (err: any) {
       setError(err.message);
-    } finally {
+    } fill: {
       setLoading(false);
     }
   };
 
   const copyBadge = () => {
     if (!result) return;
-    // Always emit the canonical production origin in the badge markdown so a
-    // README badge copied from dev still points at the live site, not localhost.
     const origin = (typeof window !== 'undefined' && /^https?:\/\/(localhost|127\.0\.0\.1)/.test(window.location.origin))
       ? 'https://opensoyce.com'
       : window.location.origin;
@@ -159,7 +176,7 @@ export default function Lookup() {
     <div className="mx-auto w-full px-6 py-6 max-w-[1500px] transition-all duration-300 relative">
       <AnimatePresence>
         {toast.show && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 50, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 50, x: '-50%' }}
@@ -175,13 +192,6 @@ export default function Lookup() {
         <div className="mb-12">
           <h1 className="text-5xl font-bold uppercase italic tracking-tighter mb-4">Repo Lookup</h1>
           <p className="text-xl font-medium opacity-60">Import any GitHub project and generate its OpenSoyce Nutrition Label instantly.</p>
-          
-          {false && (
-            <div className="mt-4 p-3 bg-amber-50 border-l-4 border-amber-500 text-amber-700 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-              <AlertCircle size={14} />
-              <span>Note: Add GITHUB_TOKEN to .env to enable high-rate live data. Currently running in demo/limited mode.</span>
-            </div>
-          )}
         </div>
       )}
 
@@ -199,8 +209,8 @@ export default function Lookup() {
                 <div className="space-y-2">
                   <label className="block text-[10px] font-bold uppercase tracking-widest opacity-40">GITHUB REPOSITORY</label>
                   <div className="relative">
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       className={`w-full bg-soy-label/20 border-4 p-5 font-black outline-none transition-all ${input && !input.includes('/') ? 'border-soy-red' : 'border-soy-bottle'} focus:bg-white`}
@@ -224,7 +234,7 @@ export default function Lookup() {
                 </div>
               </div>
 
-              <button 
+              <button
                 type="submit"
                 disabled={loading}
                 className="w-full bg-soy-bottle text-soy-label py-5 text-xl font-bold uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 disabled:opacity-50"
@@ -235,7 +245,7 @@ export default function Lookup() {
             </form>
 
             {error && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-6 p-4 bg-soy-red/10 border-2 border-soy-red text-soy-red flex items-center gap-3 font-bold"
@@ -298,8 +308,8 @@ export default function Lookup() {
                 )}
 
                 {viewMode === 'ide' ? (
-                  <SauceIDE 
-                    result={result} 
+                  <SauceIDE
+                    result={result}
                     viewMode={viewMode}
                     setViewMode={setViewMode}
                     onSearchNew={() => {
@@ -308,9 +318,58 @@ export default function Lookup() {
                     }}
                   />
                 ) : (
-                  <div className="flex flex-col lg:flex-row gap-8 items-start">
-                    <div className="flex-1 w-full">
-                      <div className="bg-white border-4 border-soy-bottle p-8 mb-6 shadow-[8px_8px_0px_#000]">
+                  <div className="flex-1 w-full">
+                    {/* namesake migration banner */}
+                    {result.migration && (
+                      <div className="border-4 border-amber-500 bg-amber-50 p-4 mb-6">
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">⚠️</span>
+                          <div className="flex-1">
+                            <div className="text-sm font-black uppercase tracking-widest text-amber-900">
+                              {result.migration.source === 'curated'
+                                ? 'KNOWN MIGRATION'
+                                : 'POSSIBLE MIGRATION (DETECTED)'}
+                            </div>
+                            <p className="text-sm mt-1 text-amber-950">
+                              This project{' '}
+                              {result.migration.successor ? (
+                                <>
+                                  migrated to{' '}
+                                  <Link
+                                    to={`/lookup?q=${result.migration.successor.owner}/${result.migration.successor.repo}`}
+                                    className="font-bold underline"
+                                    onClick={() =>
+                                      trackEvent('migration_successor_click', {
+                                        repo: `${result.owner}/${result.name}`,
+                                        successor: `${result.migration!.successor!.owner}/${result.migration!.successor!.repo}`,
+                                        source: result.migration!.source,
+                                      })
+                                    }
+                                  >
+                                    {result.migration.successor.owner}/{result.migration.successor.repo}
+                                  </Link>
+                                </>
+                              ) : (
+                                <>was deprecated</>
+                              )}
+                              {result.migration.migratedAt
+                                ? ` on ${result.migration.migratedAt}`
+                                : ''}
+                              . The score below reflects the OLD repo (now archived or dormant) — it is NOT changed by this banner.
+                            </p>
+                            <p className="text-xs mt-1 text-amber-950 opacity-70">
+                              {result.migration.reason}
+                            </p>
+                            <p className="text-[10px] mt-2 font-black uppercase tracking-widest text-amber-900 opacity-70">
+                              Confidence: {result.migration.confidence} · Source: {result.migration.source}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col lg:flex-row gap-8 items-start">
+                      <div className="flex-1 w-full bg-white border-4 border-soy-bottle p-8 mb-6 shadow-[8px_8px_0px_#000]">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                           <div>
                             <h2 className="text-5xl font-black uppercase italic tracking-tighter leading-none mb-2">{result.name}</h2>
@@ -321,14 +380,21 @@ export default function Lookup() {
                             </div>
                           </div>
                           <div className="shadow-[4px_4px_0px_#000]">
-                            <SoyceScore value={result.score.overall ?? 0} size="md" link />
+                            <SoyceScore
+                              value={result.score.overall ?? 0}
+                              size="md"
+                              link
+                              advisorySummary={result.advisories ?? null}
+                              maintainerConcentration={result.maintainerConcentration ?? null}
+                              vendorSdkMatch={!!result.vendorSdk}
+                            />
                           </div>
                         </div>
 
                         <p className="text-sm font-bold uppercase italic tracking-tight opacity-70 mb-8 leading-relaxed border-l-4 border-soy-red pl-4">
                           "{result.description}"
                         </p>
-                        
+
                         {/* Meta Row */}
                         <div className="flex flex-wrap items-center gap-4 py-6 border-y-2 border-soy-bottle/5 mb-8 text-[11px] font-black uppercase tracking-wider italic">
                           <div className="flex items-center gap-1.5"><span className="text-soy-red font-normal">⭐</span> {((result.stars || 0) / 1000).toFixed(1)}K</div>
@@ -404,69 +470,68 @@ export default function Lookup() {
                         </div>
                       </div>
 
-                      <SimilarProjects 
-                        owner={result.owner} 
-                        repo={result.name} 
-                        topics={result.techStack} 
-                      />
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Link 
-                          to={`/projects/${result.owner}/${result.name}`}
-                          onClick={() => trackEvent('analyze_project_click', { repo: `${result.owner}/${result.name}`, source: 'lookup' })}
-                          className="md:col-span-2 bg-black text-white py-6 text-2xl font-black uppercase italic tracking-tighter hover:bg-soy-red transition-all flex items-center justify-center gap-4 shadow-[8px_8px_0px_#444]"
-                        >
-                          VIEW FULL PROFILE <ArrowUpRight size={24} />
-                        </Link>
-
-                        <button 
-                          onClick={copyBadge}
-                          className="bg-white border-4 border-soy-bottle py-4 font-bold uppercase tracking-widest hover:bg-soy-label transition-all flex flex-col items-center justify-center gap-2"
-                        >
-                          <div className="flex items-center gap-2">
-                            {copied ? <Check size={20} className="text-soy-red" /> : <Copy size={20} />}
-                            {copied ? 'Markdown Copied!' : 'Copy Badge Markdown'}
-                          </div>
-                          <div className="mt-2 pt-2 border-t border-soy-bottle/10 w-full px-4">
-                            <div className="text-[8px] opacity-40 mb-2">LIVE PREVIEW</div>
-                            <img 
-                              src={`/api/badge/${result.owner}/${result.name}.svg?t=${Date.now()}`} 
-                              alt="Soyce Badge" 
-                              className="h-5 mx-auto"
-                            />
-                          </div>
-                        </button>
-
-                        <button 
-                          onClick={toggleWatch}
-                          className={`py-4 font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-4 border-soy-bottle ${
-                            isWatching(result.owner, result.name) 
-                              ? 'bg-soy-bottle text-white' 
-                              : 'bg-white text-soy-bottle hover:bg-soy-label'
-                          }`}
-                        >
-                          {isWatching(result.owner, result.name) ? (
-                            <>
-                              <EyeOff size={20} />
-                              <span>✓ WATCHING | UNWATCH</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye size={20} />
-                              <span>WATCH REPO</span>
-                            </>
-                          )}
-                        </button>
+                      <div className="flex-shrink-0 mx-auto lg:mx-0 shadow-[12px_12px_0px_#D12D2D]">
+                        <NutritionLabel project={result} />
                       </div>
                     </div>
 
-                    <div className="flex-shrink-0 mx-auto lg:mx-0 shadow-[12px_12px_0px_#D12D2D]">
-                      <NutritionLabel project={result} />
+                    <SimilarProjects
+                      owner={result.owner}
+                      repo={result.name}
+                      topics={result.techStack}
+                    />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                      <Link
+                        to={`/projects/${result.owner}/${result.name}`}
+                        onClick={() => trackEvent('analyze_project_click', { repo: `${result.owner}/${result.name}`, source: 'lookup' })}
+                        className="md:col-span-2 bg-black text-white py-6 text-2xl font-black uppercase italic tracking-tighter hover:bg-soy-red transition-all flex items-center justify-center gap-4 shadow-[8px_8px_0px_#444]"
+                      >
+                        VIEW FULL PROFILE <ArrowUpRight size={24} />
+                      </Link>
+
+                      <button
+                        onClick={copyBadge}
+                        className="bg-white border-4 border-soy-bottle py-4 font-bold uppercase tracking-widest hover:bg-soy-label transition-all flex flex-col items-center justify-center gap-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          {copied ? <Check size={20} className="text-soy-red" /> : <Copy size={20} />}
+                          {copied ? 'Markdown Copied!' : 'Copy Badge Markdown'}
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-soy-bottle/10 w-full px-4">
+                          <div className="text-[8px] opacity-40 mb-2">LIVE PREVIEW</div>
+                          <img
+                            src={`/api/badge/${result.owner}/${result.name}.svg?t=${Date.now()}`}
+                            alt="Soyce Badge"
+                            className="h-5 mx-auto"
+                          />
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={toggleWatch}
+                        className={`py-4 font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-4 border-soy-bottle ${
+                          isWatching(result.owner, result.name)
+                            ? 'bg-soy-bottle text-white'
+                            : 'bg-white text-soy-bottle hover:bg-soy-label'
+                        }`}
+                      >
+                        {isWatching(result.owner, result.name) ? (
+                          <>
+                            <EyeOff size={20} />
+                            <span>✓ WATCHING | UNWATCH</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye size={20} />
+                            <span>WATCH REPO</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 )}
               </motion.div>
-
             ) : !loading && (
               <div className="h-full flex flex-col items-center justify-center p-20 border-4 border-dashed border-soy-bottle/10 rounded-xl text-center opacity-20">
                  <Github size={64} className="mb-4" />
@@ -489,7 +554,7 @@ function PillarRow({ label, value, raw, max }: { label: string, value: number, r
         <span className="opacity-40">{raw !== undefined ? `${raw.toFixed(1)} / ${max.toFixed(1)}` : `${Math.round(value)}%`}</span>
       </div>
       <div className="h-4 bg-white/50 border border-soy-bottle/10 relative overflow-hidden">
-        <motion.div 
+        <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${value}%` }}
           className="absolute inset-0 bg-soy-red"

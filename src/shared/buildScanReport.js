@@ -14,6 +14,9 @@
  *   - Markdown never includes the raw dependency inventory. JSON may.
  */
 
+import { plural } from './pluralize.js';
+import { signReport } from './reportSigning.js';
+
 /** @typedef {'CLEAN'|'PATCH_AVAILABLE'|'REVIEW_REQUIRED'|'VERIFY_LATER'} DecisionLabel */
 
 const DIMENSION_ORDER = /** @type {const} */ ([
@@ -21,7 +24,7 @@ const DIMENSION_ORDER = /** @type {const} */ ([
   'remediationReadiness',
   'maintainerTrust',
   'treeComplexity',
-  'transparency',
+  'identityResolution',
 ]);
 
 const DIMENSION_LABEL = {
@@ -29,7 +32,7 @@ const DIMENSION_LABEL = {
   remediationReadiness: 'Remediation Readiness',
   maintainerTrust: 'Maintainer Trust',
   treeComplexity: 'Tree Complexity',
-  transparency: 'Transparency',
+  identityResolution: 'Identity Resolution',
 };
 
 const LABEL_DISPLAY = {
@@ -155,7 +158,7 @@ function recommendedAction(summary, profile, vulns) {
     const unavailable = countScoreUnavailable(rows, null); // vuln-side only
     const n = unresolved + unavailable;
     if (n > 0) {
-      return `Re-run when analysis is available — ${n} package(s) could not be assessed.`;
+      return `Re-run when analysis is available — ${plural(n, 'package')} could not be assessed.`;
     }
     return 'Re-run when analysis is available — some packages could not be assessed.';
   }
@@ -168,7 +171,7 @@ function recommendedAction(summary, profile, vulns) {
     }
     if (rr === 'HIGH') {
       const n = countNoFixHighCrit(rows);
-      return `No fix available for ${n} high/critical advisory(ies) — escalate or wait for upstream patch.`;
+      return `No fix available for ${plural(n, 'high/critical advisory', 'high/critical advisories')} — escalate or wait for upstream patch.`;
     }
     return 'Manual review needed for the listed advisories before merging.';
   }
@@ -183,14 +186,16 @@ function recommendedAction(summary, profile, vulns) {
  * @param {any} inventory
  * @param {any} selectedHealth
  * @param {any} profile
+ * @param {boolean} [osvError]
  * @returns {string[]}
  */
-function uncertaintyBullets(vulns, inventory, selectedHealth, profile) {
+function uncertaintyBullets(vulns, inventory, selectedHealth, profile, osvError) {
   const out = [];
   const vulnRows = Array.isArray(vulns) ? vulns : [];
 
-  // OSV gap: vulnerabilities === null means the call failed.
-  if (vulns == null) {
+  // OSV gap: explicit osvError flag from runScan, OR vulnerabilities === null
+  // (legacy / unset). Either signals the OSV call did not complete.
+  if (osvError === true || vulns == null) {
     out.push('OSV vulnerability data was unavailable for this scan.');
   }
 
@@ -202,15 +207,26 @@ function uncertaintyBullets(vulns, inventory, selectedHealth, profile) {
   // GitHub / repo-health analysis gaps on vulnerable rows.
   let analysisFailed = 0;
   let identityNone = 0;
+  let identityUnverified = 0;
   for (const v of vulnRows) {
     if (v?.repoHealthError === 'ANALYSIS_FAILED') analysisFailed += 1;
     if (v?.repoHealthError === 'IDENTITY_NONE') identityNone += 1;
+    // Borrowed-trust signal (P0-AI-2). Only `verified === false` is a real
+    // mismatch; 'unverified' (string) means we didn't check, which is not a
+    // false-positive risk worth surfacing.
+    if (v?.verified === false) identityUnverified += 1;
   }
   if (analysisFailed > 0) {
-    out.push(`Repo health analysis failed for ${analysisFailed} vulnerable package(s).`);
+    out.push(`Repo health analysis failed for ${plural(analysisFailed, 'vulnerable package')}.`);
   }
   if (identityNone > 0) {
-    out.push(`${identityNone} vulnerable package(s) could not be linked to a source repo.`);
+    out.push(`${plural(identityNone, 'vulnerable package')} could not be linked to a source repo.`);
+  }
+  if (identityUnverified > 0) {
+    // CONCRETE false-positive-risk signal: the npm metadata points at a
+    // GitHub repo whose package.json names a different package. The Soyce
+    // score is being inherited from an unrelated repo.
+    out.push(`Source repo identity could not be verified for ${plural(identityUnverified, 'package')} — npm metadata points at a repo whose package.json names a different package.`);
   }
 
   // Selected-health gaps.
@@ -222,13 +238,13 @@ function uncertaintyBullets(vulns, inventory, selectedHealth, profile) {
       if (r?.status === 'SCORE_UNAVAILABLE') selUnavailable += 1;
     }
     if (selUnresolved > 0) {
-      out.push(`${selUnresolved} selected dependency(ies) had no resolvable source repo.`);
+      out.push(`${plural(selUnresolved, 'selected dependency', 'selected dependencies')} had no resolvable source repo.`);
     }
     if (selUnavailable > 0) {
-      out.push(`${selUnavailable} selected dependency(ies) had no available health score.`);
+      out.push(`${plural(selUnavailable, 'selected dependency', 'selected dependencies')} had no available health score.`);
     }
     if (typeof selectedHealth.skippedBudget === 'number' && selectedHealth.skippedBudget > 0) {
-      out.push(`${selectedHealth.skippedBudget} qualifying dependency(ies) were skipped by the scoring budget.`);
+      out.push(`${plural(selectedHealth.skippedBudget, 'qualifying dependency', 'qualifying dependencies')} were skipped by the scoring budget.`);
     }
   }
 
@@ -249,6 +265,7 @@ function uncertaintyBullets(vulns, inventory, selectedHealth, profile) {
  *   inventory: any|null|undefined,
  *   selectedHealth: any|null|undefined,
  *   scannedAt?: string,
+ *   osvError?: boolean,
  * }} args
  * @returns {string}
  */
@@ -259,6 +276,7 @@ export function buildMarkdownReport({
   inventory,
   selectedHealth,
   scannedAt,
+  osvError,
 } = {}) {
   const vulns = Array.isArray(vulnerabilities) ? vulnerabilities : [];
   const lines = [];
@@ -297,7 +315,13 @@ export function buildMarkdownReport({
   const fixAvailable = summary?.totals?.fixAvailable || 0;
   const fixUnavailable = summary?.totals?.fixUnavailable || 0;
   const advisoryCount = summary?.totals?.advisories ?? vulns.length;
-  lines.push(`- Known vulnerabilities: ${advisoryCount} (${fixAvailable} with fix available, ${fixUnavailable} without)`);
+  if (osvError === true) {
+    // Don't print misleading zeros when OSV was unreachable. The Uncertainty
+    // bullet below explains why.
+    lines.push('- Known vulnerabilities: not assessed (OSV unavailable)');
+  } else {
+    lines.push(`- Known vulnerabilities: ${advisoryCount} (${fixAvailable} with fix available, ${fixUnavailable} without)`);
+  }
   const sevLine = severityBreakdownLine(bySev);
   if (sevLine) lines.push(`- Severity breakdown: ${sevLine}`);
   const coverage = profile?.coverage || {};
@@ -316,7 +340,7 @@ export function buildMarkdownReport({
   lines.push('');
 
   // Uncertainty (omitted if empty).
-  const uncertainty = uncertaintyBullets(vulnerabilities, inventory, selectedHealth, profile);
+  const uncertainty = uncertaintyBullets(vulnerabilities, inventory, selectedHealth, profile, osvError);
   if (uncertainty.length > 0) {
     lines.push('### Uncertainty');
     for (const u of uncertainty) lines.push(`- ${u}`);
@@ -344,6 +368,14 @@ export function buildMarkdownReport({
 /**
  * Build the JSON report.
  *
+ * If `opts.privateKeyPem` is provided, the returned object includes a
+ * top-level `signature` field anchored to that Ed25519 key. The signing is
+ * deterministic (Ed25519 + sorted-key canonicalization), so re-signing the
+ * same report content with the same key produces an identical signature.
+ *
+ * Backward compat: when `opts.privateKeyPem` is omitted, no signature field
+ * is added — callers without the env var keep the original v3d shape.
+ *
  * @param {{
  *   summary: any,
  *   profile: any,
@@ -351,7 +383,9 @@ export function buildMarkdownReport({
  *   inventory: any|null|undefined,
  *   selectedHealth: any|null|undefined,
  *   scannedAt?: string,
+ *   osvError?: boolean,
  * }} args
+ * @param {{ privateKeyPem?: string, publicKeyPem?: string, keyId?: string, now?: () => string }} [opts]
  */
 export function buildJsonReport({
   summary,
@@ -360,7 +394,8 @@ export function buildJsonReport({
   inventory,
   selectedHealth,
   scannedAt,
-} = {}) {
+  osvError,
+} = {}, opts = {}) {
   const vulns = Array.isArray(vulnerabilities) ? vulnerabilities : [];
   const bySev = summary?.totals?.bySeverity || {
     CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0,
@@ -376,11 +411,12 @@ export function buildJsonReport({
   const totalInstalled = inventory?.totals?.totalPackages
     ?? coverage.totalInstalled
     ?? 0;
-  const uncertainty = uncertaintyBullets(vulnerabilities, inventory, selectedHealth, profile);
+  const uncertainty = uncertaintyBullets(vulnerabilities, inventory, selectedHealth, profile, osvError);
 
   /** @type {any} */
   const out = {
     schemaVersion: 1,
+    osvError: !!osvError,
     scannedAt: typeof scannedAt === 'string' && scannedAt
       ? scannedAt
       : new Date().toISOString(),
@@ -430,6 +466,11 @@ export function buildJsonReport({
         scope: p?.scope || 'unknown',
         hasLicense: !!p?.hasLicense,
         hasRepository: !!p?.hasRepository,
+        hasInstallScript: !!p?.hasInstallScript,
+        possibleTypoSquat: p?.possibleTypoSquat || null,
+        dependencyConfusion: p?.dependencyConfusion || null,
+        crossEcosystemBridge: p?.crossEcosystemBridge || null,
+        modelWeightLoader: p?.modelWeightLoader || null,
       }))
       : [];
     out.inventory = {
@@ -437,6 +478,16 @@ export function buildJsonReport({
       totals: inventory.totals || {},
       packages,
     };
+  }
+
+  if (opts && typeof opts.privateKeyPem === 'string' && opts.privateKeyPem.trim()) {
+    return signReport(out, {
+      privateKeyPem: opts.privateKeyPem,
+      publicKeyPem: opts.publicKeyPem,
+      keyId: opts.keyId,
+      location: 'top-level',
+      now: opts.now,
+    });
   }
 
   return out;

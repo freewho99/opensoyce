@@ -1,7 +1,60 @@
 {
   "rewrites": [
-    { "source": "/api/github/:owner/:repo", "destination": "/api/github" },
-    { "source": "/api/badge/:owner/:repo.svg", "destination": "/api/badge" },
-    { "source": "/((?!api/|icons/|assets/|favicon.ico|og-image.png).*)", "destination": "/index.html" }
+    {
+      "source": "/api/github/:owner/:repo",
+      "destination": "/api/github"
+    },
+    {
+      "source": "/api/badge/:owner/:repo.svg",
+      "destination": "/api/badge"
+    },
+    {
+      "source": "/api/claim/start",
+      "destination": "/api/claim"
+    },
+    {
+      "source": "/api/claim/callback",
+      "destination": "/api/claim"
+    },
+    {
+      "source": "/api/claim/submit",
+      "destination": "/api/claim"
+    },
+    {
+      "source": "/methodology",
+      "destination": "/methodology/index.html"
+    },
+    {
+      "source": "/((?!api/|\\.well-known/|icons/|assets/|favicon.ico|og-image.png).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/opensoyce-signing-key.pem",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/x-pem-file"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=300"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/band-drop-tick",
+      "schedule": "0 9 * * *"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/ai-recipes",
+      "destination": "/recipes",
+      "permanent": true
+    }
   ]
 }

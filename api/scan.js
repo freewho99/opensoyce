@@ -9,6 +9,7 @@
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
 import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
 import { runScan, mapWithConcurrency } from '../src/shared/runScan.js';
+import { signReport } from '../src/shared/reportSigning.js';
 
 /**
  * Per-request analysis memo. Vercel functions are stateless across requests
@@ -54,6 +55,26 @@ export default async function handler(req, res) {
     });
     if (result.osvError) {
       return res.status(503).json({ error: 'OSV_UNAVAILABLE' });
+    }
+    // Opt-in signing for HTTP responses that will be embedded elsewhere.
+    // Default unsigned (backward compat; TLS already covers the transient
+    // channel). Caller asks for a signed response via `?signed=1`.
+    const wantsSigned = req.query && (req.query.signed === '1' || req.query.signed === 'true');
+    const signingKey = process.env.OPENSOYCE_SIGNING_PRIVATE_KEY;
+    if (wantsSigned && signingKey && signingKey.trim()) {
+      try {
+        const signed = signReport(result, {
+          privateKeyPem: signingKey,
+          publicKeyPem: process.env.OPENSOYCE_SIGNING_PUBLIC_KEY,
+          location: 'top-level',
+        });
+        return res.status(200).json(signed);
+      } catch (e) {
+        // Signing failure is operator-side; return the unsigned result with
+        // a header so the caller can detect the degradation.
+        res.setHeader('X-OpenSoyce-Signing-Error', String(e.message || e).slice(0, 200));
+        return res.status(200).json(result);
+      }
     }
     return res.status(200).json(result);
   } catch (err) {

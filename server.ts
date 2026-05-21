@@ -8,6 +8,14 @@ import { calculateSoyceScore } from "./src/shared/scoreCalculator.js";
 import { isValidGithubName } from "./src/shared/validateRepo.js";
 import { resolveDepIdentity } from "./src/shared/resolveDepIdentity.js";
 import { runScan, mapWithConcurrency } from "./src/shared/runScan.js";
+import { computeMaintainerConcentration } from "./src/shared/maintainerConcentration.js";
+import { getVendorSdk } from "./src/data/vendorSdks.js";
+import { detectMigration, makeFetchForks } from "./src/shared/detectMigration.js";
+import { verdictFor } from "./src/shared/verdict.js";
+// @ts-ignore — plain JS handler, no .d.ts
+import earlyAccessHandler from "./api/early-access.js";
+// @ts-ignore — plain JS handler, no .d.ts
+import exceptionsHandler from "./api/exceptions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -117,8 +125,44 @@ async function startServer() {
       workflows,
       hasDependabot
     );
+
+    // AI signals v0.1 — surface the same maintainer-concentration + vendor-SDK
+    // fields the Vercel function (analyzeRepo.js) returns, so /api/analyze in
+    // dev (Express) matches the deployed shape.
+    const maintainerConcentration = computeMaintainerConcentration(contributors || [], commits || []);
+    const vendorSdk = getVendorSdk(repoData.owner.login, repoData.name);
+    // Fork-velocity-of-namesake v0 — Express runtime parity with the Vercel
+    // function (analyzeRepo.js). Failure-isolated; null in the common case.
+    let migration = null;
+    try {
+      const verdict = verdictFor(scoreResult.total, {
+        earlyBreakout: false,
+        advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
+        maintainerConcentration,
+        vendorSdkMatch: !!vendorSdk,
+      });
+      const ghHeaders: Record<string, string> = {
+        'User-Agent': 'opensoyce',
+        'Accept': 'application/vnd.github+json',
+      };
+      if (process.env.GITHUB_TOKEN) ghHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+      migration = await detectMigration({
+        owner: repoData.owner.login,
+        repo: repoData.name,
+        verdict,
+        pushedAt: repoData.pushed_at || null,
+        stargazersCount: typeof repoData.stargazers_count === 'number' ? repoData.stargazers_count : 0,
+        deps: { fetchForks: makeFetchForks(ghHeaders) },
+      });
+    } catch {
+      migration = null;
+    }
+
     const data = {
       ...scoreResult,
+      maintainerConcentration,
+      vendorSdk,
+      migration,
       repo: {
         name: repoData.name,
         description: repoData.description,
@@ -131,7 +175,6 @@ async function startServer() {
     cacheSet(key, data);
     return data;
   }
-
 
   // API Routes
   app.get("/api/health", (req, res) => {
@@ -231,7 +274,7 @@ async function startServer() {
 
       const score = Number.isFinite(data.total) ? data.total : 0;
       const color = score >= 8 ? '#22c55e' : score >= 6 ? '#f59e0b' : '#E63322';
-      
+
       res.setHeader('Content-Type', 'image/svg+xml');
       res.send(`
         <svg xmlns="http://www.w3.org/2000/svg" width="160" height="22">
@@ -287,6 +330,32 @@ async function startServer() {
       res.status(500).json({ error: e.message });
     }
   });
+
+  // Guard early-access waitlist intake. Delegates to the Vercel-style handler
+  // in api/early-access.js so the same code path runs locally and in prod.
+  app.post("/api/early-access", scoringLimiter, async (req, res) => {
+    try {
+      await earlyAccessHandler(req, res);
+    } catch (err: any) {
+      console.error('early-access handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ ok: false, error: 'UPSTREAM_ERROR' });
+    }
+  });
+
+  // Exceptions dashboard CRUD (Sprint+3). All three verbs land in the same
+  // Vercel-style handler so the local Express server matches the prod
+  // HTTP-method-dispatch shape exactly.
+  const exceptionsAdapter = async (req: express.Request, res: express.Response) => {
+    try {
+      await exceptionsHandler(req, res);
+    } catch (err: any) {
+      console.error('exceptions handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ error: 'INTERNAL_ERROR', message: 'unexpected server error' });
+    }
+  };
+  app.get("/api/exceptions", exceptionsAdapter);
+  app.post("/api/exceptions", exceptionsAdapter);
+  app.delete("/api/exceptions", exceptionsAdapter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

@@ -11,7 +11,8 @@ import Lookup from './pages/Lookup';
 import Watchlist from './pages/Watchlist';
 import CLI from './pages/CLI';
 import Scanner from './pages/Scanner';
-import Guard from './pages/Guard';
+import GuardInstall from './pages/GuardInstall';
+import GuardEarlyAccess from './pages/GuardEarlyAccess';
 import Compare from './pages/Compare';
 import Recommend from './pages/Recommend';
 import Pricing from './pages/Pricing';
@@ -21,6 +22,8 @@ import BlogPost from './pages/BlogPost';
 import FAQ from './pages/FAQ';
 import About from './pages/About';
 import Graveyard from './pages/Graveyard';
+import AiLeaderboard from './pages/AiLeaderboard';
+import AiGraveyard from './pages/AiGraveyard';
 import Methodology from './pages/Methodology';
 import Remix from './pages/Remix';
 import HeatCheck from './pages/HeatCheck';
@@ -31,7 +34,63 @@ import SignalInbox from './pages/SignalInbox';
 import SkillsAgentsCompare from './pages/SkillsAgentsCompare';
 import OpenDesignCaseStudy from './pages/OpenDesignCaseStudy';
 import Dashboard from './pages/Dashboard';
+import Settings from './pages/Settings';
+import Guard from './pages/Guard';
+import Proof from './pages/Proof';
 import NotFound from './pages/NotFound';
+
+// Route tree extracted so the prerender entry can wrap it in <StaticRouter>
+// while the browser entry uses <BrowserRouter>. Keep this in sync with the
+// routes inside <App/> below.
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route path="/leaderboards" element={<Leaderboard />} />
+        <Route path="/lookup" element={<Lookup />} />
+        <Route path="/watchlist" element={<Watchlist />} />
+        <Route path="/cli" element={<CLI />} />
+        <Route path="/scan" element={<Scan />} />
+        <Route path="/scanner" element={<Scanner />} />
+        <Route path="/guard" element={<Guard />} />
+        <Route path="/guard/install" element={<GuardInstall />} />
+        <Route path="/guard/early-access" element={<GuardEarlyAccess />} />
+        <Route path="/compare" element={<Compare />} />
+        <Route path="/recommend" element={<Recommend />} />
+        <Route path="/recipes" element={<Recommend />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/claim" element={<Claim />} />
+        <Route path="/blog" element={<Blog />} />
+        <Route path="/blog/:slug" element={<BlogPost />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/methodology" element={<Methodology />} />
+        <Route path="/proof" element={<Proof />} />
+        <Route path="/remix" element={<Remix />} />
+        <Route path="/heat-check" element={<HeatCheck />} />
+        <Route path="/submit-project" element={<SubmitProject />} />
+        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/admin/signals" element={<SignalInbox />} />
+        <Route path="/compare/skills-agents" element={<SkillsAgentsCompare />} />
+        <Route path="/challenge" element={<Challenge />} />
+        <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />
+        <Route path="/compare/:slug" element={<Compare />} />
+        <Route path="/graveyard" element={<Graveyard />} />
+        <Route path="/leaderboard/ai" element={<AiLeaderboard />} />
+        <Route path="/graveyard/ai" element={<AiGraveyard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
+        <Route path="/project/:owner/:repo" element={<ProjectDetail />} />
+        <Route path="/projects/:owner/:repo/fork" element={<ForkProject />} />
+        <Route path="/project/:owner/:repo/fork" element={<ForkProject />} />
+        {/* Fallback or other pages */}
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
+}
 
 export default function App() {
   const [darkSauceMode, setDarkSauceMode] = React.useState(false);
@@ -40,13 +99,13 @@ export default function App() {
   React.useEffect(() => {
     let keys: string[] = [];
     const konami = 'ArrowUp,ArrowUp,ArrowDown,ArrowDown,ArrowLeft,ArrowRight,ArrowLeft,ArrowRight,b,a';
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       keys.push(e.key);
       keys = keys.slice(-10);
-      
+
       if (keys.join(',') === konami) {
         setDarkSauceMode(prev => !prev);
         setShowToast(true);
@@ -68,46 +127,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="/leaderboards" element={<Leaderboard />} />
-          <Route path="/lookup" element={<Lookup />} />
-          <Route path="/watchlist" element={<Watchlist />} />
-          <Route path="/cli" element={<CLI />} />
-          <Route path="/scan" element={<Scan />} />
-          <Route path="/scanner" element={<Scanner />} />
-          <Route path="/guard" element={<Guard />} />
-          <Route path="/compare" element={<Compare />} />
-          <Route path="/recommend" element={<Recommend />} />
-          <Route path="/recipes" element={<Recommend />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/claim" element={<Claim />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
-          <Route path="/faq" element={<FAQ />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/methodology" element={<Methodology />} />
-          <Route path="/remix" element={<Remix />} />
-          <Route path="/heat-check" element={<HeatCheck />} />
-          <Route path="/submit-project" element={<SubmitProject />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/admin/signals" element={<SignalInbox />} />
-          <Route path="/compare/skills-agents" element={<SkillsAgentsCompare />} />
-          <Route path="/challenge" element={<Challenge />} />
-          <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />
-          <Route path="/compare/:slug" element={<Compare />} />
-          <Route path="/graveyard" element={<Graveyard />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
-          <Route path="/project/:owner/:repo" element={<ProjectDetail />} />
-          <Route path="/projects/:owner/:repo/fork" element={<ForkProject />} />
-          <Route path="/project/:owner/:repo/fork" element={<ForkProject />} />
-          {/* Fallback or other pages */}
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
-      
+      <AppRoutes />
+
       {/* Konami Toast */}
       <AnimatePresence>
         {showToast && (
@@ -127,4 +148,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-

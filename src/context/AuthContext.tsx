@@ -19,8 +19,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
-    const saved = localStorage.getItem('soyce_auth');
+    if (typeof window === 'undefined') return null;
     try {
+      const saved = localStorage.getItem('soyce_auth');
       return saved ? JSON.parse(saved) : null;
     } catch (e) {
       return null;

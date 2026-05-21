@@ -31,6 +31,33 @@ export type MaintenanceBreakdown = {
   triageDataAvailable: boolean;
 };
 
+export type MaintainerConcentration = {
+  topShare: number;                // 0..1
+  nonBotContributorCount: number;
+  lastCommitDate: string | null;
+  daysSinceLastCommit: number | null;
+  isSingleMaintainer: boolean;
+};
+
+export type VendorSdkMatch = {
+  owner: string;
+  repo: string;
+  vendor: string;
+  reason: string;
+};
+
+// Fork-velocity-of-namesake v0. The scored repo may have been migrated to
+// a successor; this is INFORMATIONAL only — score/verdict are unchanged.
+export type RepoMigration = {
+  successor: { owner: string; repo: string } | null;
+  migratedAt: string | null;
+  reason: string;
+  confidence: 'HIGH' | 'MEDIUM';
+  source: 'curated' | 'fork-chain';
+  successorStars?: number;
+  successorPushedAt?: string;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -54,8 +81,10 @@ export type Project = {
   busFactorHealthy?: boolean;
   avgResolutionDays?: number | null;
   contributors?: number;
+  maintainerConcentration?: MaintainerConcentration | null;
+  vendorSdk?: VendorSdkMatch | null;
+  migration?: RepoMigration | null;
   parentId?: string; // ID of the original project if this is a fork
-
 
   parentName?: string;
   parentOwner?: string;

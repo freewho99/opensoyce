@@ -4,6 +4,10 @@
  * OSV /v1/querybatch returns vuln ids only; full details require /v1/vulns/{id}.
  */
 
+import { detectTypoSquat } from '../data/protectedPackageNames.js';
+import { getCrossEcosystemBridge } from '../data/crossEcosystemBridges.js';
+import { getModelWeightLoader } from '../data/modelWeightLoaders.js';
+
 const OSV_BATCH_URL = 'https://api.osv.dev/v1/querybatch';
 const OSV_VULN_URL = 'https://api.osv.dev/v1/vulns/';
 const BATCH_SIZE = 1000;
@@ -12,12 +16,47 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const defaultCache = new Map();    // `${name}@${version}` -> {result, expiresAt}
 const vulnDetailCache = new Map(); // vuln id -> {data, expiresAt}
 
-/** @returns {'npm-v1'|'npm-v2'|'npm-v3'|'yarn-v1'|'yarn-v2'|'package-json'|'unknown'} */
+/** @returns {'npm-v1'|'npm-v2'|'npm-v3'|'yarn-v1'|'yarn-v2'|'pnpm-lock'|'package-json'|'uv-lock'|'poetry-lock'|'unknown'} */
 export function detectLockfileFormat(text) {
   if (typeof text !== 'string' || !text.trim()) return 'unknown';
   const t = text.trimStart();
   if (t.startsWith('# yarn lockfile v1')) return 'yarn-v1';
   if (t.includes('__metadata:')) return 'yarn-v2';
+  // pnpm-lock.yaml: a top-level `lockfileVersion:` scalar (number OR quoted
+  // string) AND at least one of pnpm's distinctive top-level sections
+  // (importers, packages, snapshots, settings). Must NOT be a JSON object
+  // (npm package-lock.json also has a top-level `lockfileVersion` field).
+  if (!t.startsWith('{')) {
+    const pnpmHeader = /^lockfileVersion:\s*['"]?[0-9]+(?:\.[0-9]+)?['"]?\s*$/m;
+    const pnpmStructure = /^(importers|packages|snapshots|settings):\s*$/m;
+    if (pnpmHeader.test(t) && pnpmStructure.test(t)) {
+      return 'pnpm-lock';
+    }
+  }
+  // Python lockfiles (TOML). Detect via the comment banner Poetry emits, and
+  // via uv's distinctive top-level `version = N` + `requires-python` keys.
+  // Both formats use [[package]] arrays so we can't disambiguate on that alone.
+  // Order: poetry banner first (most specific), then uv heuristic, then a
+  // generic [[package]]+[metadata] fall-through that we treat as poetry-lock
+  // (the conservative default — poetry is the older / broader format).
+  if (/^#\s*This file (is @generated|was generated) (by|automatically by) [Pp]oetry/m.test(t)) {
+    return 'poetry-lock';
+  }
+  if (/^#\s*This file (is @generated|was generated) (by|automatically by) uv/m.test(t)) {
+    return 'uv-lock';
+  }
+  // Content-based fall-through (no banner). uv.lock has `requires-python` at
+  // the top level alongside `version = N`; poetry.lock has `lock-version` in
+  // its `[metadata]` table.
+  const looksToml = /^\s*\[\[package\]\]\s*$/m.test(t);
+  if (looksToml) {
+    if (/^\s*requires-python\s*=/m.test(t) && /^\s*version\s*=\s*\d+\s*$/m.test(t)) {
+      return 'uv-lock';
+    }
+    if (/^\s*\[metadata\]\s*$/m.test(t) && /^\s*lock-version\s*=/m.test(t)) {
+      return 'poetry-lock';
+    }
+  }
   if (!t.startsWith('{')) return 'unknown';
   let obj;
   try { obj = JSON.parse(t); } catch { return 'unknown'; }
@@ -30,7 +69,262 @@ export function detectLockfileFormat(text) {
   return 'unknown';
 }
 
+/**
+ * Map a detected lockfile format to its OSV ecosystem name. Single source of
+ * truth so runScan + identity resolver dispatch + downstream filters all
+ * agree. Returns 'unknown' for unparseable inputs so callers can decide
+ * whether to query OSV at all.
+ * @param {string} format
+ * @returns {'npm'|'PyPI'|'unknown'}
+ */
+export function ecosystemForFormat(format) {
+  if (format === 'npm-v1' || format === 'npm-v2' || format === 'npm-v3'
+      || format === 'yarn-v1' || format === 'yarn-v2'
+      || format === 'pnpm-lock') {
+    return 'npm';
+  }
+  if (format === 'uv-lock' || format === 'poetry-lock') return 'PyPI';
+  return 'unknown';
+}
+
+/**
+ * Regex-based extractor for Python TOML lockfile [[package]] arrays.
+ *
+ * We deliberately do NOT pull in a full TOML library — uv.lock and
+ * poetry.lock use a tiny, well-bounded subset of TOML and a regex pass is
+ * deterministic, dependency-free, and easy to audit. The extractor only
+ * understands what these two files actually emit:
+ *
+ *   [[package]]
+ *   name = "pkg"
+ *   version = "1.2.3"
+ *   optional = true
+ *   category = "dev"          # legacy poetry
+ *   source = { registry = "https://pypi.org/simple" }
+ *
+ * Inline tables (`source = { ... }`) are read as a single line — neither
+ * lockfile generator multi-lines them in practice. Nested keys other than
+ * source.* are ignored; callers only need name/version/optional/category/
+ * source to build the inventory.
+ *
+ * @param {string} text
+ * @returns {Array<{
+ *   name: string|null,
+ *   version: string|null,
+ *   optional: boolean,
+ *   category: string|null,
+ *   source: { registry?: string, path?: string, git?: string, url?: string }|null,
+ * }>}
+ */
+function extractPythonPackageBlocks(text) {
+  /** @type {Array<any>} */
+  const blocks = [];
+  // Split the file into [[package]] sections. Each section ends at the next
+  // top-level `[[...]]` or `[...]` header (with no leading whitespace) — the
+  // [[package]] header itself sits at column 0 in both formats.
+  const lines = text.split(/\r?\n/);
+  let inPkg = false;
+  /** @type {any} */
+  let current = null;
+  function flush() {
+    if (current) blocks.push(current);
+    current = null;
+  }
+  function makeBlock() {
+    return { name: null, version: null, optional: false, category: null, source: null };
+  }
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const line = raw.replace(/\s+$/, '');
+    if (line.startsWith('[[')) {
+      flush();
+      inPkg = /^\[\[package\]\]\s*$/.test(line);
+      if (inPkg) current = makeBlock();
+      continue;
+    }
+    if (line.startsWith('[')) {
+      // A new top-level table ends the current [[package]] block.
+      flush();
+      inPkg = false;
+      continue;
+    }
+    if (!inPkg || !current) continue;
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    // Match `key = value` at the start of the line. Whitespace around `=`.
+    const m = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
+    if (!m) continue;
+    const key = m[1];
+    const rawVal = m[2];
+    if (key === 'name') current.name = unquoteToml(rawVal);
+    else if (key === 'version') current.version = unquoteToml(rawVal);
+    else if (key === 'optional') current.optional = /^true\b/i.test(rawVal.trim());
+    else if (key === 'category') current.category = unquoteToml(rawVal);
+    else if (key === 'source') current.source = parseInlineSourceTable(rawVal);
+  }
+  flush();
+  return blocks;
+}
+
+/** Strip surrounding quotes from a TOML scalar (string or unquoted literal). */
+function unquoteToml(v) {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith('\'') && s.endsWith('\''))) {
+    return s.slice(1, -1);
+  }
+  // Arrays / inline tables / numbers fall through — caller decides what to do.
+  return s;
+}
+
+/**
+ * Parse a `source = { registry = "...", path = "...", git = "..." }` inline
+ * table into a flat object. Unknown keys are ignored. Returns null if the
+ * value isn't an inline table.
+ */
+function parseInlineSourceTable(rawVal) {
+  const trimmed = rawVal.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+  const body = trimmed.slice(1, -1);
+  /** @type {Record<string,string>} */
+  const out = {};
+  // Split on commas that are NOT inside quotes. Inline-table values are
+  // simple key="quoted-string" pairs in practice for both lockfiles.
+  const parts = body.match(/(?:[^,"']|"[^"]*"|'[^']*')+/g) || [];
+  for (const part of parts) {
+    const m = /^\s*([A-Za-z0-9_-]+)\s*=\s*(.+?)\s*$/.exec(part);
+    if (!m) continue;
+    const key = m[1];
+    const val = unquoteToml(m[2]);
+    if (val != null) out[key] = val;
+  }
+  return out;
+}
+
+/**
+ * Find names listed under the uv.lock root [manifest] section's
+ * `dependencies = [ ... ]` array. Returns null if no manifest is present
+ * (uv may omit it for single-project lockfiles emitted in workspace mode).
+ *
+ * uv.lock's manifest looks like:
+ *   [manifest]
+ *   members = ["myproject"]
+ *
+ *   [[manifest.dependency]]
+ *   name = "requests"
+ *
+ *   [[manifest.dependency]]
+ *   name = "langchain"
+ *
+ * Older uv.lock layouts use an inline `dependencies = ["requests", "langchain"]`
+ * under [manifest]. Handle both.
+ *
+ * @param {string} text
+ * @returns {Set<string>|null}
+ */
+function extractUvDirectSet(text) {
+  const out = new Set();
+  let found = false;
+  const lines = text.split(/\r?\n/);
+  let section = null;
+  let inManifestDepBlock = false;
+  let pendingDepName = null;
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    if (/^\[\[manifest\.dependency\]\]\s*$/.test(line)) {
+      found = true;
+      if (pendingDepName) out.add(pendingDepName);
+      pendingDepName = null;
+      inManifestDepBlock = true;
+      section = '[[manifest.dependency]]';
+      continue;
+    }
+    if (/^\[\[/.test(line) || /^\[/.test(line)) {
+      if (pendingDepName) out.add(pendingDepName);
+      pendingDepName = null;
+      inManifestDepBlock = false;
+      section = line;
+      if (/^\[manifest\]\s*$/.test(line)) found = true;
+      continue;
+    }
+    if (inManifestDepBlock) {
+      const m = /^name\s*=\s*(.+)$/.exec(line);
+      if (m) pendingDepName = unquoteToml(m[1]);
+      continue;
+    }
+    // Inline `dependencies = ["a", "b"]` under [manifest].
+    if (section && /^\[manifest\]/.test(section)) {
+      const m = /^dependencies\s*=\s*\[(.+)\]\s*$/.exec(line);
+      if (m) {
+        found = true;
+        const parts = m[1].split(',').map(s => unquoteToml(s.trim())).filter(Boolean);
+        for (const name of parts) out.add(name);
+      }
+    }
+  }
+  if (pendingDepName) out.add(pendingDepName);
+  return found ? out : null;
+}
+
 function tagged(code) { const e = new Error(code); e.code = code; return e; }
+
+/**
+ * Parse any supported lockfile (npm or Python) into the same shape. Dispatches
+ * on the detected format. Returns the same `{ ecosystem, direct, all }` shape
+ * regardless of input — the only difference is `ecosystem` ('npm' or 'PyPI'),
+ * which downstream uses for OSV queries and resolver dispatch.
+ *
+ * @param {string} text
+ * @returns {{ ecosystem:'npm'|'PyPI', direct:string[], all:Array<{name:string,version:string}> }}
+ */
+export function parseLockfile(text) {
+  const fmt = detectLockfileFormat(text);
+  if (fmt === 'uv-lock' || fmt === 'poetry-lock') {
+    return parsePythonLockfile(text, fmt);
+  }
+  if (fmt === 'pnpm-lock') return parsePnpmLockfile(text);
+  return parseNpmLockfile(text);
+}
+
+/**
+ * Parse a Python lockfile (uv.lock or poetry.lock) into the unified shape.
+ * Pure: extracts [[package]] blocks via regex, dedupes by name (first-seen
+ * version wins, matching npm parser semantics).
+ *
+ * Direct detection: uv.lock carries a [[manifest.dependency]] list of top-
+ * level deps; we use it when present. poetry.lock has no native
+ * direct-vs-transitive marker without a companion pyproject.toml — every
+ * package is reported as transitive (honest fallback; the inventory builder
+ * separately sets `directUnknown: true` so the UI/Risk Profile can surface
+ * the caveat).
+ *
+ * @param {string} text
+ * @param {'uv-lock'|'poetry-lock'} format
+ * @returns {{ ecosystem:'PyPI', direct:string[], all:Array<{name:string,version:string}> }}
+ */
+export function parsePythonLockfile(text, format) {
+  if (format !== 'uv-lock' && format !== 'poetry-lock') {
+    throw tagged('UNPARSEABLE_LOCKFILE');
+  }
+  const blocks = extractPythonPackageBlocks(text);
+  /** @type {Map<string,string>} */
+  const all = new Map();
+  for (const b of blocks) {
+    if (!b.name || !b.version) continue;
+    if (!all.has(b.name)) all.set(b.name, b.version);
+  }
+  let direct = [];
+  if (format === 'uv-lock') {
+    const directSet = extractUvDirectSet(text);
+    if (directSet) direct = [...directSet].filter(n => all.has(n)).sort();
+  }
+  // poetry-lock: direct stays empty (honest unknown).
+  return {
+    ecosystem: 'PyPI',
+    direct,
+    all: [...all.entries()].map(([name, version]) => ({ name, version })),
+  };
+}
 
 /**
  * Parse an npm package-lock.json (v1/v2/v3) into a flat package list.
@@ -88,21 +382,30 @@ function walkV1Deps(deps, all, direct, topLevel) {
 /**
  * Query OSV in batches and return per-package vulnerability summaries.
  * Omits non-vulnerable packages from the result.
+ *
+ * The ecosystem is supplied per scan (single scan = single ecosystem) and
+ * threaded into every OSV `package` query plus the affected-range filter
+ * used when extracting the fixedIn version. The cache key includes the
+ * ecosystem so a 'PyPI' lookup of `requests@2.0.0` cannot bleed into a
+ * later 'npm' lookup of a same-named package (theoretical, but the cost
+ * of guarding is zero).
+ *
  * @param {Array<{name:string,version:string}>} packages
  * @param {typeof fetch=} fetchImpl
- * @param {{cache?:Map<string,{result:any[],expiresAt:number}>}=} opts
+ * @param {{cache?:Map<string,{result:any[],expiresAt:number}>, ecosystem?:'npm'|'PyPI'}=} opts
  */
 export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
   const fetchFn = fetchImpl || globalThis.fetch;
   if (typeof fetchFn !== 'function') throw new Error('NO_FETCH_AVAILABLE');
   const cache = opts.cache || defaultCache;
+  const ecosystem = opts.ecosystem || 'npm';
   const now = Date.now();
 
   const pending = [];
   const cachedResults = [];
   for (const p of packages) {
     if (!p || !p.name || !p.version) continue;
-    const key = `${p.name}@${p.version}`;
+    const key = `${ecosystem}:${p.name}@${p.version}`;
     const hit = cache.get(key);
     if (hit && hit.expiresAt > now) cachedResults.push(...hit.result);
     else pending.push(p);
@@ -115,7 +418,7 @@ export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        queries: chunk.map(p => ({ package: { name: p.name, ecosystem: 'npm' }, version: p.version })),
+        queries: chunk.map(p => ({ package: { name: p.name, ecosystem }, version: p.version })),
       }),
     });
     if (!res.ok) throw new Error(`OSV_BATCH_${res.status}`);
@@ -123,7 +426,7 @@ export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
     const results = Array.isArray(data.results) ? data.results : [];
     chunk.forEach((p, idx) => {
       const vulns = results[idx] && Array.isArray(results[idx].vulns) ? results[idx].vulns : [];
-      idsByKey.set(`${p.name}@${p.version}`, vulns.map(v => v.id).filter(Boolean));
+      idsByKey.set(`${ecosystem}:${p.name}@${p.version}`, vulns.map(v => v.id).filter(Boolean));
     });
   }
 
@@ -133,9 +436,9 @@ export async function queryOsvBatch(packages, fetchImpl, opts = {}) {
 
   const out = [...cachedResults];
   for (const p of pending) {
-    const key = `${p.name}@${p.version}`;
+    const key = `${ecosystem}:${p.name}@${p.version}`;
     const ids = idsByKey.get(key) || [];
-    const pkgResults = ids.length ? [mergeVulnRecords(p, ids, details)] : [];
+    const pkgResults = ids.length ? [mergeVulnRecords(p, ids, details, ecosystem)] : [];
     cache.set(key, { result: pkgResults, expiresAt: now + CACHE_TTL_MS });
     out.push(...pkgResults);
   }
@@ -169,7 +472,7 @@ async function fetchVulnDetails(ids, fetchFn) {
   return map;
 }
 
-function mergeVulnRecords(pkg, ids, details) {
+function mergeVulnRecords(pkg, ids, details, ecosystem) {
   const severities = [];
   const aliasIds = new Set(ids);
   let summary = '';
@@ -180,7 +483,7 @@ function mergeVulnRecords(pkg, ids, details) {
     if (!summary && typeof d.summary === 'string') summary = d.summary;
     if (Array.isArray(d.aliases)) for (const a of d.aliases) aliasIds.add(a);
     severities.push(extractSeverity(d));
-    const fixed = extractFixedVersion(d, pkg.name);
+    const fixed = extractFixedVersion(d, pkg.name, ecosystem || 'npm');
     if (fixed && (!fixedIn || compareSemverLoose(fixed, fixedIn) < 0)) fixedIn = fixed;
   }
   return {
@@ -217,10 +520,11 @@ function severityFromCvssVector(vec) {
   return 'low';
 }
 
-function extractFixedVersion(vuln, pkgName) {
+function extractFixedVersion(vuln, pkgName, ecosystem) {
   if (!Array.isArray(vuln.affected)) return null;
+  const eco = ecosystem || 'npm';
   for (const a of vuln.affected) {
-    if (!a || !a.package || a.package.ecosystem !== 'npm' || a.package.name !== pkgName) continue;
+    if (!a || !a.package || a.package.ecosystem !== eco || a.package.name !== pkgName) continue;
     if (!Array.isArray(a.ranges)) continue;
     for (const r of a.ranges) {
       if (!Array.isArray(r.events)) continue;
@@ -259,6 +563,11 @@ export const __internal = { defaultCache, vulnDetailCache, severityFromCvssVecto
  * is dev-only.
  *
  * @param {string|object} lockfile  raw text or pre-parsed lockfile object
+ * @param {{ privateList?: { nameSet: Set<string>, comments: Map<string,string> } | null }} [opts]
+ *        Optional `.opensoyce-private` list. When present, each finalized
+ *        package row gets a `dependencyConfusion` field at MEDIUM confidence
+ *        when the package name matches the list. Active escalation to HIGH
+ *        happens later in runScan after the inventory is built (async path).
  * @returns {{
  *   format: 'npm-v3'|'npm-v2'|'npm-v1'|'yarn-v1'|'unknown',
  *   packages: Array<{
@@ -284,16 +593,23 @@ export const __internal = { defaultCache, vulnDetailCache, severityFromCvssVecto
  *   },
  * }}
  */
-export function buildInventory(lockfile) {
+export function buildInventory(lockfile, opts = {}) {
   const empty = emptyInventory();
   if (lockfile == null) return empty;
+  const privateList = (opts && opts.privateList) || null;
 
   let format = 'unknown';
   let obj = null;
   if (typeof lockfile === 'string') {
     format = detectLockfileFormat(lockfile);
     if (format === 'yarn-v1') {
-      return buildYarnV1Inventory(lockfile);
+      return buildYarnV1Inventory(lockfile, { privateList });
+    }
+    if (format === 'uv-lock' || format === 'poetry-lock') {
+      return buildPythonInventory(lockfile, format, { privateList });
+    }
+    if (format === 'pnpm-lock') {
+      return buildPnpmInventory(lockfile, { privateList });
     }
     if (format !== 'npm-v1' && format !== 'npm-v2' && format !== 'npm-v3') {
       return empty;
@@ -310,11 +626,11 @@ export function buildInventory(lockfile) {
   }
 
   // Aggregator: per-package-name accumulator.
-  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean, hasInstallScript: boolean }>} */
   const byName = new Map();
   let totalEntries = 0;
 
-  function record(name, version, { direct, scope, hasLicense, hasRepository }) {
+  function record(name, version, { direct, scope, hasLicense, hasRepository, hasInstallScript }) {
     if (!name) return;
     totalEntries += 1;
     let acc = byName.get(name);
@@ -325,6 +641,7 @@ export function buildInventory(lockfile) {
         scopes: new Set(),
         hasLicense: false,
         hasRepository: false,
+        hasInstallScript: false,
       };
       byName.set(name, acc);
     }
@@ -333,9 +650,17 @@ export function buildInventory(lockfile) {
     acc.scopes.add(scope);
     if (hasLicense) acc.hasLicense = true;
     if (hasRepository) acc.hasRepository = true;
+    // Sticky across versions: if ANY occurrence of a package had an install
+    // script, the merged record is flagged. Postinstall risk doesn't go away
+    // when a non-scripting version of the same package coexists in the tree.
+    if (hasInstallScript) acc.hasInstallScript = true;
   }
 
   if (format === 'npm-v3' || format === 'npm-v2') {
+    // npm v2/v3 lockfiles flat-hoist every package to `node_modules/<name>`,
+    // even deeply-transitive ones. The only reliable signal for "direct"
+    // is the root entry's declared dependency maps. Build that set once.
+    const trueDirectSet = collectRootDirectDeps(obj.packages || {});
     for (const [key, meta] of Object.entries(obj.packages || {})) {
       if (key === '' || !meta || typeof meta !== 'object') continue;
       if (meta.link === true) continue;
@@ -348,25 +673,29 @@ export function buildInventory(lockfile) {
         : null;
       const name = aliasedName || nameFromKey(key);
       if (!name) continue;
-      const direct = isTopLevelKey(key);
+      // Direct iff name appears in root entry's declared dep maps AND the
+      // lockfile placed it at the top level (not nested under another pkg).
+      const direct = isTopLevelKey(key) && trueDirectSet.has(name);
       const scope = scopeFromMeta(meta);
       record(name, meta.version, {
         direct,
         scope,
         hasLicense: hasField(meta, 'license'),
         hasRepository: hasField(meta, 'repository'),
+        hasInstallScript: meta.hasInstallScript === true,
       });
     }
   } else if (format === 'npm-v1') {
     walkV1ForInventory(obj.dependencies || {}, record, true);
   }
 
-  return finalizeInventory(format, byName, totalEntries);
+  return finalizeInventory(format, byName, totalEntries, { privateList });
 }
 
 function emptyInventory() {
   return {
     format: 'unknown',
+    ecosystem: 'unknown',
     packages: [],
     totals: {
       totalPackages: 0,
@@ -378,10 +707,40 @@ function emptyInventory() {
       optionalCount: 0,
       unknownScopeCount: 0,
       duplicateCount: 0,
-      missingLicenseCount: 0,
-      missingRepositoryCount: 0,
+      licenseDataAvailable: false,
+      repositoryDataAvailable: false,
+      missingLicenseCount: null,
+      missingRepositoryCount: null,
+      installScriptCount: 0,
+      possibleTypoSquatCount: 0,
+      dependencyConfusionCount: 0,
+      crossEcosystemBridgeCount: 0,
+      modelWeightLoaderCount: 0,
     },
   };
+}
+
+/**
+ * Read the root entry (`packages[""]`) and return the set of package names
+ * that are truly direct dependencies of the project. A name is direct iff
+ * it appears in dependencies / devDependencies / optionalDependencies /
+ * peerDependencies of the root entry.
+ * @param {Record<string, any>} packages
+ * @returns {Set<string>}
+ */
+function collectRootDirectDeps(packages) {
+  const out = new Set();
+  const root = packages && packages[''];
+  if (!root || typeof root !== 'object') return out;
+  const buckets = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
+  for (const bucket of buckets) {
+    const map = root[bucket];
+    if (!map || typeof map !== 'object') continue;
+    for (const name of Object.keys(map)) {
+      if (typeof name === 'string' && name.length > 0) out.add(name);
+    }
+  }
+  return out;
 }
 
 function scopeFromMeta(meta) {
@@ -437,13 +796,14 @@ function walkV1ForInventory(deps, record, topLevel) {
       scope,
       hasLicense: hasField(meta, 'license'),
       hasRepository: hasField(meta, 'repository'),
+      hasInstallScript: meta.hasInstallScript === true,
     });
     if (meta.dependencies) walkV1ForInventory(meta.dependencies, record, false);
   }
 }
 
-function finalizeInventory(format, byName, totalEntries) {
-  /** @type {Array<{name:string,versions:string[],direct:boolean,scope:string,hasLicense:boolean,hasRepository:boolean}>} */
+function finalizeInventory(format, byName, totalEntries, opts = {}) {
+  /** @type {Array<{name:string,versions:string[],direct:boolean,scope:string,hasLicense:boolean,hasRepository:boolean,hasInstallScript:boolean}>} */
   const packages = [];
   let directCount = 0;
   let transitiveCount = 0;
@@ -454,6 +814,13 @@ function finalizeInventory(format, byName, totalEntries) {
   let duplicateCount = 0;
   let missingLicenseCount = 0;
   let missingRepositoryCount = 0;
+  let installScriptCount = 0;
+  let possibleTypoSquatCount = 0;
+  let dependencyConfusionCount = 0;
+  let crossEcosystemBridgeCount = 0;
+  let modelWeightLoaderCount = 0;
+  const privateList = (opts && opts.privateList) || null;
+  const ecosystem = ecosystemForFormat(format);
 
   const names = [...byName.keys()].sort((a, b) => a.localeCompare(b));
   for (const name of names) {
@@ -461,6 +828,45 @@ function finalizeInventory(format, byName, totalEntries) {
     const versions = [...acc.versions].sort(compareVersionsLoose);
     const scope = mergeScopes(acc.scopes);
     const direct = acc.direct;
+    const hasInstallScript = acc.hasInstallScript === true;
+    // Typo-squat homoglyph detection v0. Pure per-name check; the helper
+    // performs byte-exact self-match suppression so a legitimate `langchain`
+    // install resolves to null. Informational only — never affects score,
+    // verdict band, or Risk Profile dimensions.
+    const possibleTypoSquat = detectTypoSquat(name);
+    // Dependency-confusion static signal (MEDIUM baseline). The active
+    // public-registry probe runs later in runScan; here we only seed the
+    // MEDIUM hit so the synchronous inventory builder doesn't need to
+    // become async. Ecosystem-agnostic: a name in the user's private list
+    // applies wherever it appears.
+    const dependencyConfusion = (privateList && privateList.nameSet instanceof Set && privateList.nameSet.has(name))
+      ? {
+          confidence: 'MEDIUM',
+          reason:
+            'Listed as private but also resolving to public registry — verify your index priority configuration.',
+          userComment: (privateList.comments instanceof Map && privateList.comments.has(name))
+            ? privateList.comments.get(name)
+            : null,
+        }
+      : null;
+    // Cross-ecosystem bridge v0. Curated map only — when the scanned package
+    // has a well-known sibling in the OTHER ecosystem (npm ↔ PyPI), surface
+    // an informational chip pointing at it. The chip's job is "did you scan
+    // the other side too?" — never affects score, band, or Risk Profile.
+    // Only fires for ecosystems we recognize (npm or PyPI); yarn-v1 routes
+    // through buildYarnV1Inventory which has its own copy.
+    const crossEcosystemBridge = (ecosystem === 'npm' || ecosystem === 'PyPI')
+      ? getCrossEcosystemBridge(name, ecosystem)
+      : null;
+    // Model-weight loader posture v0. Curated allowlist of packages that load
+    // AI model weights (huggingface_hub, transformers, torch, …). When one is
+    // present in the inventory, surface a posture chip recommending
+    // safetensors over pickle. POSTURE recommendation, not an RCE detector —
+    // we never inspect actual model files. Ecosystem-aware: huggingface_hub
+    // is PyPI; @huggingface/transformers is npm.
+    const modelWeightLoader = (ecosystem === 'npm' || ecosystem === 'PyPI')
+      ? getModelWeightLoader(name, ecosystem)
+      : null;
 
     packages.push({
       name,
@@ -469,6 +875,11 @@ function finalizeInventory(format, byName, totalEntries) {
       scope,
       hasLicense: acc.hasLicense,
       hasRepository: acc.hasRepository,
+      hasInstallScript,
+      possibleTypoSquat,
+      dependencyConfusion,
+      crossEcosystemBridge,
+      modelWeightLoader,
     });
 
     if (direct) directCount += 1; else transitiveCount += 1;
@@ -479,24 +890,562 @@ function finalizeInventory(format, byName, totalEntries) {
     if (versions.length > 1) duplicateCount += 1;
     if (!acc.hasLicense) missingLicenseCount += 1;
     if (!acc.hasRepository) missingRepositoryCount += 1;
+    if (hasInstallScript) installScriptCount += 1;
+    if (possibleTypoSquat) possibleTypoSquatCount += 1;
+    if (dependencyConfusion) dependencyConfusionCount += 1;
+    if (crossEcosystemBridge) crossEcosystemBridgeCount += 1;
+    if (modelWeightLoader) modelWeightLoaderCount += 1;
   }
 
+  // Only npm-v3 (lockfileVersion 3, the `packages` map) genuinely carries
+  // license/repository fields per-package inside the lockfile body. npm-v1,
+  // npm-v2, yarn-v1, pnpm-lock, uv.lock, poetry.lock all omit them by
+  // design -- their license info lives in the published package's own
+  // package.json / pyproject.toml, NOT in the lockfile. Reporting
+  // "missing license" for every package when the lockfile format has no
+  // license channel at all is mechanically true but misleading. Surface a
+  // separate flag so downstream UI can suppress the noise.
+  const licenseDataAvailable = format === 'npm-v3';
+  const repositoryDataAvailable = format === 'npm-v3';
+
+  /** @type {any} */
+  const totals = {
+    totalPackages: packages.length,
+    totalEntries,
+    directCount,
+    transitiveCount,
+    prodCount,
+    devCount,
+    optionalCount,
+    unknownScopeCount,
+    duplicateCount,
+    licenseDataAvailable,
+    repositoryDataAvailable,
+    missingLicenseCount: licenseDataAvailable ? missingLicenseCount : null,
+    missingRepositoryCount: repositoryDataAvailable ? missingRepositoryCount : null,
+    installScriptCount,
+    possibleTypoSquatCount,
+    dependencyConfusionCount,
+    crossEcosystemBridgeCount,
+    modelWeightLoaderCount,
+  };
+  void ecosystem; // computed for parity with other downstream consumers
+  if (opts.directUnknown) totals.directUnknown = true;
   return {
     format,
+    ecosystem,
     packages,
-    totals: {
-      totalPackages: packages.length,
-      totalEntries,
-      directCount,
-      transitiveCount,
-      prodCount,
-      devCount,
-      optionalCount,
-      unknownScopeCount,
-      duplicateCount,
-      missingLicenseCount,
-      missingRepositoryCount,
-    },
+    totals,
+  };
+}
+
+/**
+ * Build inventory for a Python lockfile (uv.lock or poetry.lock).
+ *
+ * Direct detection differs by format:
+ *   - uv.lock: read the [[manifest.dependency]] / [manifest] section; names
+ *     listed there are direct, everything else is transitive.
+ *   - poetry.lock: native format has no direct-vs-transitive marker without
+ *     a companion pyproject.toml. v0: treat every package as transitive and
+ *     set `totals.directUnknown: true` so consumers can surface a caveat.
+ *
+ * Scope detection:
+ *   - poetry's legacy `category = "dev"` field maps to scope 'dev'.
+ *   - `optional = true` (either format) maps to scope 'optional'.
+ *   - Otherwise scope 'unknown' for uv (no native equivalent) and 'prod'
+ *     for poetry (poetry's default-category was 'main' = production).
+ */
+function buildPythonInventory(text, format, opts = {}) {
+  const blocks = extractPythonPackageBlocks(text);
+  const directSet = format === 'uv-lock' ? extractUvDirectSet(text) : null;
+  const directUnknown = format === 'poetry-lock';
+  const privateList = (opts && opts.privateList) || null;
+
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean, hasInstallScript: boolean }>} */
+  const byName = new Map();
+  let totalEntries = 0;
+
+  for (const b of blocks) {
+    if (!b.name) continue;
+    totalEntries += 1;
+    let acc = byName.get(b.name);
+    if (!acc) {
+      acc = {
+        versions: new Set(),
+        direct: false,
+        scopes: new Set(),
+        hasLicense: false,
+        hasRepository: false,
+        // Python lockfiles don't expose install-script flags (uv.lock /
+        // poetry.lock have no equivalent of npm's hasInstallScript). Stay
+        // honest: always false here. v0 scope is npm + pnpm only.
+        hasInstallScript: false,
+      };
+      byName.set(b.name, acc);
+    }
+    if (b.version) acc.versions.add(b.version);
+    if (directSet && directSet.has(b.name)) acc.direct = true;
+    // Scope mapping.
+    let scope = 'unknown';
+    if (b.optional) scope = 'optional';
+    else if (b.category === 'dev') scope = 'dev';
+    else if (format === 'poetry-lock' && (b.category === 'main' || b.category == null)) {
+      // Poetry's default category is 'main' (production). Newer poetry omits
+      // the field entirely — same meaning. We mark this as 'prod' so the
+      // tier classifier in selectHealthCandidates can act on it. The
+      // direct/transitive question is governed separately by directUnknown.
+      scope = 'prod';
+    } else if (format === 'uv-lock') {
+      // uv.lock has no scope flags — packages are just packages. Honest
+      // 'unknown' here keeps downstream from treating everything as prod.
+      scope = 'unknown';
+    }
+    acc.scopes.add(scope);
+    // Source field doesn't carry license/repository for Python lockfiles;
+    // both stay false. The resolver pulls repository info from PyPI directly.
+  }
+
+  return finalizeInventory(format, byName, totalEntries, { directUnknown, privateList });
+}
+
+// ---------------------------------------------------------------------------
+// pnpm lockfile parser (pnpm-lock.yaml, v6/v9)
+//
+// Hand-rolled, dependency-free, indentation-aware YAML reader scoped to the
+// bounded subset pnpm actually emits: `lockfileVersion:`, `importers:` (with
+// nested workspace paths -> dependency buckets), and `packages:` (keyed by
+// `/name@version` or `/@scope/name@version`, value = inline map with `dev`,
+// `optional`, etc. flags). Everything else (settings, snapshots,
+// patchedDependencies, peerDependencies metadata, resolution blobs) is
+// ignored.
+//
+// Supports BOTH block-form dependency maps and inline flow-maps:
+//   dependencies:
+//     lodash: 4.17.21         # block form
+//   dependencies: {lodash: 4.17.21, react: 18.2.0}    # flow form
+//
+// Strictness: malformed lines are silently skipped. Tab-indented lines are
+// skipped defensively (pnpm always emits spaces). The parser never throws.
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a pnpm-lock.yaml into its three sections of interest.
+ *
+ * @param {string} text
+ * @returns {{
+ *   lockfileVersion: string|null,
+ *   importers: Record<string, { dependencies?: Record<string,string>, devDependencies?: Record<string,string>, optionalDependencies?: Record<string,string> }>,
+ *   packages: Record<string, { dev?: boolean, optional?: boolean }>,
+ * }}
+ */
+export function parsePnpmYaml(text) {
+  /** @type {{ lockfileVersion: string|null, importers: Record<string, any>, packages: Record<string, any> }} */
+  const out = { lockfileVersion: null, importers: {}, packages: {} };
+  if (typeof text !== 'string' || !text.trim()) return out;
+
+  const lines = text.split(/\r?\n/);
+  // Strip trailing whitespace + comments, drop tab-indented lines defensively
+  // (pnpm always emits spaces; tabs are a malformed-file canary).
+  const norm = lines.map(raw => {
+    if (/^\t/.test(raw)) return null; // skip tab-indented lines
+    // Strip line comments. A `#` inside quotes is treated as content; we keep
+    // it simple: a `#` preceded by whitespace OR at column 0 starts a comment.
+    let s = raw.replace(/\s+$/, '');
+    return s;
+  });
+
+  // Helper: count leading spaces on a line (after we've already filtered tabs).
+  function indentOf(line) {
+    let i = 0;
+    while (i < line.length && line[i] === ' ') i += 1;
+    return i;
+  }
+
+  // First pass: top-level scalars + section starts.
+  for (let i = 0; i < norm.length; i += 1) {
+    const line = norm[i];
+    if (line == null) continue;
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (indentOf(line) !== 0) continue;
+
+    const mVer = /^lockfileVersion:\s*['"]?([0-9]+(?:\.[0-9]+)?)['"]?\s*$/.exec(line);
+    if (mVer) { out.lockfileVersion = mVer[1]; continue; }
+
+    if (/^importers:\s*$/.test(line)) {
+      i = parseImportersSection(norm, i + 1, out.importers);
+      i -= 1; // step back so the outer loop sees the section-ending line.
+      continue;
+    }
+    if (/^packages:\s*$/.test(line)) {
+      i = parsePackagesSection(norm, i + 1, out.packages);
+      i -= 1;
+      continue;
+    }
+    // Skip everything else: settings:, snapshots:, patchedDependencies:,
+    // overrides:, dependenciesMeta:, etc. We don't need them.
+  }
+
+  return out;
+}
+
+// Read pnpm's `importers:` section. Children are workspace paths (`.`, `./`,
+// or `./packages/foo`), each containing `dependencies` / `devDependencies` /
+// `optionalDependencies` maps. Returns the index AFTER the section ends.
+function parseImportersSection(lines, start, importers) {
+  let i = start;
+  let currentImporter = null;
+  let currentBucket = null;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line == null) { i += 1; continue; }
+    if (!line.trim() || line.trim().startsWith('#')) { i += 1; continue; }
+    const indent = leadingSpaces(line);
+    if (indent === 0) return i; // end of section
+
+    // Indent 2 spaces → workspace key (e.g. `.:` or `./packages/foo:`).
+    if (indent === 2) {
+      const m = /^\s+(['"]?)(.+?)\1:\s*$/.exec(line);
+      if (m) {
+        currentImporter = m[2];
+        if (!importers[currentImporter]) importers[currentImporter] = {};
+        currentBucket = null;
+      }
+      i += 1; continue;
+    }
+    // Indent 4 spaces → dep bucket (dependencies / devDependencies / etc.).
+    if (indent === 4 && currentImporter) {
+      const mBucket = /^\s+(dependencies|devDependencies|optionalDependencies):\s*(.*)$/.exec(line);
+      if (mBucket) {
+        currentBucket = mBucket[1];
+        const rest = mBucket[2].trim();
+        if (!importers[currentImporter][currentBucket]) importers[currentImporter][currentBucket] = {};
+        // Flow-form: `dependencies: {lodash: 4.17.21, react: 18.2.0}`.
+        if (rest.startsWith('{')) {
+          assignFlowMap(rest, importers[currentImporter][currentBucket]);
+        }
+        i += 1; continue;
+      }
+      // Some pnpm files indent buckets at 4 but their entries can also be
+      // expressed as inline maps under bucket-less workspace keys. Ignore.
+      i += 1; continue;
+    }
+    // Indent 6+ spaces → entries inside a bucket (block form).
+    if (indent >= 6 && currentImporter && currentBucket) {
+      const trimmed = line.trim();
+      // Skip nested block form like `lodash:\n  specifier: ^4\n  version: 4.17.21`
+      // For pnpm v9: dep entries can be `name: version` OR a nested object.
+      // We accept the simple `name: version` shape AND for nested shape, walk
+      // forward to find `version: <val>`.
+      const mPair = /^(['"]?)([^'"\s:]+(?:\/[^'"\s:]+)?)\1:\s*(.+)?$/.exec(trimmed);
+      if (mPair) {
+        const name = mPair[2];
+        let value = (mPair[3] || '').trim();
+        if (!value) {
+          // Nested form — walk children for `version:` field.
+          let j = i + 1;
+          while (j < lines.length) {
+            const sub = lines[j];
+            if (sub == null) { j += 1; continue; }
+            if (!sub.trim()) { j += 1; continue; }
+            const subIndent = leadingSpaces(sub);
+            if (subIndent <= indent) break;
+            const mv = /^\s+version:\s*(['"]?)([^'"\s]+)\1\s*$/.exec(sub);
+            if (mv) { value = mv[2]; break; }
+            j += 1;
+          }
+        } else {
+          // Strip quotes if present.
+          if ((value.startsWith("'") && value.endsWith("'"))
+              || (value.startsWith('"') && value.endsWith('"'))) {
+            value = value.slice(1, -1);
+          }
+        }
+        importers[currentImporter][currentBucket][name] = value;
+      }
+      i += 1; continue;
+    }
+    i += 1;
+  }
+  return i;
+}
+
+// Read pnpm's `packages:` section. Children are keys like `/lodash@4.17.21`
+// or `/@scope/pkg@1.0.0`, each containing flag fields (`dev`, `optional`,
+// plus `resolution`, `dependencies`, etc. which we ignore).
+function parsePackagesSection(lines, start, packages) {
+  let i = start;
+  let currentKey = null;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line == null) { i += 1; continue; }
+    if (!line.trim() || line.trim().startsWith('#')) { i += 1; continue; }
+    const indent = leadingSpaces(line);
+    if (indent === 0) return i; // end of section
+
+    // Indent 2 spaces → package key (`'/lodash@4.17.21':`).
+    if (indent === 2) {
+      const m = /^\s+(['"]?)(.+?)\1:\s*(.*)$/.exec(line);
+      if (m) {
+        currentKey = m[2];
+        if (!packages[currentKey]) packages[currentKey] = {};
+        // Some flow-form values appear inline after the colon — pnpm doesn't
+        // usually emit them, but be tolerant.
+        const rest = (m[3] || '').trim();
+        if (rest.startsWith('{')) {
+          assignFlowMap(rest, packages[currentKey]);
+        }
+      }
+      i += 1; continue;
+    }
+    // Indent 4 spaces → flag/field on the current package.
+    if (indent === 4 && currentKey) {
+      const mFlag = /^\s+(dev|optional|requiresBuild):\s*(true|false)\s*$/.exec(line);
+      if (mFlag) {
+        packages[currentKey][mFlag[1]] = (mFlag[2] === 'true');
+      }
+      // Ignore resolution:, engines:, dependencies:, peerDependencies:, etc.
+      i += 1; continue;
+    }
+    // Deeper indents are nested data we don't read.
+    i += 1;
+  }
+  return i;
+}
+
+function leadingSpaces(line) {
+  let i = 0;
+  while (i < line.length && line[i] === ' ') i += 1;
+  return i;
+}
+
+// Parse a flow-form inline map like `{lodash: 4.17.21, react: '18.2.0', dev: true}`
+// and assign into `target`. Boolean literals are converted; everything else is
+// kept as string. Unknown / malformed entries are silently skipped.
+function assignFlowMap(raw, target) {
+  const t = raw.trim();
+  if (!t.startsWith('{') || !t.endsWith('}')) return;
+  const body = t.slice(1, -1);
+  const parts = body.match(/(?:[^,"']|"[^"]*"|'[^']*')+/g) || [];
+  for (const part of parts) {
+    const m = /^\s*(['"]?)([^'"\s:]+)\1\s*:\s*(.+?)\s*$/.exec(part);
+    if (!m) continue;
+    const key = m[2];
+    let val = m[3];
+    if ((val.startsWith("'") && val.endsWith("'"))
+        || (val.startsWith('"') && val.endsWith('"'))) {
+      val = val.slice(1, -1);
+    }
+    if (val === 'true') target[key] = true;
+    else if (val === 'false') target[key] = false;
+    else target[key] = val;
+  }
+}
+
+/**
+ * Parse a pnpm package key into { name, version }. Handles:
+ *   /lodash@4.17.21                  -> { name: 'lodash', version: '4.17.21' }
+ *   /@scope/pkg@1.0.0                -> { name: '@scope/pkg', version: '1.0.0' }
+ *   /foo@1.0.0_react@18.2.0          -> { name: 'foo', version: '1.0.0' }   (v6 peer)
+ *   /foo@1.0.0(react@18.2.0)         -> { name: 'foo', version: '1.0.0' }   (v9 peer)
+ *   lodash@4.17.21                    -> works without leading slash too
+ *
+ * Returns null on malformed input.
+ *
+ * @param {string} key
+ * @returns {{ name: string, version: string }|null}
+ */
+export function parsePnpmPackageKey(key) {
+  if (typeof key !== 'string' || !key) return null;
+  let k = key.startsWith('/') ? key.slice(1) : key;
+  if (!k) return null;
+  // Strip the v9 paren-suffix `(...)` first — it always comes AFTER the
+  // version, and the inner `@` in `(react@18.2.0)` would otherwise fool the
+  // lastIndexOf('@') split.
+  const parenAt = k.indexOf('(');
+  if (parenAt >= 0) k = k.slice(0, parenAt);
+  // Strip the v6 underscore-suffix `_peer@version` — same rationale.
+  const underAt = k.indexOf('_');
+  if (underAt >= 0) k = k.slice(0, underAt);
+
+  // Scoped package: starts with `@`, name = `@scope/pkg`, version after the
+  // `@` that follows the scope's `/`.
+  if (k.startsWith('@')) {
+    const slash = k.indexOf('/');
+    if (slash <= 0) return null;
+    const atIdx = k.indexOf('@', slash);
+    if (atIdx <= slash + 1) return null;
+    const name = k.slice(0, atIdx);
+    const version = k.slice(atIdx + 1);
+    if (!name || !version) return null;
+    return { name, version };
+  }
+  const atIdx = k.lastIndexOf('@');
+  if (atIdx <= 0) return null;
+  const name = k.slice(0, atIdx);
+  const version = k.slice(atIdx + 1);
+  if (!name || !version) return null;
+  return { name, version };
+}
+
+/**
+ * Generator yielding direct deps from a parsed `importers` map.
+ * Skips workspace-internal values (link:, workspace:, file:, git+, http*).
+ *
+ * @param {Record<string, any>} importers
+ * @returns {Generator<{ name: string, version: string, scope: 'prod'|'dev'|'optional' }>}
+ */
+export function* directDepsFromImporters(importers) {
+  if (!importers || typeof importers !== 'object') return;
+  for (const importer of Object.values(importers)) {
+    if (!importer || typeof importer !== 'object') continue;
+    for (const [bucket, scope] of /** @type {const} */ ([
+      ['dependencies', 'prod'],
+      ['devDependencies', 'dev'],
+      ['optionalDependencies', 'optional'],
+    ])) {
+      const deps = importer[bucket];
+      if (!deps || typeof deps !== 'object') continue;
+      for (const [name, raw] of Object.entries(deps)) {
+        if (typeof raw !== 'string') continue;
+        if (isWorkspaceInternalValue(raw)) continue;
+        // The recorded `version` for a direct dep in pnpm's importer block
+        // can be a plain semver, OR a suffixed `1.0.0(react@18.2.0)` /
+        // `1.0.0_react@18.2.0` shape. Strip suffixes the same way.
+        let version = raw;
+        const parenAt = version.indexOf('(');
+        if (parenAt >= 0) version = version.slice(0, parenAt);
+        const underAt = version.indexOf('_');
+        if (underAt >= 0) version = version.slice(0, underAt);
+        yield { name, version, scope };
+      }
+    }
+  }
+}
+
+function isWorkspaceInternalValue(v) {
+  if (typeof v !== 'string') return true;
+  return v.startsWith('link:')
+    || v.startsWith('workspace:')
+    || v.startsWith('file:')
+    || v.startsWith('git+')
+    || v.startsWith('http://')
+    || v.startsWith('https://');
+}
+
+/**
+ * Build the canonical inventory shape from a pnpm-lock.yaml.
+ *
+ * Direct/transitive: derived from `importers:` (every workspace member's
+ * dependency buckets). If `importers:` is missing entirely we set
+ * `directUnknown: true` and mark nothing as direct — same honesty rule as the
+ * Python path for poetry.lock without a companion pyproject.toml.
+ *
+ * Scope: importer-declared scopes win for direct deps. Transitive deps use
+ * the per-package `optional` / `dev` flags (optional > dev > prod default).
+ * mergeScopes() reconciles when the same package appears under multiple
+ * scopes across workspaces.
+ *
+ * License / repository: pnpm doesn't write either into the lockfile. Both
+ * stay false; resolver fetches them on demand.
+ */
+export function buildPnpmInventory(text, opts = {}) {
+  const { importers, packages } = parsePnpmYaml(text);
+  const importerKeys = importers ? Object.keys(importers) : [];
+  const directUnknown = importerKeys.length === 0;
+  const privateList = (opts && opts.privateList) || null;
+
+  // Map: name -> Set of scopes declared by importers (direct deps only).
+  /** @type {Map<string, Set<string>>} */
+  const directScopes = new Map();
+  for (const { name, scope } of directDepsFromImporters(importers)) {
+    let s = directScopes.get(name);
+    if (!s) { s = new Set(); directScopes.set(name, s); }
+    s.add(scope);
+  }
+
+  /** @type {Map<string, { versions: Set<string>, direct: boolean, scopes: Set<string>, hasLicense: boolean, hasRepository: boolean, hasInstallScript: boolean }>} */
+  const byName = new Map();
+  let totalEntries = 0;
+
+  function record(name, version, isDirect, scopes, hasInstallScript) {
+    if (!name) return;
+    totalEntries += 1;
+    let acc = byName.get(name);
+    if (!acc) {
+      acc = {
+        versions: new Set(),
+        direct: false,
+        scopes: new Set(),
+        hasLicense: false,
+        hasRepository: false,
+        hasInstallScript: false,
+      };
+      byName.set(name, acc);
+    }
+    if (version) acc.versions.add(version);
+    if (isDirect) acc.direct = true;
+    for (const s of scopes) acc.scopes.add(s);
+    // Sticky across versions — same rule as the npm path.
+    if (hasInstallScript) acc.hasInstallScript = true;
+  }
+
+  for (const [key, meta] of Object.entries(packages || {})) {
+    const parsed = parsePnpmPackageKey(key);
+    if (!parsed) continue;
+    const isDirect = directScopes.has(parsed.name);
+    const scopes = isDirect
+      ? [...directScopes.get(parsed.name)]
+      : [scopeFromPnpmFlags(meta)];
+    // pnpm uses `requiresBuild: true` on package entries to mark installs
+    // that run lifecycle scripts; semantically equivalent to npm's
+    // hasInstallScript flag.
+    const hasInstallScript = !!(meta && meta.requiresBuild === true);
+    record(parsed.name, parsed.version, isDirect, scopes, hasInstallScript);
+  }
+
+  // Also record direct deps that for some reason don't appear in `packages:`
+  // (defensive — keeps directCount honest if the user truncated the file).
+  for (const [name, scopes] of directScopes.entries()) {
+    if (!byName.has(name)) {
+      record(name, '', true, [...scopes], false);
+    }
+  }
+
+  return finalizeInventory('pnpm-lock', byName, totalEntries, { directUnknown, privateList });
+}
+
+function scopeFromPnpmFlags(meta) {
+  if (!meta || typeof meta !== 'object') return 'prod';
+  if (meta.optional === true) return 'optional';
+  if (meta.dev === true) return 'dev';
+  return 'prod';
+}
+
+/**
+ * Parse a pnpm-lock.yaml into the unified `{ ecosystem, direct, all }` shape.
+ * First-seen version wins on dedupe, matching npm parser semantics.
+ *
+ * @param {string} text
+ * @returns {{ ecosystem:'npm', direct:string[], all:Array<{name:string,version:string}> }}
+ */
+export function parsePnpmLockfile(text) {
+  const { importers, packages } = parsePnpmYaml(text);
+  /** @type {Map<string,string>} */
+  const all = new Map();
+  for (const key of Object.keys(packages || {})) {
+    const parsed = parsePnpmPackageKey(key);
+    if (!parsed) continue;
+    if (!all.has(parsed.name)) all.set(parsed.name, parsed.version);
+  }
+  /** @type {Set<string>} */
+  const direct = new Set();
+  for (const { name } of directDepsFromImporters(importers)) {
+    direct.add(name);
+  }
+  return {
+    ecosystem: 'npm',
+    direct: [...direct].sort(),
+    all: [...all.entries()].map(([name, version]) => ({ name, version })),
   };
 }
 
@@ -513,9 +1462,11 @@ function compareVersionsLoose(a, b) {
  * direct/transitive without the consuming package.json. All scope and
  * direct fields fall back to 'unknown' / false; the UI shows a note.
  */
-function buildYarnV1Inventory(text) {
+function buildYarnV1Inventory(text, opts = {}) {
   const inv = emptyInventory();
   inv.format = 'yarn-v1';
+  inv.ecosystem = 'npm';
+  const privateList = (opts && opts.privateList) || null;
   /** @type {Map<string, { versions: Set<string>, hasLicense: boolean, hasRepository: boolean }>} */
   const byName = new Map();
   let totalEntries = 0;
@@ -572,9 +1523,32 @@ function buildYarnV1Inventory(text) {
   let duplicateCount = 0;
   let missingLicenseCount = 0;
   let missingRepositoryCount = 0;
+  let possibleTypoSquatCount = 0;
+  let dependencyConfusionCount = 0;
+  let crossEcosystemBridgeCount = 0;
+  let modelWeightLoaderCount = 0;
   for (const name of names) {
     const acc = byName.get(name);
     const versions = [...acc.versions].sort(compareVersionsLoose);
+    // Typo-squat detection is parser-format-agnostic — it checks the
+    // package name itself, not lockfile metadata. yarn-v1 gets the chip
+    // the same as npm v2/v3 and pnpm.
+    const possibleTypoSquat = detectTypoSquat(name);
+    const dependencyConfusion = (privateList && privateList.nameSet instanceof Set && privateList.nameSet.has(name))
+      ? {
+          confidence: 'MEDIUM',
+          reason:
+            'Listed as private but also resolving to public registry — verify your index priority configuration.',
+          userComment: (privateList.comments instanceof Map && privateList.comments.has(name))
+            ? privateList.comments.get(name)
+            : null,
+        }
+      : null;
+    // Cross-ecosystem bridge v0 — yarn-v1 is npm-ecosystem. Same curated map.
+    const crossEcosystemBridge = getCrossEcosystemBridge(name, 'npm');
+    // Model-weight loader posture v0 — yarn-v1 is the npm ecosystem, so the
+    // chip fires the same way as v2/v3/pnpm.
+    const modelWeightLoader = getModelWeightLoader(name, 'npm');
     inv.packages.push({
       name,
       versions,
@@ -582,10 +1556,21 @@ function buildYarnV1Inventory(text) {
       scope: 'unknown',        // unknown for yarn v1; UI surfaces this.
       hasLicense: acc.hasLicense,
       hasRepository: acc.hasRepository,
+      // yarn-v1 lockfiles don't expose install-script flags; documented in
+      // docs/ci-reporter.md as a known v0 caveat alongside Python lockfiles.
+      hasInstallScript: false,
+      possibleTypoSquat,
+      dependencyConfusion,
+      crossEcosystemBridge,
+      modelWeightLoader,
     });
     if (versions.length > 1) duplicateCount += 1;
     if (!acc.hasLicense) missingLicenseCount += 1;
     if (!acc.hasRepository) missingRepositoryCount += 1;
+    if (possibleTypoSquat) possibleTypoSquatCount += 1;
+    if (dependencyConfusion) dependencyConfusionCount += 1;
+    if (crossEcosystemBridge) crossEcosystemBridgeCount += 1;
+    if (modelWeightLoader) modelWeightLoaderCount += 1;
   }
 
   inv.totals.totalPackages = inv.packages.length;
@@ -597,7 +1582,19 @@ function buildYarnV1Inventory(text) {
   inv.totals.optionalCount = 0;
   inv.totals.unknownScopeCount = inv.packages.length;
   inv.totals.duplicateCount = duplicateCount;
-  inv.totals.missingLicenseCount = missingLicenseCount;
-  inv.totals.missingRepositoryCount = missingRepositoryCount;
+  // uv.lock / poetry.lock carry license/repository data via their own
+  // [package.metadata] blocks sometimes, but our parser doesn't yet
+  // extract them. Treat as "data unavailable" for v0 honesty rather
+  // than report every package as missing.
+  inv.totals.licenseDataAvailable = false;
+  inv.totals.repositoryDataAvailable = false;
+  inv.totals.missingLicenseCount = null;
+  inv.totals.missingRepositoryCount = null;
+  void missingLicenseCount;
+  void missingRepositoryCount;
+  inv.totals.possibleTypoSquatCount = possibleTypoSquatCount;
+  inv.totals.dependencyConfusionCount = dependencyConfusionCount;
+  inv.totals.crossEcosystemBridgeCount = crossEcosystemBridgeCount;
+  inv.totals.modelWeightLoaderCount = modelWeightLoaderCount;
   return inv;
 }

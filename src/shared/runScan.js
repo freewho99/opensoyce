@@ -35,13 +35,15 @@
  */
 
 import {
-  parseNpmLockfile,
+  parseLockfile,
   queryOsvBatch,
   detectLockfileFormat,
+  ecosystemForFormat,
   buildInventory,
 } from './scanLockfile.js';
 import { selectHealthCandidates } from './selectHealthCandidates.js';
 import { verdictFor } from './verdict.js';
+import { checkPublicRegistry as defaultCheckPublicRegistry } from './checkPublicRegistry.js';
 
 // Severity tiering for response sort. Lower index = higher severity.
 // Duplicated only as a tiny lookup constant (intentional — it's 6 tokens,
@@ -78,10 +80,10 @@ function splitOwnerRepo(slug) {
  * Resolve GitHub identity for each vulnerable package. Skipping non-vulnerable
  * packages keeps npm-registry traffic minimal. Failures default to NONE.
  */
-async function attachIdentitiesToVulnerabilities(vulns, resolveIdentity) {
+async function attachIdentitiesToVulnerabilities(vulns, resolveIdentity, ecosystem) {
   if (!Array.isArray(vulns) || vulns.length === 0) return vulns || [];
   const results = await Promise.allSettled(
-    vulns.map(v => resolveIdentity(v.package, { version: v.version })),
+    vulns.map(v => resolveIdentity(v.package, { version: v.version, ecosystem })),
   );
   return vulns.map((v, i) => {
     const r = results[i];
@@ -92,11 +94,16 @@ async function attachIdentitiesToVulnerabilities(vulns, resolveIdentity) {
         resolvedRepo: ident.resolvedRepo,
         confidence: ident.confidence,
         source: ident.source,
+        // Borrowed-trust signal from the resolver (P0-AI-2). When the npm
+        // registry pointed at a GitHub repo whose package.json names a
+        // different package, `verified` is false and `mismatchReason` is set.
+        verified: ident.verified ?? 'unverified',
       };
       if (ident.directory) merged.directory = ident.directory;
+      if (ident.mismatchReason) merged.mismatchReason = ident.mismatchReason;
       return merged;
     }
-    return { ...v, resolvedRepo: null, confidence: 'NONE', source: null };
+    return { ...v, resolvedRepo: null, confidence: 'NONE', source: null, verified: 'unverified' };
   });
 }
 
@@ -137,14 +144,28 @@ async function attachRepoHealthToVulnerabilities(vulns, getAnalysis, mapWithConc
       v.repoHealthError = 'ANALYSIS_FAILED';
       return;
     }
+    const advisorySummary = (data.meta && data.meta.advisories) || null;
+    const maintainerConcentration = data.maintainerConcentration || null;
+    const vendorSdk = data.vendorSdk || null;
     v.repoHealth = {
       soyceScore: data.total,
-      verdict: verdictFor(data.total, { earlyBreakout: false }),
+      verdict: verdictFor(data.total, {
+        earlyBreakout: false,
+        advisorySummary,
+        maintainerConcentration,
+        vendorSdkMatch: !!vendorSdk,
+      }),
       signals: {
         maintenance: data.breakdown.maintenance ?? 0,
         security: data.breakdown.security ?? 0,
         activity: data.breakdown.activity ?? 0,
       },
+      advisorySummary,
+      maintainerConcentration,
+      vendorSdk,
+      // Fork-velocity-of-namesake v0 — informational; never affects score
+      // or verdict. Null when no migration detected (the common case).
+      migration: data.migration || null,
     };
     v.repoHealthError = null;
   });
@@ -162,7 +183,7 @@ async function attachRepoHealthToVulnerabilities(vulns, getAnalysis, mapWithConc
  * status:'IDENTITY_UNRESOLVED' with soyceScore null — no negative score is
  * computed.
  */
-async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalysis, resolveIdentity, mapWithConcurrency) {
+async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalysis, resolveIdentity, mapWithConcurrency, ecosystem) {
   const BUDGET = 25;
   const { selected, skippedBudget, qualifyingTotal } = selectHealthCandidates({
     inventory,
@@ -171,7 +192,7 @@ async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalys
   });
 
   const outcomes = await mapWithConcurrency(selected, 5, async (cand) => {
-    const ident = await resolveIdentity(cand.package, { version: cand.version });
+    const ident = await resolveIdentity(cand.package, { version: cand.version, ecosystem });
     const resolvedRepo = ident && ident.resolvedRepo ? ident.resolvedRepo : null;
     const confidence = ident && (ident.confidence === 'HIGH' || ident.confidence === 'MEDIUM')
       ? ident.confidence
@@ -222,13 +243,26 @@ async function selectAndScoreHealth(inventory, vulnerablePackageNames, getAnalys
       row.status = 'SCORE_UNAVAILABLE';
       return row;
     }
+    const advisorySummary = (v.analysis.meta && v.analysis.meta.advisories) || null;
+    const maintainerConcentration = v.analysis.maintainerConcentration || null;
+    const vendorSdk = v.analysis.vendorSdk || null;
     row.soyceScore = v.analysis.total;
-    row.verdict = verdictFor(v.analysis.total, { earlyBreakout: false });
+    row.verdict = verdictFor(v.analysis.total, {
+      earlyBreakout: false,
+      advisorySummary,
+      maintainerConcentration,
+      vendorSdkMatch: !!vendorSdk,
+    });
     row.signals = {
       maintenance: v.analysis.breakdown.maintenance ?? 0,
       security: v.analysis.breakdown.security ?? 0,
       activity: v.analysis.breakdown.activity ?? 0,
     };
+    row.advisorySummary = advisorySummary;
+    row.maintainerConcentration = maintainerConcentration;
+    row.vendorSdk = vendorSdk;
+    // Fork-velocity-of-namesake v0 — same shape on v3b selected health rows.
+    row.migration = v.analysis.migration || null;
     row.status = 'SCORED';
     return row;
   });
@@ -277,7 +311,20 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   if (!deps || typeof deps !== 'object') {
     throw new Error('runScan: deps is required');
   }
-  const { getAnalysis, resolveIdentity, mapWithConcurrency, fetchImpl } = deps;
+  const {
+    getAnalysis,
+    resolveIdentity,
+    mapWithConcurrency,
+    fetchImpl,
+    // Dep-confusion v0. `privateList` is the parsed `.opensoyce-private`
+    // shape { nameSet, comments, ... }. `checkPublicRegistry` is the
+    // injection seam for tests; default falls through to the shared module.
+    privateList,
+    checkPublicRegistry,
+  } = deps;
+  const depConfusionCheck = typeof checkPublicRegistry === 'function'
+    ? checkPublicRegistry
+    : defaultCheckPublicRegistry;
   if (typeof getAnalysis !== 'function') throw new Error('runScan: deps.getAnalysis required');
   if (typeof resolveIdentity !== 'function') throw new Error('runScan: deps.resolveIdentity required');
   if (typeof mapWithConcurrency !== 'function') throw new Error('runScan: deps.mapWithConcurrency required');
@@ -292,9 +339,11 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   if (format === 'yarn-v1' || format === 'yarn-v2') throw taggedScanError('YARN_COMING_SOON');
   if (format === 'unknown' || format == null) throw taggedScanError('UNPARSEABLE_LOCKFILE');
 
+  const ecosystem = ecosystemForFormat(format);
+
   let parsed;
   try {
-    parsed = parseNpmLockfile(lockfileText);
+    parsed = parseLockfile(lockfileText);
   } catch {
     throw taggedScanError('UNPARSEABLE_LOCKFILE');
   }
@@ -307,7 +356,10 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   let vulnerabilities = [];
   let osvError = false;
   try {
-    vulnerabilities = await queryOsvBatch(parsed.all, fetchImpl);
+    // Per-scan ecosystem flows from the inventory format through to every
+    // OSV `package` query and the affected-range filter. Single-ecosystem
+    // scans (npm-only OR PyPI-only) — there's no mixed-tree case in v0.
+    vulnerabilities = await queryOsvBatch(parsed.all, fetchImpl, { ecosystem });
   } catch (e) {
     // Log lives at the route layer; runScan stays quiet for tests.
     osvError = true;
@@ -316,10 +368,10 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
 
   // Identity resolver: failure-isolated per-batch.
   try {
-    vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || [], resolveIdentity);
+    vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || [], resolveIdentity, ecosystem);
   } catch {
     vulnerabilities = (vulnerabilities || []).map(v => ({
-      ...v, resolvedRepo: null, confidence: 'NONE', source: null,
+      ...v, resolvedRepo: null, confidence: 'NONE', source: null, verified: 'unverified',
     }));
   }
 
@@ -335,13 +387,103 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   }
 
   // Scanner v3a — whole-tree inventory. Additive; never fails the scan.
+  // `privateList` (when present) seeds the static MEDIUM dep-confusion signal
+  // on each matching package row; the active escalation to HIGH happens
+  // immediately after inventory construction (async path, bounded concurrency).
   let inventory = null;
   let inventoryError = null;
   try {
-    inventory = buildInventory(lockfileText);
+    inventory = buildInventory(lockfileText, { privateList: privateList || null });
   } catch {
     inventory = null;
     inventoryError = 'INVENTORY_FAILED';
+  }
+
+  // Dep-confusion v0 — active escalation. For every package row whose
+  // dependencyConfusion is MEDIUM (static match), probe the public registry.
+  // If the public registry confirms a package by that name, escalate to
+  // HIGH. Bounded concurrency = 5, same as the v2.1a resolver. Any failure
+  // leaves the MEDIUM signal in place — we never DROP the static signal,
+  // only escalate or not.
+  if (inventory && Array.isArray(inventory.packages) && privateList && privateList.nameSet instanceof Set && privateList.nameSet.size > 0) {
+    const targets = [];
+    for (let i = 0; i < inventory.packages.length; i += 1) {
+      const p = inventory.packages[i];
+      if (p && p.dependencyConfusion && p.dependencyConfusion.confidence === 'MEDIUM') {
+        targets.push({ idx: i, name: p.name });
+      }
+    }
+    if (targets.length > 0) {
+      const probeOutcomes = await mapWithConcurrency(targets, 5, async (t) => {
+        try {
+          return await depConfusionCheck(t.name, ecosystem, { fetchImpl });
+        } catch {
+          return false;
+        }
+      });
+      let activeCount = 0;
+      for (let i = 0; i < targets.length; i += 1) {
+        const outcome = probeOutcomes[i];
+        const exists = !!(outcome && outcome.ok && outcome.value === true);
+        if (!exists) continue;
+        const p = inventory.packages[targets[i].idx];
+        if (!p || !p.dependencyConfusion) continue;
+        p.dependencyConfusion = {
+          confidence: 'HIGH',
+          reason:
+            'Active squat detected: this private name has been published to the public registry. An attacker may be attempting dependency confusion.',
+          userComment: p.dependencyConfusion.userComment || null,
+        };
+        activeCount += 1;
+      }
+      // Surface count of HIGH-confidence (active) hits separately so the UI
+      // can render "X active squat(s) detected" without recounting.
+      if (inventory.totals && typeof inventory.totals === 'object') {
+        inventory.totals.activeDependencyConfusionCount = activeCount;
+      }
+    }
+  }
+
+  // Postinstall analysis v0 — informational `hasInstallScript` flag flows
+  // from the inventory through to each vuln row so the UI can render the
+  // INSTALL SCRIPT chip without re-parsing the lockfile. Lookup by package
+  // name (case-sensitive — both maps come from the same lockfile pass).
+  // Defaults to false on packages absent from the inventory (e.g. when
+  // inventory build failed but vuln scan succeeded).
+  if (inventory && Array.isArray(inventory.packages) && Array.isArray(vulnerabilities)) {
+    const installScriptIndex = new Map();
+    // Typo-squat homoglyph detection v0 — informational chip plumb-through.
+    // Same propagation shape as hasInstallScript: inventory is the source of
+    // truth, vuln rows pick up the per-name lookup so the UI never has to
+    // re-walk the lockfile to render the chip. Defaults to null on rows
+    // whose package is absent from the inventory (e.g. inventory build
+    // failed) so the chip stays hidden in that degraded mode.
+    const typoSquatIndex = new Map();
+    const depConfusionIndex = new Map();
+    // Cross-ecosystem bridge v0 — same propagation shape as the chips
+    // above. Inventory is the source of truth; vuln rows look up by name.
+    const crossEcosystemBridgeIndex = new Map();
+    // Model-weight loader posture v0 — same propagation shape as the chips
+    // above. Inventory is the source of truth; vuln rows look up by name so
+    // the UI never has to re-walk the lockfile.
+    const modelWeightLoaderIndex = new Map();
+    for (const p of inventory.packages) {
+      if (p && p.name) {
+        installScriptIndex.set(p.name, p.hasInstallScript === true);
+        typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
+        depConfusionIndex.set(p.name, p.dependencyConfusion || null);
+        crossEcosystemBridgeIndex.set(p.name, p.crossEcosystemBridge || null);
+        modelWeightLoaderIndex.set(p.name, p.modelWeightLoader || null);
+      }
+    }
+    vulnerabilities = vulnerabilities.map(v => ({
+      ...v,
+      hasInstallScript: installScriptIndex.get(v.package) === true,
+      possibleTypoSquat: typoSquatIndex.get(v.package) || null,
+      dependencyConfusion: depConfusionIndex.get(v.package) || null,
+      crossEcosystemBridge: crossEcosystemBridgeIndex.get(v.package) || null,
+      modelWeightLoader: modelWeightLoaderIndex.get(v.package) || null,
+    }));
   }
 
   // Scanner v3b — selective dependency health scoring. Failure-isolated.
@@ -358,6 +500,7 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
         getAnalysis,
         resolveIdentity,
         mapWithConcurrency,
+        ecosystem,
       );
     }
   } catch {
@@ -365,9 +508,41 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     selectedHealthError = 'SELECTED_HEALTH_FAILED';
   }
 
+  // Postinstall analysis v0 — same lookup for v3b selected-health rows.
+  // We do this AFTER selectAndScoreHealth runs so the merge can't crash the
+  // pipeline if selectAndScoreHealth throws.
+  if (inventory && Array.isArray(inventory.packages) && selectedHealth && Array.isArray(selectedHealth.scored)) {
+    const installScriptIndex = new Map();
+    const typoSquatIndex = new Map();
+    const depConfusionIndex = new Map();
+    const crossEcosystemBridgeIndex = new Map();
+    const modelWeightLoaderIndex = new Map();
+    for (const p of inventory.packages) {
+      if (p && p.name) {
+        installScriptIndex.set(p.name, p.hasInstallScript === true);
+        typoSquatIndex.set(p.name, p.possibleTypoSquat || null);
+        depConfusionIndex.set(p.name, p.dependencyConfusion || null);
+        crossEcosystemBridgeIndex.set(p.name, p.crossEcosystemBridge || null);
+        modelWeightLoaderIndex.set(p.name, p.modelWeightLoader || null);
+      }
+    }
+    selectedHealth = {
+      ...selectedHealth,
+      scored: selectedHealth.scored.map(r => ({
+        ...r,
+        hasInstallScript: installScriptIndex.get(r.package) === true,
+        possibleTypoSquat: typoSquatIndex.get(r.package) || null,
+        dependencyConfusion: depConfusionIndex.get(r.package) || null,
+        crossEcosystemBridge: crossEcosystemBridgeIndex.get(r.package) || null,
+        modelWeightLoader: modelWeightLoaderIndex.get(r.package) || null,
+      })),
+    };
+  }
+
   const payload = {
     totalDeps: parsed.all.length,
     directDeps: parsed.direct.length,
+    ecosystem,
     vulnerabilities: sortScanVulnerabilities(vulnerabilities || []),
     scannedAt: new Date().toISOString(),
     cacheHit: false,

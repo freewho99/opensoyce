@@ -14,6 +14,48 @@ import {
 import { summarizeScan } from '../shared/scanSummary.js';
 import { computeRiskProfile } from '../shared/riskProfile.js';
 import { buildMarkdownReport, buildJsonReport } from '../shared/buildScanReport.js';
+import { isTrustedInstallScript } from '../data/trustedInstallScripts.js';
+
+// Typo-squat homoglyph detection v0 — shape emitted by detectTypoSquat() in
+// src/data/protectedPackageNames.js. Informational only; the chip never
+// affects Risk Profile, score, or verdict band.
+interface PossibleTypoSquat {
+  matched: string;
+  suspectedTarget: string;
+}
+
+// Dependency-confusion detection v0 — shape emitted by detectDepConfusion()
+// + escalated in runScan. Informational only; the chip never affects Risk
+// Profile, score, or verdict band. MEDIUM = static match on the user's
+// .opensoyce-private file. HIGH = same + active public-registry confirmation.
+interface DependencyConfusion {
+  confidence: 'MEDIUM' | 'HIGH';
+  reason: string;
+  userComment: string | null;
+}
+
+// Model-weight loader posture v0 — shape emitted by getModelWeightLoader()
+// in src/data/modelWeightLoaders.js. Posture recommendation only; never
+// affects Risk Profile, score, or verdict band. 'safe' tier renders a
+// green affirmation chip; 'load_pickle' / 'torch_load' render amber.
+interface ModelWeightLoader {
+  name: string;
+  ecosystem: 'npm' | 'PyPI';
+  risk: 'load_pickle' | 'torch_load' | 'safe';
+  safer: string | null;
+  reason: string;
+}
+
+// Cross-ecosystem bridge v0 — shape emitted by getCrossEcosystemBridge() in
+// src/data/crossEcosystemBridges.js. Informational only — surfaces when a
+// scanned package has a well-known sibling in the OTHER ecosystem (npm ↔
+// PyPI). Never affects Risk Profile, composite score, or verdict band.
+interface CrossEcosystemBridge {
+  matched: string;
+  sibling: string;
+  siblingEcosystem: 'npm' | 'PyPI';
+  reason: string;
+}
 
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
@@ -31,6 +73,17 @@ type RepoVerdict =
   | 'RISKY'
   | 'STALE';
 
+// Fork-velocity-of-namesake v0. Informational — never affects score / verdict.
+interface RepoMigration {
+  successor: { owner: string; repo: string } | null;
+  migratedAt: string | null;
+  reason: string;
+  confidence: 'HIGH' | 'MEDIUM';
+  source: 'curated' | 'fork-chain';
+  successorStars?: number;
+  successorPushedAt?: string;
+}
+
 interface RepoHealth {
   soyceScore: number;
   verdict: RepoVerdict;
@@ -39,6 +92,9 @@ interface RepoHealth {
     security: number;
     activity: number;
   };
+  // Fork-velocity-of-namesake v0 — null in the common case. When set, the
+  // scanner row renders a small ⚠ MIGRATED chip linking to the successor.
+  migration?: RepoMigration | null;
 }
 
 type RepoHealthError = 'IDENTITY_NONE' | 'ANALYSIS_FAILED';
@@ -56,12 +112,41 @@ interface Vulnerability {
   confidence?: ResolverConfidence;
   source?: ResolverSource | null;
   directory?: string;
+  // Borrowed-trust cross-check (P0-AI-2). `true` = GitHub package.json `name`
+  // matched the npm package name. `false` = mismatch — a typo-squat is
+  // inheriting an unrelated repo's Soyce score. `'unverified'` (string) =
+  // cross-check not performed (e.g. GitHub fetch failed). Absent on
+  // responses from servers older than May 2026.
+  verified?: boolean | 'unverified';
+  mismatchReason?: 'github_pkg_name_different' | 'github_root_pkg_missing';
   // Scanner v2.1a — repo health (paired with advisory severity per-row).
   // Mutually exclusive: when `repoHealth` is set, `repoHealthError` is null,
   // and vice versa. Both absent on responses from older servers — render
   // defensively (sub-block hidden).
   repoHealth?: RepoHealth | null;
   repoHealthError?: RepoHealthError | null;
+  // Postinstall analysis v0 — populated by runScan from the matching
+  // inventory record. Informational only; does not affect scoring or
+  // verdict bands. Absent on responses from older servers — render
+  // defensively (chip hidden).
+  hasInstallScript?: boolean;
+  // Typo-squat homoglyph detection v0 — populated by runScan from the
+  // matching inventory record. Null when no homoglyph attack is suspected;
+  // present (with suspectedTarget) when the package name's confusables
+  // skeleton collides with a protected name AND the bytes differ.
+  possibleTypoSquat?: PossibleTypoSquat | null;
+  // Dependency-confusion detection v0 — populated by runScan when the
+  // package name appears in the user's `.opensoyce-private` file.
+  // Null when the package is not on the list (or the list is absent).
+  dependencyConfusion?: DependencyConfusion | null;
+  // Cross-ecosystem bridge v0 — populated by runScan when the package has a
+  // well-known sibling in the other ecosystem (npm ↔ PyPI). Informational
+  // only; chip points the user at the sibling so they remember to scan both.
+  crossEcosystemBridge?: CrossEcosystemBridge | null;
+  // Model-weight loader posture v0 — populated by runScan from the matching
+  // inventory record. Posture recommendation only; does not affect scoring,
+  // band, or Risk Profile.
+  modelWeightLoader?: ModelWeightLoader | null;
 }
 
 // Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
@@ -76,6 +161,24 @@ interface InventoryPackage {
   scope: InventoryScope;
   hasLicense: boolean;
   hasRepository: boolean;
+  // Postinstall analysis v0 — true when the lockfile flagged this package
+  // with `hasInstallScript: true` (npm) or `requiresBuild: true` (pnpm).
+  // Sticky across versions: ANY version having the flag flips the merged
+  // record to true. Defaults false on older responses.
+  hasInstallScript?: boolean;
+  // Typo-squat homoglyph detection v0 — set when the package name's
+  // confusables skeleton collides with a curated protected name AND the
+  // names differ byte-for-byte (legitimate self-installs return null).
+  possibleTypoSquat?: PossibleTypoSquat | null;
+  // Dependency-confusion detection v0 — set when the package name appears
+  // in the user's `.opensoyce-private` file.
+  dependencyConfusion?: DependencyConfusion | null;
+  // Cross-ecosystem bridge v0 — set when the package name appears in the
+  // curated CROSS_ECOSYSTEM_BRIDGES list. Informational chip only.
+  crossEcosystemBridge?: CrossEcosystemBridge | null;
+  // Model-weight loader posture v0 — set when the package name appears in
+  // the curated MODEL_WEIGHT_LOADERS list AND the ecosystem matches.
+  modelWeightLoader?: ModelWeightLoader | null;
 }
 
 interface InventoryTotals {
@@ -88,8 +191,31 @@ interface InventoryTotals {
   optionalCount: number;
   unknownScopeCount: number;
   duplicateCount: number;
-  missingLicenseCount: number;
-  missingRepositoryCount: number;
+  // null when the lockfile format doesn't carry license/repository fields
+  // (pnpm, yarn, npm-v1/v2, uv, poetry). Only npm-v3 emits these per-package.
+  missingLicenseCount: number | null;
+  missingRepositoryCount: number | null;
+  licenseDataAvailable?: boolean;
+  repositoryDataAvailable?: boolean;
+  // Postinstall analysis v0 — count of packages with hasInstallScript===true.
+  // Absent on older server responses; render defensively.
+  installScriptCount?: number;
+  // Typo-squat homoglyph detection v0 — count of packages with a non-null
+  // possibleTypoSquat. Absent on older server responses; render defensively.
+  possibleTypoSquatCount?: number;
+  // Dependency-confusion detection v0 — count of packages with a non-null
+  // dependencyConfusion entry (MEDIUM or HIGH combined). Absent on older
+  // server responses; render defensively.
+  dependencyConfusionCount?: number;
+  // Count of HIGH-confidence (active squat) hits within
+  // dependencyConfusionCount above. Set only when the active probe ran.
+  activeDependencyConfusionCount?: number;
+  // Cross-ecosystem bridge v0 — count of packages with a non-null
+  // crossEcosystemBridge entry. Absent on older server responses.
+  crossEcosystemBridgeCount?: number;
+  // Model-weight loader posture v0 — count of packages with a non-null
+  // modelWeightLoader entry. Absent on older server responses.
+  modelWeightLoaderCount?: number;
 }
 
 interface Inventory {
@@ -123,6 +249,18 @@ interface SelectedHealthRow {
   verdict: RepoVerdict | null;
   signals: { maintenance: number; security: number; activity: number } | null;
   status: SelectedHealthStatus;
+  // Postinstall analysis v0 — copied from the matching inventory record.
+  hasInstallScript?: boolean;
+  // Typo-squat homoglyph detection v0 — copied from the matching inventory record.
+  possibleTypoSquat?: PossibleTypoSquat | null;
+  // Dependency-confusion detection v0 — copied from the matching inventory record.
+  dependencyConfusion?: DependencyConfusion | null;
+  // Cross-ecosystem bridge v0 — copied from the matching inventory record.
+  crossEcosystemBridge?: CrossEcosystemBridge | null;
+  // Model-weight loader posture v0 — copied from the matching inventory record.
+  modelWeightLoader?: ModelWeightLoader | null;
+  // Fork-velocity-of-namesake v0 — copied from the analysis result.
+  migration?: RepoMigration | null;
 }
 
 interface SelectedHealth {
@@ -238,6 +376,10 @@ export default function Scanner() {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<ScanResponse | null>(null);
   const [errorState, setErrorState] = useState<ScanErrorState | null>(null);
+  // Chip glossary modal (P1a — Wei + Marco grading-swarm finding). Tooltips on
+  // chips exist via `title` attrs but aren't discoverable; a single ? trigger
+  // in the page header opens an inventory of every chip + its trigger logic.
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
@@ -327,8 +469,20 @@ export default function Scanner() {
     <div className="max-w-7xl mx-auto px-4 py-12">
       {/* Header */}
       <div className="mb-12">
-        <div className="inline-block bg-soy-red text-white text-[10px] font-black px-3 py-1 mb-4 tracking-[0.4em] border-2 border-black">
-          SCANNER v2
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="inline-block bg-soy-red text-white text-[10px] font-black px-3 py-1 tracking-[0.4em] border-2 border-black">
+            SCANNER v2
+          </div>
+          <button
+            type="button"
+            onClick={() => setGlossaryOpen(true)}
+            title="Open chip glossary — what every scanner chip means"
+            aria-label="Open chip glossary"
+            className="shrink-0 inline-flex items-center gap-1.5 border-2 border-soy-bottle bg-white text-soy-bottle hover:bg-soy-bottle hover:text-white transition-colors px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em]"
+          >
+            <span className="font-black">?</span>
+            <span>CHIP GLOSSARY</span>
+          </button>
         </div>
         <h1 className="text-4xl md:text-5xl font-bold uppercase italic tracking-tighter mb-4">
           Find Known Vulnerabilities
@@ -338,6 +492,7 @@ export default function Scanner() {
           to find known vulnerabilities hiding in your resolved dependency tree.
         </p>
       </div>
+      {glossaryOpen && <ChipGlossaryModal onClose={() => setGlossaryOpen(false)} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Form column */}
@@ -608,6 +763,33 @@ function ResultsPanel({
           Inventory unavailable for this scan -- analysis still completed.
         </div>
       )}
+
+      {/* Guard upsell -- only renders alongside scan results. Drives the
+          manual-scan -> install-Guard funnel. */}
+      <div className="mt-10 bg-soy-bottle text-white border-4 border-black shadow-[8px_8px_0px_#E63322] p-8">
+        <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-3">
+          Want this checked on every PR?
+        </h3>
+        <p className="text-sm font-bold uppercase tracking-widest opacity-70 leading-relaxed mb-6 max-w-2xl">
+          Install OpenSoyce Guard to catch risky dependency changes before they merge.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            to="/guard/install"
+            className="inline-flex items-center gap-2 bg-soy-red text-white px-6 py-4 text-sm font-black uppercase italic tracking-widest border-4 border-black shadow-[4px_4px_0px_#000] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#000] transition-all"
+          >
+            Install Guard
+            <ArrowUpRight size={16} />
+          </Link>
+          <Link
+            to="/guard/install"
+            className="inline-flex items-center gap-2 bg-white text-soy-bottle px-6 py-4 text-sm font-black uppercase italic tracking-widest border-4 border-black shadow-[4px_4px_0px_#000] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#000] transition-all"
+          >
+            View Policy Example
+            <ArrowUpRight size={16} />
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
@@ -770,13 +952,25 @@ function InventoryPanel({
             <span>{totals.duplicateCount}</span>
           </div>
         )}
-        <div className="text-soy-bottle">
-          <span className="opacity-50">MISSING LICENSE</span>{' '}
-          <span>{totals.missingLicenseCount}</span>
-          <span className="mx-1 opacity-30">/</span>
-          <span className="opacity-50">REPO</span>{' '}
-          <span>{totals.missingRepositoryCount}</span>
-        </div>
+        {/* Only show MISSING LICENSE/REPO counts when the lockfile format
+            actually carries those fields per package. pnpm-lock, yarn.lock,
+            uv.lock, poetry.lock, and npm-v1/v2 do NOT, so the count would
+            always equal totalPackages -- misleading. */}
+        {totals.missingLicenseCount !== null && totals.missingRepositoryCount !== null && (
+          <div className="text-soy-bottle">
+            <span className="opacity-50">MISSING LICENSE</span>{' '}
+            <span>{totals.missingLicenseCount}</span>
+            <span className="mx-1 opacity-30">/</span>
+            <span className="opacity-50">REPO</span>{' '}
+            <span>{totals.missingRepositoryCount}</span>
+          </div>
+        )}
+        {(totals.missingLicenseCount === null || totals.missingRepositoryCount === null) && (
+          <div className="text-soy-bottle opacity-50" title="This lockfile format does not carry per-package license/repository metadata. License data lives in each package's published package.json, not the lockfile.">
+            <span>LICENSE/REPO META</span>{' '}
+            <span className="font-black">N/A FOR THIS LOCKFILE</span>
+          </div>
+        )}
       </div>
 
       {isYarn && (
@@ -951,6 +1145,21 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
             + {row.secondaryReasons.map(r => REASON_LABEL[r] || r).join(' / ')}
           </span>
         )}
+        {/* Postinstall analysis v0 — same suppression rules as elsewhere. */}
+        <InstallScriptChip name={row.package} hasInstallScript={row.hasInstallScript} />
+        {/* Typo-squat homoglyph v0 — same suppression rules as elsewhere. */}
+        <TypoSquatChip typoSquat={row.possibleTypoSquat} />
+        {/* Dependency-confusion v0 — fires only for names in the user's
+            `.opensoyce-private` file. MEDIUM static; HIGH after active check. */}
+        <DepConfusionChip dependencyConfusion={row.dependencyConfusion} />
+        {/* Cross-ecosystem bridge v0 — informational chip; sky blue (not
+            amber/red) because it's a "scan the other ecosystem too" reminder,
+            not a severity warning. */}
+        <CrossEcosystemBridgeChip bridge={row.crossEcosystemBridge} />
+        {/* Model-weight loader posture v0 — informational chip; AMBER for
+            pickle-loading packages, GREEN for safer formats (safetensors,
+            ONNX). Never affects score, band, or Risk Profile. */}
+        <ModelWeightChip loader={row.modelWeightLoader} />
       </div>
 
       {/* Status zone -- separate row so the copy / chips never collide with
@@ -981,6 +1190,9 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
                 Maint {row.signals.maintenance.toFixed(1)} / Sec {row.signals.security.toFixed(1)} / Act {row.signals.activity.toFixed(1)}
               </span>
             )}
+            {/* Fork-velocity-of-namesake v0 — same chip surface as the
+                per-vuln row block above. */}
+            <MigrationChip migration={row.migration ?? null} />
           </>
         )}
         {row.status === 'IDENTITY_UNRESOLVED' && (
@@ -1015,6 +1227,118 @@ const SCOPE_LABEL: Record<InventoryScope, string> = {
 
 function severityRank(s: Severity): number {
   return SEVERITY_ORDER.indexOf(s);
+}
+
+// Postinstall analysis v0 — informational chip surfaced on inventory rows,
+// vuln rows, and v3b selected-health rows. Suppressed for curated trusted
+// packages (TypeScript, esbuild, sharp, husky, etc.). The chip never
+// contributes to the Risk Profile or composite score; it's a heads-up only.
+const INSTALL_SCRIPT_TOOLTIP =
+  'This package runs install scripts on `npm install` — install scripts can execute arbitrary code. Verify the package is trustworthy.';
+
+function InstallScriptChip({ name, hasInstallScript }: { name: string; hasInstallScript: boolean | undefined }) {
+  if (!hasInstallScript) return null;
+  if (isTrustedInstallScript(name)) return null;
+  return (
+    <span
+      title={INSTALL_SCRIPT_TOOLTIP}
+      className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-300 text-black"
+    >
+      ⚠ INSTALL SCRIPT
+    </span>
+  );
+}
+
+// Typo-squat homoglyph detection v0 — informational chip. Surfaces when the
+// scanned package name's confusables skeleton matches a curated protected
+// name AND the byte sequences differ (the legitimate-install self-match is
+// suppressed inside detectTypoSquat()). The chip never contributes to the
+// Risk Profile or composite score.
+function TypoSquatChip({ typoSquat }: { typoSquat: PossibleTypoSquat | null | undefined }) {
+  if (!typoSquat) return null;
+  const tooltip = `Package name uses characters that visually resemble "${typoSquat.suspectedTarget}". This could be a typo-squat attack — verify the package is the one you intended.`;
+  return (
+    <span
+      title={tooltip}
+      className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-500 text-black"
+    >
+      ⚠ POSSIBLE TYPO-SQUAT
+    </span>
+  );
+}
+
+// Dependency-confusion v0. Surfaces when the package name appears in the
+// user's `.opensoyce-private` list. MEDIUM = static match. HIGH = static
+// match plus the public registry returned 200 for that name (active squat).
+// The chip is informational only — no score / band / Risk Profile impact.
+// The user's own trailing `# comment` from the file (when present) is
+// appended to the tooltip in parentheses so the team's annotation travels
+// with the warning.
+function DepConfusionChip({ dependencyConfusion }: { dependencyConfusion: DependencyConfusion | null | undefined }) {
+  if (!dependencyConfusion) return null;
+  const isActive = dependencyConfusion.confidence === 'HIGH';
+  const tooltip = `${dependencyConfusion.reason}${dependencyConfusion.userComment ? ` (${dependencyConfusion.userComment})` : ''}`;
+  return (
+    <span
+      title={tooltip}
+      className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${
+        isActive ? 'bg-red-500 text-white' : 'bg-amber-500 text-black'
+      }`}
+    >
+      {isActive ? '⚠ ACTIVE DEP CONFUSION' : '⚠ POSSIBLE DEP CONFUSION'}
+    </span>
+  );
+}
+
+// Model-weight loader posture v0 — informational chip surfaced when the
+// inventory contains a known model-loading package (huggingface_hub,
+// transformers, torch, …). The chip is a POSTURE recommendation, not an
+// RCE detector — we do NOT inspect actual model files. Three tiers:
+//   load_pickle / torch_load → AMBER chip recommending safetensors
+//   safe                     → GREEN affirmation chip
+// Never affects Risk Profile, composite score, or verdict band.
+function ModelWeightChip({ loader }: { loader: ModelWeightLoader | null | undefined }) {
+  if (!loader) return null;
+  const isSafe = loader.risk === 'safe';
+  const isTorch = loader.risk === 'torch_load';
+  const saferText = loader.safer ? ` Prefer ${loader.safer}.` : '';
+  const tooltip = isSafe
+    ? `${loader.reason} (using safer model-weight format).`
+    : `${loader.reason}.${saferText} Posture recommendation — OpenSoyce does not scan model files.`;
+  const label = isSafe
+    ? '✓ SAFE MODEL FORMAT'
+    : isTorch
+      ? '⚠ TORCH.LOAD: USE SAFETENSORS'
+      : '⚠ USE SAFETENSORS';
+  return (
+    <span
+      title={tooltip}
+      className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${
+        isSafe ? 'bg-emerald-500 text-black' : 'bg-amber-300 text-black'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+// Cross-ecosystem bridge v0 — informational chip surfaced when the inventory
+// contains a package that has a well-known sibling in the OTHER ecosystem
+// (npm ↔ PyPI). The chip's job is "did you scan the other side too?" — it
+// is NOT a security-severity warning. Distinct sky/cyan color so users can
+// visually distinguish it from the amber/red squat-class chips. Never
+// affects Risk Profile, composite score, or verdict band.
+function CrossEcosystemBridgeChip({ bridge }: { bridge: CrossEcosystemBridge | null | undefined }) {
+  if (!bridge) return null;
+  const tooltip = `This package has a sibling in ${bridge.siblingEcosystem}: ${bridge.sibling}. ${bridge.reason}. Verify both ecosystems are scanned when assessing supply-chain risk.`;
+  return (
+    <span
+      title={tooltip}
+      className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-sky-500 text-black"
+    >
+      ⚠ CROSS-ECOSYSTEM BRIDGE
+    </span>
+  );
 }
 
 interface InventoryRowProps {
@@ -1087,6 +1411,24 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
             REPO UNRESOLVED
           </span>
         )}
+        {/* Postinstall analysis v0 — informational only; suppressed for
+            curated trusted packages (TypeScript, esbuild, sharp, etc.). */}
+        <InstallScriptChip name={pkg.name} hasInstallScript={pkg.hasInstallScript} />
+        {/* Typo-squat homoglyph v0 — informational only; never affects
+            score or band. Suppressed for the legitimate-install self-match
+            inside detectTypoSquat() so this only fires on attacks. */}
+        <TypoSquatChip typoSquat={pkg.possibleTypoSquat} />
+        {/* Dependency-confusion v0 — only fires for names listed in
+            `.opensoyce-private`. MEDIUM static / HIGH on active squat. */}
+        <DepConfusionChip dependencyConfusion={pkg.dependencyConfusion} />
+        {/* Cross-ecosystem bridge v0 — informational only. The chip points
+            at the sibling package in the other ecosystem (npm ↔ PyPI) so
+            users remember to scan both lockfiles when both are in play. */}
+        <CrossEcosystemBridgeChip bridge={pkg.crossEcosystemBridge} />
+        {/* Model-weight loader posture v0 — fires for curated AI model
+            loaders (huggingface_hub, transformers, torch, safetensors, …).
+            Posture recommendation, not an RCE detector. */}
+        <ModelWeightChip loader={pkg.modelWeightLoader} />
       </div>
       {expanded && multi && (
         <div className="pb-3 pt-1 pl-2 border-t border-soy-bottle/10">
@@ -1119,6 +1461,9 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
 // The "REPO" prefix is mandatory at call sites so this never visually collides
 // with the advisory severity pill (which is also green/amber/red but means
 // something entirely different).
+//
+// HIGH MOMENTUM is included for type completeness only — the runScan path
+// never produces it (editorial-only tier; see src/shared/verdict.js).
 const VERDICT_CHIP: Record<RepoVerdict, string> = {
   'USE READY': 'bg-emerald-500 text-black',
   'FORKABLE': 'bg-emerald-500 text-black',
@@ -1160,10 +1505,12 @@ function VulnRow({ v }: { v: Vulnerability }) {
         </span>
       </div>
 
-      {/* CVE / GHSA IDs */}
-      {v.ids?.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {v.ids.map((id) => (
+      {/* CVE / GHSA IDs + postinstall chip. The chip lives next to the IDs
+          so the "vulnerable AND runs install scripts" combo is unmistakable.
+          Suppressed for curated trusted packages (TypeScript, sharp, …). */}
+      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat || v.dependencyConfusion || v.crossEcosystemBridge || v.modelWeightLoader) && (
+        <div className="flex flex-wrap gap-1.5 mb-3 items-center">
+          {(v.ids || []).map((id) => (
             <span
               key={id}
               className="bg-soy-label/40 text-soy-bottle px-2 py-0.5 text-[10px] font-mono font-bold border border-soy-bottle/30 break-all"
@@ -1171,6 +1518,20 @@ function VulnRow({ v }: { v: Vulnerability }) {
               {id}
             </span>
           ))}
+          <InstallScriptChip name={v.package} hasInstallScript={v.hasInstallScript} />
+          {/* Typo-squat homoglyph v0 — the "vulnerable AND homoglyph"
+              combo is the most-dangerous case, so the chip lives next to
+              the IDs alongside the install-script chip. */}
+          <TypoSquatChip typoSquat={v.possibleTypoSquat} />
+          {/* Dependency-confusion v0 — same chip surface. The "vulnerable
+              AND active dep-confusion" combo is the worst-case stack. */}
+          <DepConfusionChip dependencyConfusion={v.dependencyConfusion} />
+          {/* Cross-ecosystem bridge v0 — informational. Points at the
+              sibling in the other ecosystem so users scan both sides. */}
+          <CrossEcosystemBridgeChip bridge={v.crossEcosystemBridge} />
+          {/* Model-weight loader posture v0 — chip surface alongside the
+              other informational chips. Posture recommendation only. */}
+          <ModelWeightChip loader={v.modelWeightLoader} />
         </div>
       )}
 
@@ -1239,11 +1600,14 @@ const LABEL_STYLES: Record<SummaryLabel, { pill: string; copy: string }> = {
 
 // Distribution band display order. UNAVAILABLE last so the eye lands on
 // healthy bands first when they exist. Reuses the VERDICT_CHIP colors.
+//
+// HIGH MOMENTUM is intentionally omitted: it is an editorial-only tier
+// (see src/shared/verdict.js) and runScan never produces it, so it does
+// not appear in the scan-result health distribution chip set.
 const HEALTH_BAND_ORDER: HealthBandKey[] = [
   'USE READY',
   'FORKABLE',
   'STABLE',
-  'HIGH MOMENTUM',
   'WATCHLIST',
   'RISKY',
   'STALE',
@@ -1424,7 +1788,7 @@ function RepoHealthBlock({ v }: { v: Vulnerability }) {
   }
 
   if (!v.repoHealth) return null;
-  const { soyceScore, verdict, signals } = v.repoHealth;
+  const { soyceScore, verdict, signals, migration } = v.repoHealth;
   const chip = VERDICT_CHIP[verdict] || 'bg-soy-label text-black';
 
   return (
@@ -1442,6 +1806,21 @@ function RepoHealthBlock({ v }: { v: Vulnerability }) {
               {v.resolvedRepo}
             </a>
           ) : null}
+          {/* Borrowed-trust signal (P0-AI-2). When the GitHub package.json
+              names a different package than the npm registry claims, the
+              Soyce score is being inherited from an unrelated repo. */}
+          {v.verified === false ? (
+            <span
+              className="self-start px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-300 text-black"
+              title={
+                v.mismatchReason === 'github_pkg_name_different'
+                  ? 'GitHub repo package.json names a different npm package — score may be borrowed.'
+                  : 'GitHub repo has no root package.json with a name field — identity unverifiable.'
+              }
+            >
+              ⚠ UNVERIFIED IDENTITY
+            </span>
+          ) : null}
           <span
             className={`self-start px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${chip}`}
           >
@@ -1450,12 +1829,49 @@ function RepoHealthBlock({ v }: { v: Vulnerability }) {
           <span className="font-mono text-xs md:text-sm font-bold tracking-tight">
             Soyce {soyceScore.toFixed(1)}
           </span>
+          {/* Fork-velocity-of-namesake v0 — small ⚠ MIGRATED chip. Tooltip
+              carries the full reason; click target links to the successor
+              when one is known (deprecated entries link to lookup root). */}
+          <MigrationChip migration={migration ?? null} />
         </div>
         <div className="font-mono italic text-[11px] tracking-tight opacity-70">
           Maint {signals.maintenance.toFixed(1)} / Sec {signals.security.toFixed(1)} / Activity {signals.activity.toFixed(1)}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Fork-velocity-of-namesake v0 — small chip surfaced on vuln + selected-health
+ * rows when the scored repo has been migrated. Click target links to the
+ * successor (or to the lookup root when the entry was deprecated). Tooltip
+ * carries the full reason + confidence. Hidden when migration is null (the
+ * common case).
+ */
+function MigrationChip({ migration }: { migration: RepoMigration | null | undefined }) {
+  if (!migration) return null;
+  const succ = migration.successor;
+  const tooltip = succ
+    ? `Migrated to ${succ.owner}/${succ.repo}${migration.migratedAt ? ` on ${migration.migratedAt}` : ''} — ${migration.reason} (Confidence: ${migration.confidence})`
+    : `Deprecated${migration.migratedAt ? ` on ${migration.migratedAt}` : ''} — ${migration.reason} (Confidence: ${migration.confidence})`;
+  const href = succ
+    ? `/lookup?q=${succ.owner}/${succ.repo}`
+    : null;
+  const inner = (
+    <span
+      title={tooltip}
+      className="inline-flex items-center self-start px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-300 text-black"
+    >
+      ⚠ MIGRATED
+    </span>
+  );
+  return href ? (
+    <Link to={href} className="no-underline">
+      {inner}
+    </Link>
+  ) : (
+    inner
   );
 }
 
@@ -1489,7 +1905,7 @@ const DIMENSION_LABEL: Record<RiskDimensionKey, string> = {
   remediationReadiness: 'REMEDIATION',
   maintainerTrust: 'MAINTAINER TRUST',
   treeComplexity: 'TREE COMPLEXITY',
-  transparency: 'TRANSPARENCY',
+  identityResolution: 'IDENTITY RESOLUTION',
 };
 
 const DIMENSION_ORDER: RiskDimensionKey[] = [
@@ -1497,7 +1913,7 @@ const DIMENSION_ORDER: RiskDimensionKey[] = [
   'remediationReadiness',
   'maintainerTrust',
   'treeComplexity',
-  'transparency',
+  'identityResolution',
 ];
 
 function RiskProfilePanel({ result }: { result: ScanResponse }) {
@@ -1682,6 +2098,212 @@ function RiskProfilePanel({ result }: { result: ScanResponse }) {
               <span>{coverage.selectedSkippedBudget}</span>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Chip glossary modal (P1a — grading-swarm finding from Wei + Marco). Lists
+// every chip the Scanner can render plus the signal that triggers it. Tooltips
+// on individual chips remain unchanged; this is the discoverable inventory.
+// Brutalist style matches the rest of Scanner: thick borders, dark backdrop,
+// inline panel. No new dependencies — fixed-position overlay + backdrop click.
+function ChipGlossaryModal({ onClose }: { onClose: () => void }) {
+  // Keep the entry list co-located with the rendering so adding a new chip
+  // means touching one place. Order: severity → identity/security → repo
+  // health bands → maintainer/identity → ecosystem → model weights, matching
+  // the visual scan order on a typical results row.
+  const sections: Array<{
+    title: string;
+    entries: Array<{ chip: string; tone?: 'red' | 'amber' | 'green' | 'neutral'; desc: string }>;
+  }> = [
+    {
+      title: 'VULNERABILITY / SECURITY',
+      entries: [
+        {
+          chip: 'CRITICAL / HIGH / MEDIUM / LOW',
+          tone: 'red',
+          desc: 'OSV-reported severity for known advisories on this exact package version. The severity pill mirrors what OSV says — we do not invent severities or override them.',
+        },
+        {
+          chip: '⚠ N OPEN HIGH/CRIT',
+          tone: 'red',
+          desc: 'Verdict-band cap. The repo\'s composite score would be USE READY but it has N open CRITICAL/HIGH advisories on its OWN code. The band is capped at FORKABLE / WATCHLIST. Source: P0-AI-1 logic in src/shared/verdict.js.',
+        },
+        {
+          chip: '⚠ UNVERIFIED IDENTITY',
+          tone: 'amber',
+          desc: 'The npm package\'s "repository" URL points at a GitHub repo whose package.json#name (or pyproject.toml [project].name) does NOT match this package\'s name. Possible borrowed-trust attack — a typo-squat squatting a healthy repo\'s repository field to inherit its score.',
+        },
+        {
+          chip: '⚠ POSSIBLE TYPO-SQUAT',
+          tone: 'amber',
+          desc: 'Package name reduces to the same Unicode confusables skeleton as a curated protected name (e.g. Cyrillic а in lаngchain). No false-positive on legitimate installs — self-match is byte-exact.',
+        },
+        {
+          chip: '⚠ POSSIBLE DEP CONFUSION',
+          tone: 'amber',
+          desc: 'Package name appears in the user\'s .opensoyce-private declaration. Static signal — the name exists in your private namespace AND could exist on a public registry, so an attacker could squat it.',
+        },
+        {
+          chip: '⚠ ACTIVE DEP CONFUSION',
+          tone: 'red',
+          desc: 'Escalated form of the above: the public registry actually returned 200 for that private name RIGHT NOW. An attacker may already be squatting — investigate immediately.',
+        },
+        {
+          chip: '⚠ INSTALL SCRIPT',
+          tone: 'amber',
+          desc: 'Package runs preinstall / install / postinstall hooks on `npm install` (the event-stream / ua-parser-js attack vector). Informational only — many legitimate packages do this. Trusted packages (typescript, esbuild, sharp, …) are suppressed via src/data/trustedInstallScripts.js.',
+        },
+      ],
+    },
+    {
+      title: 'REPO HEALTH BANDS (Soyce verdict)',
+      entries: [
+        { chip: 'USE READY  ≥ 8.5', tone: 'green', desc: 'Safe to adopt — strong across all pillars (maintenance, community, security, docs, activity).' },
+        { chip: 'FORKABLE   ≥ 7.0', tone: 'green', desc: 'Healthy and trustworthy — fork-worthy as a base. NOT a verdict that the project is abandoned: most popular OSS projects land here. The label means the codebase is solid enough to build on.' },
+        { chip: 'STABLE     ≥ 6.0', tone: 'neutral', desc: 'Mature, lower-velocity, still maintained — releases + triage without daily commits.' },
+        { chip: 'WATCHLIST  ≥ 4.0', tone: 'amber', desc: 'Real issues; verify per-pillar breakdown before adoption.' },
+        { chip: 'RISKY      ≥ 2.5', tone: 'red', desc: 'Multiple bands flag concerns — maintenance debt, license gap, unaddressed advisories.' },
+        { chip: 'STALE      < 2.5', tone: 'red', desc: 'Abandoned or dormant — no recent commits, releases, or triage.' },
+      ],
+    },
+    {
+      title: 'MAINTAINER / IDENTITY',
+      entries: [
+        {
+          chip: '⚠ SINGLE-MAINTAINER',
+          tone: 'amber',
+          desc: 'Verdict-band cap. Top-1 commit share > 85% AND ≤ 2 non-bot contributors AND > 30 days since last commit. Caps USE READY → FORKABLE only. Suppressed for vendor-official SDKs via src/data/vendorSdks.ts.',
+        },
+        {
+          chip: 'REPO RESOLVED',
+          tone: 'green',
+          desc: 'We mapped this npm / PyPI package to a concrete GitHub repo via the registry "repository" field (HIGH confidence).',
+        },
+        {
+          chip: 'REPO UNRESOLVED',
+          tone: 'neutral',
+          desc: 'We could not map the package to a source repo — repository field missing, malformed, or pointing somewhere we can\'t verify.',
+        },
+      ],
+    },
+    {
+      title: 'ECOSYSTEM / SUPPLY CHAIN',
+      entries: [
+        {
+          chip: '⚠ CROSS-ECOSYSTEM BRIDGE',
+          tone: 'amber',
+          desc: 'This package has a curated sibling in the OTHER ecosystem (npm ↔ PyPI). If you only scanned one lockfile, you missed half the supply-chain surface. Click the sibling to investigate.',
+        },
+        {
+          chip: '⚠ MIGRATED',
+          tone: 'amber',
+          desc: 'Project has migrated to a successor repo. The score shown reflects the OLD repo (which is now dormant). Click for the successor — the active codebase is elsewhere.',
+        },
+      ],
+    },
+    {
+      title: 'MODEL WEIGHTS (POSTURE, not RCE detection)',
+      entries: [
+        {
+          chip: '⚠ USE SAFETENSORS',
+          tone: 'amber',
+          desc: 'Package can load pickle-format model weights, and pickle deserialization executes arbitrary code at load time. Prefer safetensors / ONNX. NOTE: we don\'t scan the weight files themselves — we flag the loader.',
+        },
+        {
+          chip: '⚠ TORCH.LOAD: USE SAFETENSORS',
+          tone: 'amber',
+          desc: 'Same RCE-on-load risk, specific to torch.load(). Use weights_only=True (PyTorch ≥ 2.0) or convert to safetensors.',
+        },
+        {
+          chip: '✓ SAFE MODEL FORMAT',
+          tone: 'green',
+          desc: 'Package IS safetensors / onnxruntime — the safer choice. No code execution on weight load.',
+        },
+      ],
+    },
+  ];
+
+  const toneClass = (tone?: 'red' | 'amber' | 'green' | 'neutral') => {
+    switch (tone) {
+      case 'red': return 'bg-soy-red text-white border-soy-red';
+      case 'amber': return 'bg-amber-400 text-black border-black';
+      case 'green': return 'bg-emerald-500 text-black border-black';
+      default: return 'bg-white text-black border-black';
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Chip glossary"
+      className="fixed inset-0 z-[100] flex items-start justify-center p-4 md:p-8 overflow-y-auto"
+    >
+      {/* Backdrop — click to dismiss */}
+      <button
+        type="button"
+        aria-label="Close glossary"
+        onClick={onClose}
+        className="fixed inset-0 bg-black/70 cursor-default"
+      />
+      {/* Panel */}
+      <div className="relative bg-soy-label border-4 border-black shadow-[12px_12px_0px_#E63322] max-w-4xl w-full my-4">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-black text-white border-b-4 border-soy-red px-6 py-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-soy-red text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.3em] shrink-0">
+              GLOSSARY
+            </div>
+            <h2 className="text-xl md:text-2xl font-black uppercase italic tracking-tight truncate">
+              Chip Glossary
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="shrink-0 border-2 border-white px-3 py-1 text-[11px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-colors"
+          >
+            CLOSE
+          </button>
+        </div>
+
+        <div className="px-6 py-6 space-y-8">
+          <p className="text-xs font-bold uppercase tracking-widest opacity-60 leading-relaxed">
+            Every chip rendered by the scanner, plus the signal that triggers it. Informational chips never change the composite score, Risk Profile, or verdict band unless explicitly noted as a band-cap.
+          </p>
+
+          {sections.map(section => (
+            <div key={section.title}>
+              <h3 className="text-[11px] md:text-xs font-black uppercase tracking-[0.3em] text-soy-red mb-3 border-b-2 border-soy-bottle/20 pb-2">
+                {section.title}
+              </h3>
+              <ul className="space-y-3">
+                {section.entries.map(entry => (
+                  <li key={entry.chip} className="flex flex-col md:flex-row md:items-start gap-3">
+                    <span
+                      className={`shrink-0 inline-block self-start border-2 px-2 py-1 text-[10px] font-black uppercase tracking-[0.15em] md:min-w-[16rem] ${toneClass(entry.tone)}`}
+                    >
+                      {entry.chip}
+                    </span>
+                    <p className="text-xs md:text-sm font-medium opacity-80 leading-relaxed">
+                      {entry.desc}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+
+          <p className="text-[10px] font-bold uppercase tracking-widest opacity-50 border-t-2 border-soy-bottle/20 pt-4">
+            Want the full math? See the{' '}
+            <a href="/methodology" className="underline text-soy-red hover:opacity-80">
+              methodology page
+            </a>{' '}
+            — every signal, every weight, every known limitation, named out loud.
+          </p>
         </div>
       </div>
     </div>
