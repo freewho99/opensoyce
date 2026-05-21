@@ -17,6 +17,109 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+        slug: 'blind-trust-is-a-production-risk',
+        primaryProductAction: 'scanner',
+        title: "Blind Trust Is a Production Risk.",
+        subtitle: "One poisoned extension. 3,800 repos. Yours could be next. Here's the firewall that stops the merge before it lands.",
+        category: "PRODUCT",
+        emoji: "🔥",
+        readTime: '5 min',
+        date: 'MAY 21, 2026',
+        featured: true,
+        heroImage: '/blog/automerge-governor-hero.png',
+        metaDescription: "OpenSoyce's new Automerge Governor classifies every dependency PR by risk tier — Tier 0 through Tier 4 — and blocks auto-merge when lifecycle scripts, missing provenance, or suspicious binaries appear.",
+        tags: ['automerge', 'supply-chain', 'dependency-firewall', 'opensoyce', 'security'],
+        content: `
+        ## The Setup
+
+        You ever notice how people be trusting strangers on the internet like they know 'em personally?
+
+        That's what your CI/CD pipeline doing every time Dependabot slides into your inbox with a "minor patch update" and you just click merge like it's nothing.
+
+        Bro. That's how 3,800 GitHub repos got walked.
+
+        One poisoned VS Code extension. One forged provenance badge that said "legit" when it was absolutely not. One auto-merge that nobody stopped.
+
+        Microsoft got got. Inside their own house. By their own tools.
+
+        And everybody just sat there watching like it was somebody else's problem.
+
+        It ain't somebody else's problem.
+
+        ---
+
+        ## The New Tool: Automerge Governor
+
+        We built something at [OpenSoyce](https://opensoyce.com) that stops this before it starts.
+
+        It's called the **Automerge Governor** — and it's a risk-tiered dependency firewall that lives inside your PR pipeline.
+
+        Here's the simple version: not all packages are created equal. Your \`@types/node\` update? That's a very different thing from your \`stripe\` update. Or your \`jsonwebtoken\` update. Or your \`esbuild\` update. They all look the same in your Dependabot queue. They are absolutely not the same.
+
+        The Governor knows the difference.
+
+        ![automerge-governor-3800-repos](/blog/automerge-governor-3800-repos.png)
+
+        ---
+
+        ## Five Tiers, Zero Blind Trust
+
+        **Tier 0 — The chill ones.** Pure type definitions, eslint configs, prettier configs. These can auto-merge after 24 hours if CI passes and the signature checks out.
+
+        **Tier 1 — Normal app deps.** UI libs, network helpers, common utilities. Minor and patch updates are reviewable. Major updates need a human.
+
+        **Tier 2 — Build chain.** Vite, webpack, TypeScript, babel, esbuild, rollup. These compile your code. A compromised bundler literally rewrites what ships. Everything above a patch needs a second look.
+
+        **Tier 3 — Privileged dev tools.** CLIs, VS Code extensions, MCP agents, Copilot plugins, Husky, lint-staged, Vercel CLI. If it runs with elevated context, it gets elevated scrutiny. Every update. No exceptions.
+
+        **Tier 4 — Never blind.** Auth, JWT, passport, crypto, Stripe, web3, deploy pipelines, secret vaults. These do not auto-merge. Period. A security owner signs off or the PR sits.
+
+        ---
+
+        ## The Firewall Logic
+
+        Even if your package falls in a "safe" tier, the Governor still checks:
+
+        - Did it add a **lifecycle script** that wasn't there before? Blocked.
+        - Did it add a **native binary**? Blocked.
+        - Did **CI fail**? Blocked.
+        - Is the **registry signature unverified**? Blocked.
+        - Was it published **less than 24 hours ago** (Tier 0/1) or **72 hours** (Tier 2+)? Delayed — let the community catch it first.
+        - Is **provenance missing** on a Tier 2+ package? Flagged for review.
+        - Did the **maintainer identity change**? Flagged.
+        - Did it introduce **10+ new transitive deps** overnight? Flagged.
+
+        ![automerge-governor-pr-firewall](/blog/automerge-governor-pr-firewall.png)
+
+        ---
+
+        ## The Irony Nobody Talks About
+
+        The attack on Microsoft wasn't some zero-day exploit. It wasn't a nation-state cracking SHA-256. It was a developer tool — the kind that installs itself with elevated permissions and runs in your IDE all day long — shipping a tampered update through the auto-merge conveyor belt.
+
+        The supply chain isn't a theoretical attack surface. It's the front door. And most teams have it propped open.
+
+        Here's your checklist before tomorrow morning:
+
+        - Check your `router_init.js` and any extension loader files for unsigned eval() calls
+        - Run every IDE plugin and CLI tool through [OpenSoyce Scanner](https://opensoyce.com/scanner) — Tier 3 packages especially
+        - Look at your Leaderboards: [opensoyce.com/leaderboards](https://opensoyce.com/leaderboards) will show you which of your deps have gone dark in the last 90 days
+        - If you're running GitHub Actions, check your reusable workflow dependencies — they're Tier 3 too
+
+        ---
+
+        ## What Happens Next
+
+        The Governor is live in the OpenSoyce IDE ([opensoyce.com/lookup](https://opensoyce.com/lookup)). You can simulate any update PR — flip the toggles for lifecycle scripts, provenance, publish age, CI status — and watch the decision change in real time.
+
+        Try it on a package you've been auto-merging.
+
+        You might be surprised what you've been letting through.
+
+        [Check your stack →](https://opensoyce.com/scanner)
+        `
+  },
+  {
     slug: 'the-silent-rot-problem',
     primaryProductAction: 'scanner',
     title: "The Silent Rot Problem",
