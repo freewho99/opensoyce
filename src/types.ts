@@ -127,3 +127,41 @@ export type WatchlistItem = {
   initialScore: number;
   dateAdded: string;
 };
+
+export type AutomergeVerdict = 'AUTO-MERGE ALLOWED' | 'AUTO-MERGE DELAYED' | 'AUTO-MERGE NEEDS REVIEW' | 'AUTO-MERGE BLOCKED';
+
+export type DependencyUpdatePR = {
+  packageName: string;
+  fromVersion: string;
+  toVersion: string;
+  changeType: 'patch' | 'minor' | 'major';
+  
+  // Behavior Diff
+  addsLifecycleScript: boolean;
+  addsNativeBinary: boolean;
+  newTransitiveDepsCount: number;
+  publishAgeHours: number;
+  
+  // Integrity & Trust Signals
+  provenancePresent: boolean;
+  registrySignatureVerified: boolean;
+  maintainerIdentityStable: boolean;
+  sastUpstream: boolean;
+  vulnerabilityAuditPass: boolean;
+  ciPasses: boolean;
+  lockfileDiffSize: 'small' | 'large';
+};
+
+export type AutomergeReason = {
+  severity: 'BLOCKED' | 'NEEDS REVIEW' | 'DELAYED' | 'ALLOWED';
+  message: string;
+};
+
+export type AutomergeResult = {
+  decision: AutomergeVerdict;
+  tier: number;
+  tierName: string;
+  reasons: AutomergeReason[];
+  recommendedAction: string;
+};
+

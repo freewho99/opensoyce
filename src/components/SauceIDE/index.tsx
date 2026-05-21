@@ -6,6 +6,7 @@ import SauceTracePanel from './SauceTracePanel';
 import { Project, ExtensionExploitRisk } from '../../types';
 import { ShieldAlert, ExternalLink } from 'lucide-react';
 import { verdictFor, trustPostureFor, detectExtensionExploitRisk } from '../../shared/verdict.js';
+import { assessAutomergePolicy } from '../../shared/governor.js';
 import ReasoningTraceDrawer from './ReasoningTraceDrawer';
 
 export type EvidenceTabKey =
@@ -38,6 +39,21 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
   const [simHasSast, setSimHasSast] = useState(!!result.hasSast);
   const [simBusFactorHealthy, setSimBusFactorHealthy] = useState(result.busFactorHealthy !== false);
   const [showTraceDrawer, setShowTraceDrawer] = useState(false);
+
+  // Dependency Update Governor States
+  const [depPackageName, setDepPackageName] = useState('lodash');
+  const [depChangeType, setDepChangeType] = useState<'patch' | 'minor' | 'major'>('patch');
+  const [depAddsLifecycleScript, setDepAddsLifecycleScript] = useState(false);
+  const [depAddsNativeBinary, setDepAddsNativeBinary] = useState(false);
+  const [depNewTransitiveDepsCount, setDepNewTransitiveDepsCount] = useState(0);
+  const [depPublishAgeHours, setDepPublishAgeHours] = useState(48);
+  const [depProvenancePresent, setDepProvenancePresent] = useState(true);
+  const [depRegistrySignatureVerified, setDepRegistrySignatureVerified] = useState(true);
+  const [depMaintainerIdentityStable, setDepMaintainerIdentityStable] = useState(true);
+  const [depSastUpstream, setDepSastUpstream] = useState(true);
+  const [depVulnerabilityAuditPass, setDepVulnerabilityAuditPass] = useState(true);
+  const [depCiPasses, setDepCiPasses] = useState(true);
+  const [depLockfileDiffSize, setDepLockfileDiffSize] = useState<'small' | 'large'>('small');
 
   // Sync simulator state when result changes
   React.useEffect(() => {
@@ -136,6 +152,24 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
     hasDependabot: simDependabot,
     hasSast: simSast,
   });
+
+  const automergeResult = assessAutomergePolicy({
+    packageName: depPackageName,
+    fromVersion: depChangeType === 'major' ? '3.0.0' : depChangeType === 'minor' ? '4.17.0' : '4.17.21',
+    toVersion: depChangeType === 'major' ? '4.0.0' : depChangeType === 'minor' ? '4.18.0' : '4.17.22',
+    changeType: depChangeType,
+    addsLifecycleScript: depAddsLifecycleScript,
+    addsNativeBinary: depAddsNativeBinary,
+    newTransitiveDepsCount: depNewTransitiveDepsCount,
+    publishAgeHours: depPublishAgeHours,
+    provenancePresent: depProvenancePresent,
+    registrySignatureVerified: depRegistrySignatureVerified,
+    maintainerIdentityStable: depMaintainerIdentityStable,
+    sastUpstream: depSastUpstream,
+    vulnerabilityAuditPass: depVulnerabilityAuditPass,
+    ciPasses: depCiPasses,
+    lockfileDiffSize: depLockfileDiffSize
+  }, result);
 
   const meta = {
     totalStars: result.stars,
@@ -302,6 +336,33 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             setSimHasSast={setSimHasSast}
             simBusFactorHealthy={simBusFactorHealthy}
             setSimBusFactorHealthy={setSimBusFactorHealthy}
+            automergeResult={automergeResult}
+            depPackageName={depPackageName}
+            setDepPackageName={setDepPackageName}
+            depChangeType={depChangeType}
+            setDepChangeType={setDepChangeType}
+            depAddsLifecycleScript={depAddsLifecycleScript}
+            setDepAddsLifecycleScript={setDepAddsLifecycleScript}
+            depAddsNativeBinary={depAddsNativeBinary}
+            setDepAddsNativeBinary={setDepAddsNativeBinary}
+            depNewTransitiveDepsCount={depNewTransitiveDepsCount}
+            setDepNewTransitiveDepsCount={setDepNewTransitiveDepsCount}
+            depPublishAgeHours={depPublishAgeHours}
+            setDepPublishAgeHours={setDepPublishAgeHours}
+            depProvenancePresent={depProvenancePresent}
+            setDepProvenancePresent={setDepProvenancePresent}
+            depRegistrySignatureVerified={depRegistrySignatureVerified}
+            setDepRegistrySignatureVerified={setDepRegistrySignatureVerified}
+            depMaintainerIdentityStable={depMaintainerIdentityStable}
+            setDepMaintainerIdentityStable={setDepMaintainerIdentityStable}
+            depSastUpstream={depSastUpstream}
+            setDepSastUpstream={setDepSastUpstream}
+            depVulnerabilityAuditPass={depVulnerabilityAuditPass}
+            setDepVulnerabilityAuditPass={setDepVulnerabilityAuditPass}
+            depCiPasses={depCiPasses}
+            setDepCiPasses={setDepCiPasses}
+            depLockfileDiffSize={depLockfileDiffSize}
+            setDepLockfileDiffSize={setDepLockfileDiffSize}
           />
         </div>
 
