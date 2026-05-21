@@ -3,9 +3,10 @@ import RepoMapPanel from './RepoMapPanel';
 import EvidenceViewer from './EvidenceViewer';
 import SauceJudgePanel from './SauceJudgePanel';
 import SauceTracePanel from './SauceTracePanel';
-import { Project } from '../../types';
+import { Project, ExtensionExploitRisk } from '../../types';
 import { ShieldAlert, ExternalLink } from 'lucide-react';
-import { verdictFor, trustPostureFor } from '../../shared/verdict.js';
+import { verdictFor, trustPostureFor, detectExtensionExploitRisk } from '../../shared/verdict.js';
+import ReasoningTraceDrawer from './ReasoningTraceDrawer';
 
 export type EvidenceTabKey =
   | 'readme'
@@ -13,7 +14,8 @@ export type EvidenceTabKey =
   | 'license'
   | 'security'
   | 'commits'
-  | 'dependencies';
+  | 'dependencies'
+  | 'templates';
 
 export interface EvidenceFocus {
   tab: EvidenceTabKey;
@@ -30,30 +32,110 @@ interface SauceIDEProps {
 }
 
 export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }: SauceIDEProps) {
-  const total = result.score.overall;
-  const er = result.extensionExploitRisk || { active: false, status: 'NONE' as const, reasons: [], confidence: 'medium' as const };
-  const verdict = verdictFor(total, {
-    advisorySummary: result.advisories,
-    maintainerConcentration: result.maintainerConcentration,
-    vendorSdkMatch: !!result.vendorSdk,
-    extensionExploitRisk: er,
-  });
-  const posture = trustPostureFor(total, {
-    advisorySummary: result.advisories,
-    maintainerConcentration: result.maintainerConcentration,
-    vendorSdkMatch: !!result.vendorSdk,
-    extensionExploitRisk: er,
-    hasDependabot: result.hasDependabot,
-    hasSast: result.hasSast,
-  });
+  // Simulator State Toggles
+  const [simulatorActive, setSimulatorActive] = useState(false);
+  const [simHasDependabot, setSimHasDependabot] = useState(!!result.hasDependabot);
+  const [simHasSast, setSimHasSast] = useState(!!result.hasSast);
+  const [simBusFactorHealthy, setSimBusFactorHealthy] = useState(result.busFactorHealthy !== false);
+  const [showTraceDrawer, setShowTraceDrawer] = useState(false);
+
+  // Sync simulator state when result changes
+  React.useEffect(() => {
+    setSimHasDependabot(!!result.hasDependabot);
+    setSimHasSast(!!result.hasSast);
+    setSimBusFactorHealthy(result.busFactorHealthy !== false);
+  }, [result]);
 
   const breakdown = result.score.raw || {
     maintenance: (result.score.maintenance / 100) * 3.0,
     security: (result.score.security / 100) * 2.0,
     community: (result.score.community / 100) * 2.5,
     documentation: (result.score.documentation / 100) * 1.5,
-    activity: (result.score.activity || 0 / 100) * 1.0,
+    activity: ((result.score.activity || 0) / 100) * 1.0,
   };
+
+  // Re-compute scoring and exploit risk using overrides if simulator is active
+  let simSecurity = breakdown.security;
+  if (simulatorActive) {
+    if (!result.hasDependabot && simHasDependabot) {
+      simSecurity += 0.25;
+    }
+    if (result.hasDependabot && !simHasDependabot) {
+      simSecurity -= 0.25;
+    }
+    if (!result.hasSast && simHasSast) {
+      simSecurity += 0.25;
+    }
+    if (result.hasSast && !simHasSast) {
+      simSecurity -= 0.25;
+    }
+    simSecurity = Math.max(0, Math.min(2.0, simSecurity));
+  }
+
+  let simCommunity = breakdown.community;
+  if (simulatorActive) {
+    if (result.busFactorHealthy === false && simBusFactorHealthy) {
+      simCommunity += 0.2;
+    }
+    if (result.busFactorHealthy !== false && !simBusFactorHealthy) {
+      simCommunity -= 0.2;
+    }
+    simCommunity = Math.max(0, Math.min(2.5, simCommunity));
+  }
+
+  const simBreakdown = {
+    ...breakdown,
+    security: simSecurity,
+    community: simCommunity,
+  };
+
+  const simTotal = simulatorActive
+    ? parseFloat((breakdown.maintenance + simSecurity + simCommunity + breakdown.documentation + breakdown.activity).toFixed(1))
+    : result.score.overall;
+
+  const total = simTotal;
+
+  const currentMc = result.maintainerConcentration || {
+    isSingleMaintainer: result.busFactorHealthy === false,
+    topShare: 0.9,
+    nonBotContributorCount: result.contributors ?? 1,
+    daysSinceLastCommit: 45,
+  };
+
+  const simMc = simulatorActive
+    ? {
+        ...currentMc,
+        isSingleMaintainer: !simBusFactorHealthy,
+        nonBotContributorCount: simBusFactorHealthy ? Math.max(currentMc.nonBotContributorCount, 3) : 1,
+      }
+    : currentMc;
+
+  const simDependabot = simulatorActive ? simHasDependabot : !!result.hasDependabot;
+  const simSast = simulatorActive ? simHasSast : !!result.hasSast;
+
+  const er = detectExtensionExploitRisk({
+    repoData: result,
+    workflows: null,
+    hasDependabot: simDependabot ? true : false,
+    hasSast: simSast ? true : false,
+    maintainerConcentration: simMc,
+  }) as ExtensionExploitRisk;
+
+  const verdict = verdictFor(simTotal, {
+    advisorySummary: result.advisories,
+    maintainerConcentration: simMc,
+    vendorSdkMatch: !!result.vendorSdk,
+    extensionExploitRisk: er,
+  });
+
+  const posture = trustPostureFor(simTotal, {
+    advisorySummary: result.advisories,
+    maintainerConcentration: simMc,
+    vendorSdkMatch: !!result.vendorSdk,
+    extensionExploitRisk: er,
+    hasDependabot: simDependabot,
+    hasSast: simSast,
+  });
 
   const meta = {
     totalStars: result.stars,
@@ -62,11 +144,11 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
     license: result.license,
     language: result.category,
     topics: result.techStack,
-    contributors: result.contributors ?? (result.maintenanceBreakdown ? 10 : 3),
-    hasDependabot: !!result.hasDependabot,
-    hasSast: !!result.hasSast,
+    contributors: simulatorActive && simBusFactorHealthy ? Math.max(result.contributors ?? 1, 3) : (result.contributors ?? (result.maintenanceBreakdown ? 10 : 3)),
+    hasDependabot: simDependabot,
+    hasSast: simSast,
     lastCommit: result.lastCommit || new Date().toISOString(),
-    busFactorHealthy: result.busFactorHealthy !== false,
+    busFactorHealthy: simulatorActive ? simBusFactorHealthy : (result.busFactorHealthy !== false),
     avgResolutionDays: result.avgResolutionDays ?? null,
   };
 
@@ -94,9 +176,15 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
       });
     } else if (actionType === 'dependabot') {
       setEvidenceFocus({
-        tab: 'security',
+        tab: 'templates',
         source: 'action',
-        reason: 'Recommended Action complete: Wrote automated scanning configurations in .github/dependabot.yml.',
+        reason: 'Recommended Action: Set up Dependabot scanning alerts in .github/dependabot.yml.',
+      });
+    } else if (actionType === 'codeql') {
+      setEvidenceFocus({
+        tab: 'templates',
+        source: 'action',
+        reason: 'Recommended Action: Set up CodeQL SAST workflow in .github/workflows/codeql.yml.',
       });
     }
   };
@@ -104,7 +192,7 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
   return (
     <div className="w-full bg-soy-label p-6 font-mono text-soy-bottle selection:bg-soy-red/20 flex flex-col items-center select-none">
       {/* Evidence IDE border container */}
-      <div className="w-full max-w-[1500px] border-2 border-black bg-[#17130f] shadow-[6px_6px_0_#000] overflow-hidden rounded-sm flex flex-col">
+      <div className="w-full max-w-[1500px] border-2 border-black bg-[#17130f] shadow-[6px_6px_0_#000] overflow-hidden rounded-sm flex flex-col relative">
         
         {/* RepoCommandBar (Top Header) */}
         <div className="bg-[#efe8dc] border-b-2 border-black p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -178,7 +266,7 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
           {/* Left panel: RepoMapPanel */}
           <RepoMapPanel
             meta={meta}
-            breakdown={breakdown}
+            breakdown={simBreakdown}
             activeFocus={evidenceFocus}
             setFocus={setEvidenceFocus}
           />
@@ -197,7 +285,7 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             owner={repo.owner}
             repo={repo.name}
             score={total}
-            breakdown={breakdown}
+            breakdown={simBreakdown}
             meta={meta}
             activeFocus={evidenceFocus}
             setFocus={setEvidenceFocus}
@@ -205,6 +293,15 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             verdict={verdict}
             trustPosture={posture}
             extensionExploitRisk={er}
+            onOpenTraceDrawer={() => setShowTraceDrawer(true)}
+            simulatorActive={simulatorActive}
+            setSimulatorActive={setSimulatorActive}
+            simHasDependabot={simHasDependabot}
+            setSimHasDependabot={setSimHasDependabot}
+            simHasSast={simHasSast}
+            setSimHasSast={setSimHasSast}
+            simBusFactorHealthy={simBusFactorHealthy}
+            setSimBusFactorHealthy={setSimBusFactorHealthy}
           />
         </div>
 
@@ -259,6 +356,20 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             </div>
           </div>
         )}
+
+        {/* Reasoning Trace Drawer */}
+        <ReasoningTraceDrawer
+          isOpen={showTraceDrawer}
+          onClose={() => setShowTraceDrawer(false)}
+          owner={repo.owner}
+          repo={repo.name}
+          score={total}
+          breakdown={simBreakdown}
+          meta={meta}
+          verdict={verdict}
+          trustPosture={posture}
+          extensionExploitRisk={er}
+        />
       </div>
 
       {/* Footer warning */}

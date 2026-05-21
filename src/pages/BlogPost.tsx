@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { blogPosts } from '../data/blogPosts';
 import { ArrowLeft, ArrowRight, Clock, Calendar, Share2 } from 'lucide-react';
 
-type ProductActionKey = 'scanner' | 'lookup' | 'methodology' | 'leaderboards' | 'compare';
+type ProductActionKey = 'scanner' | 'lookup' | 'methodology' | 'leaderboards' | 'compare' | 'guard';
 
 const PRODUCT_ACTIONS: Record<ProductActionKey, {
   headline: string;
@@ -48,9 +48,16 @@ const PRODUCT_ACTIONS: Record<ProductActionKey, {
     ctaPath: "/compare",
     chipLabel: "COMPARE",
   },
+  guard: {
+    headline: "Configure OpenSoyce Guard",
+    body: "Detect extension exploits, single maintainer drift, and dependency hijacking before they hit your developer machine.",
+    ctaLabel: "OPEN GUARD",
+    ctaPath: "/guard",
+    chipLabel: "GUARD",
+  },
 };
 
-const PRODUCT_ACTION_ORDER: ProductActionKey[] = ['scanner', 'lookup', 'methodology', 'leaderboards', 'compare'];
+const PRODUCT_ACTION_ORDER: ProductActionKey[] = ['scanner', 'lookup', 'methodology', 'leaderboards', 'compare', 'guard'];
 
 // Render inline tokens: markdown links [text](url) and bold **text**.
 // Defensive against unmatched brackets — falls through as literal text.

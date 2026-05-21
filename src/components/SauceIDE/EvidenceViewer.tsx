@@ -63,6 +63,26 @@ export default function EvidenceViewer({
     }
   };
 
+  const [selectedTemplate, setSelectedTemplate] = useState<'dependabot' | 'codeql'>('dependabot');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  useEffect(() => {
+    if (activeFocus.tab === 'templates' && activeFocus.reason) {
+      const reasonLower = activeFocus.reason.toLowerCase();
+      if (reasonLower.includes('dependabot')) {
+        setSelectedTemplate('dependabot');
+      } else if (reasonLower.includes('sast') || reasonLower.includes('codeql')) {
+        setSelectedTemplate('codeql');
+      }
+    }
+  }, [activeFocus.tab, activeFocus.reason]);
+
   const tabs: { key: EvidenceTabKey; name: string }[] = [
     { key: 'readme', name: 'README' },
     { key: 'package', name: 'PACKAGE' },
@@ -70,6 +90,7 @@ export default function EvidenceViewer({
     { key: 'security', name: 'SECURITY' },
     { key: 'commits', name: 'COMMITS' },
     { key: 'dependencies', name: 'DEPENDENCIES' },
+    { key: 'templates', name: 'TEMPLATES' },
   ];
 
   // Helper mock content
@@ -270,6 +291,96 @@ We will investigate immediately and coordinate patches within 48 hours.`;
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      );
+    }
+
+    if (currentTab === 'templates') {
+      const dependabotCode = `version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"`;
+
+      const codeqlCode = `name: "CodeQL Analysis"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: javascript
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3`;
+
+      const activeCode = selectedTemplate === 'dependabot' ? dependabotCode : codeqlCode;
+      const fileName = selectedTemplate === 'dependabot' ? '.github/dependabot.yml' : '.github/workflows/codeql.yml';
+
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Sub-tabs to choose between templates */}
+          <div className="flex bg-[#100d0b]/80 border-b border-[#3a3028] px-4 py-2 gap-2">
+            <button
+              onClick={() => setSelectedTemplate('dependabot')}
+              className={`px-3 py-1 text-[10px] font-black uppercase rounded-sm border cursor-pointer transition-all ${
+                selectedTemplate === 'dependabot'
+                  ? 'bg-soy-red text-white border-soy-red'
+                  : 'bg-[#17130f] text-soy-label/60 border-[#3a3028] hover:text-white'
+              }`}
+            >
+              dependabot.yml
+            </button>
+            <button
+              onClick={() => setSelectedTemplate('codeql')}
+              className={`px-3 py-1 text-[10px] font-black uppercase rounded-sm border cursor-pointer transition-all ${
+                selectedTemplate === 'codeql'
+                  ? 'bg-soy-red text-white border-soy-red'
+                  : 'bg-[#17130f] text-soy-label/60 border-[#3a3028] hover:text-white'
+              }`}
+            >
+              codeql.yml
+            </button>
+            
+            <button
+              onClick={() => handleCopy(activeCode)}
+              className="ml-auto px-3 py-1 bg-[#100d0b] text-white border border-[#3a3028] text-[9px] font-black uppercase tracking-wider rounded-sm hover:bg-[#efe8dc]/10 cursor-pointer transition-all flex items-center gap-1.5"
+            >
+              {copied ? 'Copied ✓' : 'Copy Template'}
+            </button>
+          </div>
+
+          <div className="flex-1 flex overflow-hidden">
+            <div className="py-4 pl-3 pr-2 text-right select-none text-soy-label/15 bg-[#17130f] border-r border-[#3a3028] min-w-[36px]">
+              {activeCode.split('\n').map((_, i) => (
+                <div key={i} className="leading-5 h-5 text-[10px]">{i + 1}</div>
+              ))}
+            </div>
+            <div className="flex-1 p-4 overflow-y-auto text-[11px] leading-5 text-soy-label/80 font-mono whitespace-pre-wrap select-text custom-scrollbar bg-[#17130f]/30">
+              <div className="text-[9px] opacity-40 mb-2 border-b border-[#3a3028] pb-1 uppercase tracking-wider">
+                Target Path: {fileName}
+              </div>
+              {activeCode}
+            </div>
           </div>
         </div>
       );

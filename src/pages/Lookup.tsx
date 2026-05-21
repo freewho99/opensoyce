@@ -9,6 +9,7 @@ import { Project } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWatchlist } from '../context/WatchlistContext';
 import { trackEvent } from '../utils/analytics';
+import { verdictFor, trustPostureFor } from '../shared/verdict.js';
 
 export default function Lookup() {
   const { owner: routeOwner, repo: routeRepo } = useParams<{ owner?: string; repo?: string }>();
@@ -31,6 +32,14 @@ export default function Lookup() {
   const [hasToken, setHasToken] = useState<boolean | null>(null);
   const [toast, setToast] = useState<{message: string, show: boolean}>({message: '', show: false});
   const [viewMode, setViewMode] = useState<'ide' | 'standard'>('ide');
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [initialSharedLoad] = useState(!!(routeOwner && routeRepo));
+
+  React.useEffect(() => {
+    if (initialSharedLoad && result) {
+      setShowShareCard(true);
+    }
+  }, [result, initialSharedLoad]);
 
   const resultsRef = React.useRef<HTMLDivElement>(null);
   const { isWatching, addToWatchlist, removeFromWatchlist } = useWatchlist();
@@ -198,8 +207,32 @@ export default function Lookup() {
     }
   };
 
+  // Resolve verdict and posture for the share card banner
+  const er = result?.extensionExploitRisk || { active: false, status: 'NONE', reasons: [], confidence: 'medium' as const };
+  const mc = result?.maintainerConcentration || {
+    isSingleMaintainer: result?.busFactorHealthy === false,
+    topShare: 0.9,
+    nonBotContributorCount: result?.contributors ?? 1,
+    daysSinceLastCommit: 45,
+  };
+  const verdict = result ? verdictFor(result.score.overall, {
+    advisorySummary: result.advisories,
+    maintainerConcentration: mc,
+    vendorSdkMatch: !!result.vendorSdk,
+    extensionExploitRisk: er,
+  }) : '';
+
+  const posture = result ? trustPostureFor(result.score.overall, {
+    advisorySummary: result.advisories,
+    maintainerConcentration: mc,
+    vendorSdkMatch: !!result.vendorSdk,
+    extensionExploitRisk: er,
+    hasDependabot: !!result.hasDependabot,
+    hasSast: !!result.hasSast,
+  }) : '';
+
   return (
-    <div className="mx-auto w-full px-6 py-6 max-w-[1500px] transition-all duration-300 relative">
+    <div className="mx-auto w-full px-6 py-6 max-w-[1500px] transition-all duration-300 relative" id="resultsRef">
       <AnimatePresence>
         {toast.show && (
           <motion.div
@@ -213,6 +246,95 @@ export default function Lookup() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Public Share Card */}
+      {showShareCard && result && (
+        <div className="mb-8 bg-[#100d0b]/90 backdrop-blur-md border-2 border-soy-bottle p-6 rounded shadow-[4px_4px_0px_#000] relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6 select-none text-soy-label font-mono text-xs">
+          <button
+            onClick={() => setShowShareCard(false)}
+            className="absolute top-3 right-3 text-soy-label/50 hover:text-white transition-all cursor-pointer bg-transparent border-0 outline-none"
+          >
+            <span className="text-xl font-bold font-sans">×</span>
+          </button>
+
+          <div className="flex-1 space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="bg-soy-red text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-sm">
+                SHARED INSIGHT
+              </span>
+              <span className="text-[11px] font-black text-soy-label/50 uppercase tracking-widest">
+                {result.owner} / {result.name}
+              </span>
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-black uppercase tracking-tight italic text-white leading-none">
+                {result.name} Trust Profile
+              </h3>
+              <p className="text-[10px] text-soy-label/60 mt-1 leading-normal font-sans">
+                Shared view: This project was assessed for open-source adoption quality and security posture.
+              </p>
+            </div>
+
+            {/* Badges and Top Checks */}
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex items-center gap-3 bg-black/40 border border-[#3a3028] p-3 rounded-sm min-w-[280px]">
+                <div className="flex flex-col gap-1.5 w-full">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-soy-label/50 font-bold uppercase">Adoption:</span>
+                    <span className="bg-soy-red text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-sm">
+                      {verdict}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-soy-label/50 font-bold uppercase">Trust Posture:</span>
+                    <span className="bg-[#efe8dc] text-black border border-black text-[9px] font-black uppercase px-2 py-0.5 rounded-sm">
+                      {posture}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1 text-[10px] text-soy-label/70">
+                <div className="flex items-center gap-2">
+                  <span className="text-soy-red">🛡️</span>
+                  <span>Dependabot alert scan: {result.hasDependabot ? '✓ CONFIGURED' : '✗ MISSING'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-soy-red">🔍</span>
+                  <span>Security scanning workflows: {result.hasSast ? '✓ DETECTED' : '✗ NOT DETECTED'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-soy-red">👥</span>
+                  <span>Maintainer distribution: {result.busFactorHealthy ? '✓ HEALTHY BALANCE' : '✗ SINGLE BOTTLENECK'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center gap-3 shrink-0 bg-black/40 border border-[#3a3028] p-4 rounded-sm min-w-[180px] text-center">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black text-soy-label/40 uppercase tracking-widest">SOYCE SCORE</span>
+              <span className="text-3xl font-black text-soy-red italic leading-none mt-1">
+                {result.score.overall.toFixed(1)}
+              </span>
+              <span className="text-[9px] font-black text-soy-label/60 mt-1 uppercase italic">
+                {result.score.overall >= 8.5 ? 'EXCELLENT' : result.score.overall >= 7.0 ? 'GOOD' : result.score.overall >= 6.0 ? 'STABLE' : 'RISKY'}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setViewMode('ide');
+                document.getElementById('resultsRef')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="w-full bg-soy-red text-white py-1.5 text-[9px] font-black uppercase tracking-wider rounded-sm hover:bg-soy-red/80 transition-all cursor-pointer flex items-center justify-center gap-1 border-0"
+            >
+              <span>Inspect Cockpit</span>
+              <ArrowRight size={10} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {(!result || viewMode === 'standard') && (
         <div className="mb-12">

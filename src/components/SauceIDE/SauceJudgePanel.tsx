@@ -39,6 +39,15 @@ interface SauceJudgePanelProps {
     reasons: { code: string; label: string }[];
     confidence: 'low' | 'medium' | 'high';
   } | null;
+  onOpenTraceDrawer: () => void;
+  simulatorActive: boolean;
+  setSimulatorActive: (active: boolean) => void;
+  simHasDependabot: boolean;
+  setSimHasDependabot: (has: boolean) => void;
+  simHasSast: boolean;
+  setSimHasSast: (has: boolean) => void;
+  simBusFactorHealthy: boolean;
+  setSimBusFactorHealthy: (healthy: boolean) => void;
 }
 
 export default function SauceJudgePanel({
@@ -53,6 +62,15 @@ export default function SauceJudgePanel({
   verdict,
   trustPosture,
   extensionExploitRisk,
+  onOpenTraceDrawer,
+  simulatorActive,
+  setSimulatorActive,
+  simHasDependabot,
+  setSimHasDependabot,
+  simHasSast,
+  setSimHasSast,
+  simBusFactorHealthy,
+  setSimBusFactorHealthy,
 }: SauceJudgePanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -165,6 +183,54 @@ export default function SauceJudgePanel({
     primaryRisks.push({ text: 'No critical security or compliance risks detected.', tab: 'security' as EvidenceTabKey, reason: 'Risk Index: Overall metrics indicate safe operations.' });
   }
 
+  // Dynamic recommended actions mapping list
+  const recommendedActions = [];
+  const erReasons = extensionExploitRisk?.reasons || [];
+  const erCodes = erReasons.map(r => r.code);
+
+  if (erCodes.includes('NO_DEPENDABOT_DETECTED')) {
+    recommendedActions.push({
+      label: 'Configure Dependabot Alerts',
+      tab: 'templates' as EvidenceTabKey,
+      reason: 'Action focus: Set up Dependabot scanning alerts in .github/dependabot.yml.',
+      onTrigger: () => onActionTrigger('dependabot')
+    });
+  }
+  if (erCodes.includes('NO_SAST_DETECTED')) {
+    recommendedActions.push({
+      label: 'Configure CodeQL SAST',
+      tab: 'templates' as EvidenceTabKey,
+      reason: 'Action focus: Set up CodeQL SAST workflow in .github/workflows/codeql.yml.',
+      onTrigger: () => onActionTrigger('codeql')
+    });
+  }
+  if (erCodes.some(c => c.startsWith('SINGLE_MAINTAINER_DRIFT_'))) {
+    recommendedActions.push({
+      label: 'Audit Maintainer Churn',
+      tab: 'commits' as EvidenceTabKey,
+      reason: 'Action focus: Review recent commit logs and contribution distribution.',
+      onTrigger: () => {}
+    });
+  }
+  if (erCodes.includes('UNKNOWN_EVIDENCE_POSTURE')) {
+    recommendedActions.push({
+      label: 'Request Manual Review',
+      tab: 'readme' as EvidenceTabKey,
+      reason: 'Action focus: Request human verification for unknown posture scan.',
+      onTrigger: () => {
+        handleSendMessage('Explain security score and unknown evidence posture');
+      }
+    });
+  }
+
+  // Always offer claiming the repository
+  recommendedActions.push({
+    label: 'Claim Repository',
+    tab: 'readme' as EvidenceTabKey,
+    reason: 'Action focus: Add OpenSoyce badge to repository README.',
+    onTrigger: () => onActionTrigger('badge')
+  });
+
   const suggestions = ['Explain Security score', 'Show ownership risk', 'How to improve?'];
 
   return (
@@ -175,7 +241,7 @@ export default function SauceJudgePanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-        {/* Sauce Verdict Score Card */}
+        {/* Project Judgment Matrix */}
         <div className="bg-[#100d0b] border-2 border-soy-bottle p-4 rounded shadow-[3px_3px_0px_#000] relative overflow-hidden">
           <div className="flex flex-col gap-2 mb-4 border-b border-[#3a3028] pb-3">
             <div className="flex items-center justify-between">
@@ -195,16 +261,22 @@ export default function SauceJudgePanel({
           <div className="flex items-baseline gap-2 mb-3">
             <span className="text-4xl font-black text-soy-label tracking-tighter leading-none">{score.toFixed(1)}</span>
             <span className="text-xs text-soy-label/40 font-bold">/ 10.0</span>
-            <span className="text-xs font-black uppercase italic tracking-widest text-soy-red ml-auto">
-              {score >= 8.5 ? 'EXCELLENT' : score >= 7.0 ? 'GOOD' : score >= 6.0 ? 'STABLE' : 'RISKY'}
+            <span className="text-[10px] font-black uppercase tracking-widest text-soy-red ml-auto">
+              ADOPTION: {score >= 8.5 ? 'EXCELLENT' : score >= 7.0 ? 'GOOD' : score >= 6.0 ? 'STABLE' : 'RISKY'}
             </span>
           </div>
 
           {/* Breakdown Pillars */}
           <div className="space-y-1.5 border-t border-[#3a3028] pt-3">
-            <div className="flex justify-between text-[9px] text-soy-label/60 font-bold uppercase">
+            <div className="flex justify-between items-center text-[9px] text-soy-label/60 font-bold uppercase mb-1">
               <span>Why This Score</span>
-              <span>Metric</span>
+              <button
+                type="button"
+                onClick={onOpenTraceDrawer}
+                className="text-soy-red hover:underline cursor-pointer lowercase italic"
+              >
+                [why this verdict? view trace]
+              </button>
             </div>
             {[
               { name: 'Maintenance', val: breakdown.maintenance.toFixed(1), max: '3.0', tab: 'commits' as EvidenceTabKey, reason: 'Inspecting commit cadence and developer activity logs.' },
@@ -263,27 +335,78 @@ export default function SauceJudgePanel({
         <div className="space-y-2">
           <h3 className="text-[9px] font-black text-soy-red uppercase tracking-widest opacity-60">Recommended Actions</h3>
           <div className="grid grid-cols-1 gap-1.5">
+            {recommendedActions.map((action, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  setFocus({ tab: action.tab, source: 'action', reason: action.reason });
+                  action.onTrigger?.();
+                }}
+                className="w-full bg-[#100d0b] hover:bg-[#efe8dc]/5 border border-[#3a3028] py-2 rounded font-bold uppercase tracking-wider text-[10px] flex items-center justify-between px-3 cursor-pointer text-soy-label/80 text-left"
+              >
+                <span>{action.label}</span>
+                <Play size={10} className="text-soy-red font-bold shrink-0 ml-2" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Trust Posture Simulator */}
+        <div className="space-y-2 border-t border-[#3a3028] pt-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[9px] font-black text-soy-label/40 uppercase tracking-widest">
+              Trust Posture Simulator
+            </h3>
             <button
-              onClick={() => {
-                setFocus({ tab: 'security', source: 'action', reason: 'Action focus: Set up Dependabot scanning alerts.' });
-                onActionTrigger('dependabot');
-              }}
-              className="w-full bg-[#100d0b] hover:bg-[#efe8dc]/5 border border-[#3a3028] py-2 rounded font-bold uppercase tracking-wider text-[10px] flex items-center justify-between px-3 cursor-pointer text-soy-label/80"
+              type="button"
+              onClick={() => setSimulatorActive(!simulatorActive)}
+              className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-sm border transition-all cursor-pointer ${
+                simulatorActive
+                  ? 'bg-soy-red text-white border-soy-red font-black'
+                  : 'bg-black text-soy-label/50 border-[#3a3028] hover:text-white'
+              }`}
             >
-              <span>Setup Dependabot</span>
-              <Play size={10} className="text-soy-red" />
-            </button>
-            <button
-              onClick={() => {
-                setFocus({ tab: 'readme', source: 'action', reason: 'Action focus: Add OpenSoyce badge to repository README.' });
-                onActionTrigger('badge');
-              }}
-              className="w-full bg-[#100d0b] hover:bg-[#efe8dc]/5 border border-[#3a3028] py-2 rounded font-bold uppercase tracking-wider text-[10px] flex items-center justify-between px-3 cursor-pointer text-soy-label/80"
-            >
-              <span>Claim Repository</span>
-              <Play size={10} className="text-soy-red" />
+              {simulatorActive ? 'ACTIVE' : 'OFF'}
             </button>
           </div>
+
+          {simulatorActive && (
+            <div className="bg-[#100d0b] border border-[#3a3028] p-3 rounded space-y-2.5">
+              <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                <input
+                  type="checkbox"
+                  checked={simHasDependabot}
+                  onChange={(e) => setSimHasDependabot(e.target.checked)}
+                  className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                />
+                <span>Add Dependabot scanning</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                <input
+                  type="checkbox"
+                  checked={simHasSast}
+                  onChange={(e) => setSimHasSast(e.target.checked)}
+                  className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                />
+                <span>Configure CodeQL/Semgrep SAST</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                <input
+                  type="checkbox"
+                  checked={simBusFactorHealthy}
+                  onChange={(e) => setSimBusFactorHealthy(e.target.checked)}
+                  className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                />
+                <span>Expand maintainer base (multi-maintainer)</span>
+              </label>
+              
+              <div className="text-[9px] text-soy-red font-black uppercase tracking-wider bg-soy-red/5 p-1.5 border border-soy-red/20 rounded-sm">
+                ⚠ Simulator mode overrides score calculations in real-time.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* AI Chat Widget */}
