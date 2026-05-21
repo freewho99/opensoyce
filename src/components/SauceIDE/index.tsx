@@ -176,39 +176,47 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
           score={total}
         />
 
-        {/* ModeRail view toggler */}
+        {/* ModeRail view toggler (Sleek full-width Status Bar) */}
         {viewMode && setViewMode && (
-          <div className="border-t border-[#3a3028] bg-[#100d0b] px-3 py-2 flex justify-center w-full">
-            <div className="mx-auto grid max-w-[640px] grid-cols-3 overflow-hidden border border-black bg-[#efe8dc] text-xs font-black uppercase tracking-[0.14em] rounded-sm w-full">
+          <div className="border-t border-[#3a3028] bg-[#100d0b] h-10 flex items-center justify-between text-xs font-black uppercase tracking-wider text-soy-bottle/60 w-full select-none">
+            <div className="flex items-center h-full">
               <button
                 type="button"
                 onClick={() => setViewMode('ide')}
-                className={`px-4 py-3 text-center transition-all cursor-pointer font-black ${
+                className={`h-full px-5 flex items-center gap-1.5 transition-all cursor-pointer font-black border-r border-[#3a3028] ${
                   viewMode === 'ide'
                     ? 'bg-soy-red text-white'
-                    : 'text-[#211a15] bg-[#efe8dc] hover:bg-[#efe8dc]/80'
+                    : 'text-[#efe8dc]/80 hover:bg-[#efe8dc]/10'
                 }`}
               >
-                🖥 Sauce IDE
+                <span>🖥</span> Sauce IDE
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('standard')}
-                className={`px-4 py-3 text-center border-l border-black transition-all cursor-pointer font-black ${
+                className={`h-full px-5 flex items-center gap-1.5 transition-all cursor-pointer font-black border-r border-[#3a3028] ${
                   viewMode === 'standard'
                     ? 'bg-soy-red text-white'
-                    : 'text-[#211a15] bg-[#efe8dc] hover:bg-[#efe8dc]/80'
+                    : 'text-[#efe8dc]/80 hover:bg-[#efe8dc]/10'
                 }`}
               >
-                📄 Nutrition Card
+                <span>📄</span> Nutrition Card
               </button>
               <button
                 type="button"
                 onClick={() => onSearchNew?.()}
-                className="bg-[#1c1713] px-4 py-3 text-center text-white hover:bg-[#2a211b] border-l border-black transition-all cursor-pointer font-black"
+                className="h-full px-5 flex items-center gap-1.5 text-white/80 hover:bg-[#efe8dc]/10 border-r border-[#3a3028] transition-all cursor-pointer font-black"
               >
-                🔍 New Lookup
+                <span>🔍</span> New Lookup
               </button>
+            </div>
+            
+            {/* Status bar right-side warning metadata */}
+            <div className="hidden md:flex items-center gap-4 px-4 text-[10px] font-bold opacity-60 text-[#efe8dc]">
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert size={12} className="text-soy-red animate-pulse" />
+                <span>Not a substitute for full security analysis. Use responsibly.</span>
+              </span>
             </div>
           </div>
         )}
