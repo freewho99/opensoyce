@@ -24,7 +24,7 @@ import { calculateSoyceScore } from './scoreCalculator.js';
 import { findSecurityPolicy } from './securityPolicyResolver.js';
 import { computeMaintainerConcentration } from './maintainerConcentration.js';
 import { getVendorSdk } from '../data/vendorSdks.js';
-import { verdictFor } from './verdict.js';
+import { verdictFor, detectExtensionExploitRisk, trustPostureFor } from './verdict.js';
 import { detectMigration, makeFetchForks } from './detectMigration.js';
 
 const GH = 'https://api.github.com';
@@ -37,7 +37,19 @@ const GH = 'https://api.github.com';
  */
 export async function analyzeRepo(owner, repo, headers) {
   const issuesSince = new Date(Date.now() - 90 * 86400000).toISOString();
-  const [repoRes, commitsRes, contributorsRes, readmeRes, communityRes, releaseRes, advisoriesRes, issuesRes] = await Promise.all([
+  const [
+    repoRes,
+    commitsRes,
+    contributorsRes,
+    readmeRes,
+    communityRes,
+    releaseRes,
+    advisoriesRes,
+    issuesRes,
+    workflowsRes,
+    dependabotRes,
+    renovateRes
+  ] = await Promise.all([
     fetch(`${GH}/repos/${owner}/${repo}`, { headers }),
     fetch(`${GH}/repos/${owner}/${repo}/commits?per_page=30`, { headers }),
     fetch(`${GH}/repos/${owner}/${repo}/contributors?per_page=30`, { headers }),
@@ -46,6 +58,9 @@ export async function analyzeRepo(owner, repo, headers) {
     fetch(`${GH}/repos/${owner}/${repo}/releases/latest`, { headers }),
     fetch(`${GH}/repos/${owner}/${repo}/security-advisories?per_page=100`, { headers }),
     fetch(`${GH}/repos/${owner}/${repo}/issues?state=all&since=${issuesSince}&per_page=100`, { headers }),
+    fetch(`${GH}/repos/${owner}/${repo}/actions/workflows`, { headers }).catch(() => null),
+    fetch(`${GH}/repos/${owner}/${repo}/contents/.github/dependabot.yml`, { headers }).catch(() => null),
+    fetch(`${GH}/repos/${owner}/${repo}/contents/renovate.json`, { headers }).catch(() => null),
   ]);
 
   if (repoRes.status === 404) return null;
@@ -65,26 +80,89 @@ export async function analyzeRepo(owner, repo, headers) {
   const repoAdvisories = advisoriesRes.ok ? await advisoriesRes.json() : null;
   const recentIssues = issuesRes.ok ? await issuesRes.json() : null;
 
+  const workflows = workflowsRes && workflowsRes.ok ? await workflowsRes.json() : null;
+
+  let hasDependabot = 'unknown';
+  const depExists = dependabotRes && dependabotRes.status === 200;
+  const renExists = renovateRes && renovateRes.status === 200;
+
+  if (depExists || renExists) {
+    hasDependabot = true;
+  } else if (
+    dependabotRes && dependabotRes.status === 404 &&
+    renovateRes && renovateRes.status === 404
+  ) {
+    hasDependabot = false;
+  }
+
+  let hasSast = 'unknown';
+  if (workflowsRes && workflowsRes.status === 200) {
+    const wfData = workflows;
+    const sastRegex = /(codeql|semgrep|snyk|trivy|osv|security|audit|scan|scorecard|socket|step-security)/i;
+    const match = wfData && Array.isArray(wfData.workflows) && wfData.workflows.some(w => {
+      return sastRegex.test(w.name || '') || sastRegex.test(w.path || '');
+    });
+    hasSast = match ? true : false;
+  } else if (workflowsRes && workflowsRes.status === 404) {
+    hasSast = false;
+  }
+
   // SECURITY.md resolver fallback when /community/profile under-reports.
   if (communityProfile && communityProfile.files && !communityProfile.files.security_policy) {
     const found = await findSecurityPolicy(owner, repo, headers);
     if (found) communityProfile.files.security_policy = { source: 'opensoyce_resolver' };
   }
 
-  const scoreResult = calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
+  const scoreResult = calculateSoyceScore(
+    repoData,
+    commits,
+    contributors,
+    readme,
+    communityProfile,
+    latestRelease,
+    repoAdvisories,
+    recentIssues,
+    workflows,
+    hasDependabot === true
+  );
 
-  // AI signals v0.1 — maintainer-concentration signal + vendor-SDK match.
-  // Pure computation over data we already fetched; no extra GitHub calls.
-  // Surfaced on the response so runScan, the Vercel function, and the UI all
-  // see the same signal without recomputing.
+  if (scoreResult.meta) {
+    scoreResult.meta.hasDependabot = hasDependabot;
+    scoreResult.meta.hasSast = hasSast;
+  }
+
   const maintainerConcentration = computeMaintainerConcentration(contributors, commits);
   const vendorSdk = getVendorSdk(repoData.owner.login, repoData.name);
 
-  // Fork-velocity-of-namesake v0 — surface known/algorithmic migrations.
-  // Failure-isolated: any error returns `null`, never breaks the analysis.
-  // The verdict band we feed in is computed with the same signals the
-  // public callers see, so detectMigration's low-band gate matches what
-  // the user is told. No score / band mutation here — purely additive.
+  const extensionExploitRisk = detectExtensionExploitRisk({
+    repoData,
+    workflows,
+    hasDependabot,
+    hasSast,
+    maintainerConcentration
+  });
+
+  const trustPosture = trustPostureFor(scoreResult.total, {
+    advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
+    maintainerConcentration,
+    vendorSdkMatch: !!vendorSdk,
+    extensionExploitRisk,
+    hasDependabot,
+    hasSast,
+    workflows
+  });
+
+  // Re-run verdictFor using capped adoption rules with extensionExploitRisk
+  if (scoreResult.total) {
+    scoreResult.verdict = verdictFor(scoreResult.total, {
+      earlyBreakout: false,
+      advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
+      maintainerConcentration,
+      vendorSdkMatch: !!vendorSdk,
+      extensionExploitRisk
+    });
+  }
+
   let migration = null;
   try {
     const verdict = verdictFor(scoreResult.total, {
@@ -92,6 +170,7 @@ export async function analyzeRepo(owner, repo, headers) {
       advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
       maintainerConcentration,
       vendorSdkMatch: !!vendorSdk,
+      extensionExploitRisk
     });
     migration = await detectMigration({
       owner: repoData.owner.login,
@@ -110,6 +189,8 @@ export async function analyzeRepo(owner, repo, headers) {
     maintainerConcentration,
     vendorSdk,
     migration,
+    extensionExploitRisk,
+    trustPosture,
     repo: {
       id: repoData.id,
       name: repoData.name,

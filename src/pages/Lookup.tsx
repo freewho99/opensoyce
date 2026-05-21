@@ -163,6 +163,8 @@ export default function Lookup() {
         maintainerConcentration: data.maintainerConcentration ?? null,
         vendorSdk: data.vendorSdk ?? null,
         migration: data.migration ?? null,
+        extensionExploitRisk: data.extensionExploitRisk ?? null,
+        trustPosture: data.trustPosture ?? null,
       });
 
       showToast('Analysis complete!');
@@ -413,6 +415,7 @@ export default function Lookup() {
                               advisorySummary={result.advisories ?? null}
                               maintainerConcentration={result.maintainerConcentration ?? null}
                               vendorSdkMatch={!!result.vendorSdk}
+                              extensionExploitRisk={result.extensionExploitRisk}
                             />
                           </div>
                         </div>

@@ -37,6 +37,12 @@ export function verdictFor(
     advisorySummary?: AdvisorySummaryLike | null;
     maintainerConcentration?: MaintainerConcentrationLike | null;
     vendorSdkMatch?: boolean;
+    extensionExploitRisk?: {
+      active: boolean;
+      status: 'HIJACK RISK' | 'MAINTAINER BOTTLENECK' | 'NONE';
+      reasons: { code: string; label: string }[];
+      confidence: 'low' | 'medium' | 'high';
+    } | null;
   },
 ): SoyceVerdict {
   return sharedVerdictFor(score, opts) as SoyceVerdict;
@@ -86,6 +92,12 @@ interface SoyceScoreProps {
   maintainerConcentration?: MaintainerConcentrationLike | null;
   /** When true, suppresses the maintainer-concentration cap. */
   vendorSdkMatch?: boolean;
+  extensionExploitRisk?: {
+    active: boolean;
+    status: 'HIJACK RISK' | 'MAINTAINER BOTTLENECK' | 'NONE';
+    reasons: { code: string; label: string }[];
+    confidence: 'low' | 'medium' | 'high';
+  } | null;
   className?: string;
 }
 
@@ -104,10 +116,11 @@ export default function SoyceScore({
   advisorySummary = null,
   maintainerConcentration = null,
   vendorSdkMatch = false,
+  extensionExploitRisk = null,
   className = '',
 }: SoyceScoreProps) {
   const score = typeof value === 'number' && !Number.isNaN(value) ? value : 0;
-  const verdict = verdictFor(score, { earlyBreakout, advisorySummary, maintainerConcentration, vendorSdkMatch });
+  const verdict = verdictFor(score, { earlyBreakout, advisorySummary, maintainerConcentration, vendorSdkMatch, extensionExploitRisk });
   // The band the score *would have* earned without the hidden-vulns cap.
   // Used purely to decide whether to show the explanation chip.
   const uncappedVerdict = verdictFor(score, { earlyBreakout });
@@ -122,6 +135,9 @@ export default function SoyceScore({
   const maintainerCapFired = !vendorSdkMatch
     && !!maintainerConcentration
     && verdict !== verdictWithoutMaintainerCap;
+  
+  const er = extensionExploitRisk || { active: false, status: 'NONE', reasons: [], confidence: 'medium' };
+  const showExploitChip = er.active && er.status !== 'NONE';
   const s = SIZE_CLASSES[size];
   // Sub-label only on the standalone card (md/lg) — compact chips on dense
   // vuln-row lists already carry enough visual weight.
@@ -167,6 +183,14 @@ export default function SoyceScore({
           })()}
         >
           ⚠ SINGLE-MAINTAINER
+        </span>
+      )}
+      {showExploitChip && (
+        <span
+          className={`${s.chip} mt-1.5 font-black uppercase tracking-[0.15em] bg-soy-red text-white px-2 py-0.5 border border-soy-red`}
+          title={`Status: ${er.status}\nConfidence: ${er.confidence}\nReasons:\n${er.reasons.map(r => `• ${r.label}`).join('\n')}`}
+        >
+          ⚠ {er.status === 'HIJACK RISK' ? 'HIJACK RISK' : 'BOTTLENECK'}
         </span>
       )}
     </div>

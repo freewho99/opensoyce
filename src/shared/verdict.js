@@ -59,42 +59,257 @@
  * Like the advisorySummary cap, this is strictly a CAP — composite math
  * is untouched, only the band label moves. A 7.5 FORKABLE stays FORKABLE;
  * a 5.5 WATCHLIST stays WATCHLIST.
- *
+ */
+
+/**
+ * @param {{
+ *   repoData: any,
+ *   workflows: any,
+ *   hasDependabot: boolean | 'unknown',
+ *   hasSast: boolean | 'unknown',
+ *   maintainerConcentration: any
+ * }} opts
+ */
+export function detectExtensionExploitRisk({ repoData, workflows, hasDependabot, hasSast, maintainerConcentration }) {
+  let sastStatus = hasSast;
+  if (sastStatus === undefined) {
+    if (workflows === null || workflows === undefined) {
+      sastStatus = 'unknown';
+    } else if (!workflows.workflows || !Array.isArray(workflows.workflows)) {
+      sastStatus = 'unknown';
+    } else {
+      const sastRegex = /(codeql|semgrep|snyk|trivy|osv|security|audit|scan|scorecard|socket|step-security)/i;
+      const match = workflows.workflows.some(w => {
+        const name = w.name || '';
+        const path = w.path || '';
+        return sastRegex.test(name) || sastRegex.test(path);
+      });
+      sastStatus = match ? true : false;
+    }
+  }
+
+  const name = (repoData.name || '').toLowerCase();
+  const desc = (repoData.description || '').toLowerCase();
+  const topics = (repoData.topics || []).map(t => t.toLowerCase());
+
+  const tier1 = ['vscode', 'jetbrains', 'intellij', 'cursor', 'extension', 'ide', 'editor', 'copilot', 'mcp', 'agent'];
+  const tier2 = ['cli', 'plugin', 'addon', 'terminal', 'shell', 'devtool', 'neovim', 'vim'];
+  const tier3 = ['console', 'command', 'tool', 'tooling'];
+
+  const matchedTerms = new Set();
+  const checkTerm = (term) => {
+    const regex = new RegExp(`(?:^|[^a-zA-Z0-9])${term}(?:[^a-zA-Z0-9]|$)`, 'i');
+    if (regex.test(name) || regex.test(desc) || topics.some(t => regex.test(t))) {
+      matchedTerms.add(term);
+      return true;
+    }
+    return false;
+  };
+
+  let totalScore = 0;
+  const matched = [];
+
+  for (const term of tier1) {
+    if (checkTerm(term)) {
+      totalScore += 3;
+      matched.push(term);
+    }
+  }
+  for (const term of tier2) {
+    if (checkTerm(term)) {
+      totalScore += 2;
+      matched.push(term);
+    }
+  }
+  for (const term of tier3) {
+    if (checkTerm(term)) {
+      totalScore += 1;
+      matched.push(term);
+    }
+  }
+
+  const isTargetVector = totalScore >= 2;
+
+  // Postural weakness check: fires only when BOTH are explicitly false
+  const hasPosturalWeakness = (hasDependabot === false && sastStatus === false);
+
+  const mc = maintainerConcentration || {};
+  const isSingle = mc.isSingleMaintainer === true;
+  const driftDays = typeof mc.daysSinceLastCommit === 'number' ? mc.daysSinceLastCommit : null;
+
+  const reasons = [];
+
+  if (isTargetVector) {
+    reasons.push({
+      code: 'TARGET_VECTOR_TIER_MATCH',
+      label: `Matches developer-tool install surface: ${matched.join(', ')}`
+    });
+  }
+
+  if (hasDependabot === false) {
+    reasons.push({
+      code: 'NO_DEPENDABOT_DETECTED',
+      label: 'No dependency automation detected'
+    });
+  } else if (hasDependabot === 'unknown') {
+    reasons.push({
+      code: 'DEPENDABOT_UNKNOWN',
+      label: 'Dependency automation status unknown due to API errors'
+    });
+  }
+
+  if (sastStatus === false) {
+    reasons.push({
+      code: 'NO_SAST_DETECTED',
+      label: 'No security scanning workflow detected'
+    });
+  } else if (sastStatus === 'unknown') {
+    reasons.push({
+      code: 'SAST_UNKNOWN',
+      label: 'Security scanning workflow status unknown due to API errors'
+    });
+  }
+
+  if (isSingle) {
+    if (driftDays !== null) {
+      reasons.push({
+        code: `SINGLE_MAINTAINER_DRIFT_${driftDays}D`,
+        label: `Single maintainer with last commit ${driftDays} days ago`
+      });
+    } else {
+      reasons.push({
+        code: 'SINGLE_MAINTAINER_NO_DRIFT_DATA',
+        label: 'Single maintainer with no drift data available'
+      });
+    }
+  }
+
+  let status = 'NONE';
+  let active = false;
+  let confidence = 'medium';
+
+  if (isTargetVector && hasPosturalWeakness && isSingle && driftDays !== null) {
+    if (driftDays > 90) {
+      status = 'HIJACK RISK';
+      active = true;
+      confidence = 'high';
+    } else if (driftDays >= 30) {
+      status = 'MAINTAINER BOTTLENECK';
+      active = true;
+      confidence = 'high';
+    }
+  }
+
+  // Unknown Dependabot + unknown SAST = no hijack risk, confidence low, reasons include unknown evidence
+  if (!active && isTargetVector && isSingle && driftDays >= 30 && (hasDependabot === 'unknown' || sastStatus === 'unknown')) {
+    confidence = 'low';
+    reasons.push({
+      code: 'UNKNOWN_EVIDENCE_POSTURE',
+      label: 'Postural weakness uncertain due to unknown security scanning or dependency automation status'
+    });
+  }
+
+  return {
+    active,
+    status,
+    reasons,
+    confidence
+  };
+}
+
+/**
+ * @param {number} score
+ * @param {{
+ *   extensionExploitRisk?: any,
+ *   advisorySummary?: AdvisorySummaryLike | null,
+ *   maintainerConcentration?: MaintainerConcentrationLike | null,
+ *   hasSast?: boolean | 'unknown',
+ *   hasDependabot?: boolean | 'unknown',
+ *   workflows?: any,
+ *   vendorSdkMatch?: boolean,
+ * }} [opts]
+ * @returns {string}
+ */
+export function trustPostureFor(score, opts = {}) {
+  const er = opts.extensionExploitRisk || { active: false, status: 'NONE', reasons: [], confidence: 'medium' };
+  const a = opts.advisorySummary || {};
+  const criticalOpen = a.critical || 0;
+  const highOpen = a.high || 0;
+
+  if (criticalOpen >= 1) {
+    return 'COMPROMISED';
+  }
+
+  if (er.status === 'HIJACK RISK') {
+    return 'HIJACK RISK';
+  }
+
+  const mc = opts.maintainerConcentration || {};
+  const isSingle = mc.isSingleMaintainer === true;
+  
+  let sastStatus = opts.hasSast;
+  if (sastStatus === undefined) {
+    if (opts.workflows === null || opts.workflows === undefined) {
+      sastStatus = 'unknown';
+    } else if (!opts.workflows.workflows || !Array.isArray(opts.workflows.workflows)) {
+      sastStatus = 'unknown';
+    } else {
+      const sastRegex = /(codeql|semgrep|snyk|trivy|osv|security|audit|scan|scorecard|socket|step-security)/i;
+      const match = opts.workflows.workflows.some(w => {
+        const name = w.name || '';
+        const path = w.path || '';
+        return sastRegex.test(name) || sastRegex.test(path);
+      });
+      sastStatus = match ? true : false;
+    }
+  }
+  const hasDependabot = opts.hasDependabot;
+  const securityAutomationDetected = (hasDependabot === true || sastStatus === true);
+
+  if (
+    er.status === 'MAINTAINER BOTTLENECK' ||
+    score < 8.5 ||
+    highOpen >= 1 ||
+    isSingle ||
+    !securityAutomationDetected
+  ) {
+    return 'LIMITED TRUST';
+  }
+
+  return 'TRUSTED';
+}
+
+/**
  * @param {number} score
  * @param {{
  *   earlyBreakout?: boolean,
  *   advisorySummary?: AdvisorySummaryLike | null,
  *   maintainerConcentration?: MaintainerConcentrationLike | null,
  *   vendorSdkMatch?: boolean,
+ *   extensionExploitRisk?: any,
  * }} [opts]
  * @returns {SoyceVerdict}
  */
 export function verdictFor(score, opts = {}) {
-  // Hidden-vulns cap: applies only when an advisorySummary is supplied.
-  // Callers that only know the score keep the legacy behavior.
-  //
-  // Grading-swarm calibration (Wei + Marco): the previous `seriousOpen >= 3`
-  // rule under-penalized a single open CRITICAL. facebook/react landing at
-  // 8.2 USE READY-band-eligible with 1 open critical + 5 high advisories was
-  // the canonical miss. Criticals are qualitatively different from highs
-  // (RCE / auth bypass / data exfil on the repo's own code), so a single
-  // open critical now caps anything 7.0+ down to WATCHLIST. The legacy
-  // multi-high accumulation rule (>=3 serious) stays unchanged, as does
-  // the 1-high USE-READY→FORKABLE rule.
+  // Let's resolve what the normal verdict would be without the hijack/bottleneck caps first.
+  let verdict = 'STALE';
+  if (score >= 8.5) verdict = 'USE READY';
+  else if (score >= 7.0) verdict = 'FORKABLE';
+  else if (opts && opts.earlyBreakout) verdict = 'HIGH MOMENTUM';
+  else if (score >= 6.0) verdict = 'STABLE';
+  else if (score >= 4.0) verdict = 'WATCHLIST';
+  else if (score >= 2.5) verdict = 'RISKY';
+
   if (opts && opts.advisorySummary) {
     const a = opts.advisorySummary;
     const criticalOpen = a.critical || 0;
     const highOpen = a.high || 0;
     const seriousOpen = criticalOpen + highOpen;
-    // >=1 open CRITICAL → cap at WATCHLIST. A single critical is enough.
-    if (criticalOpen >= 1 && score >= 7.0) return 'WATCHLIST';
-    // >=3 open serious → cap at WATCHLIST regardless of how good the rest is.
-    if (seriousOpen >= 3 && score >= 7.0) return 'WATCHLIST';
-    // >=1 open high → no USE READY; cap at FORKABLE.
-    if (highOpen >= 1 && score >= 8.5) return 'FORKABLE';
+    if (criticalOpen >= 1 && score >= 7.0) verdict = 'WATCHLIST';
+    else if (seriousOpen >= 3 && score >= 7.0) verdict = 'WATCHLIST';
+    else if (highOpen >= 1 && score >= 8.5) verdict = 'FORKABLE';
   }
-  // Maintainer-concentration cap (AI signals v0.1). Only fires on uncapped
-  // USE READY (score >= 8.5); vendor-SDK allowlist suppresses entirely.
+
   if (opts && opts.maintainerConcentration && !opts.vendorSdkMatch) {
     const mc = opts.maintainerConcentration;
     if (
@@ -103,19 +318,29 @@ export function verdictFor(score, opts = {}) {
       && mc.daysSinceLastCommit > 30
       && score >= 8.5
     ) {
-      return 'FORKABLE';
+      if (verdict === 'USE READY') {
+        verdict = 'FORKABLE';
+      }
     }
   }
-  if (score >= 8.5) return 'USE READY';
-  if (score >= 7.0) return 'FORKABLE';
-  // earlyBreakout: opt-in editorial tier for hand-curated "rising star"
-  // projects. Currently used only by src/data/categories.ts. Not exposed by
-  // runScan. When set, returns 'HIGH MOMENTUM' regardless of the band the
-  // score would normally land in. Public scoring callers should leave this
-  // off — the band is not rendered as a public verdict.
-  if (opts && opts.earlyBreakout) return 'HIGH MOMENTUM';
-  if (score >= 6.0) return 'STABLE';
-  if (score >= 4.0) return 'WATCHLIST';
-  if (score >= 2.5) return 'RISKY';
-  return 'STALE';
+
+  const er = opts.extensionExploitRisk || { active: false, status: 'NONE' };
+
+  if (er.status === 'HIJACK RISK') {
+    const order = ['USE READY', 'FORKABLE', 'HIGH MOMENTUM', 'STABLE', 'WATCHLIST', 'RISKY', 'STALE'];
+    const currentIdx = order.indexOf(verdict);
+    const targetIdx = order.indexOf('WATCHLIST');
+    if (currentIdx < targetIdx) {
+      verdict = 'WATCHLIST';
+    }
+  } else if (er.status === 'MAINTAINER BOTTLENECK') {
+    const order = ['USE READY', 'FORKABLE', 'HIGH MOMENTUM', 'STABLE', 'WATCHLIST', 'RISKY', 'STALE'];
+    const currentIdx = order.indexOf(verdict);
+    const targetIdx = order.indexOf('FORKABLE');
+    if (currentIdx < targetIdx) {
+      verdict = 'FORKABLE';
+    }
+  }
+
+  return verdict;
 }

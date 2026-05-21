@@ -5,6 +5,7 @@ import SauceJudgePanel from './SauceJudgePanel';
 import SauceTracePanel from './SauceTracePanel';
 import { Project } from '../../types';
 import { ShieldAlert, ExternalLink } from 'lucide-react';
+import { verdictFor, trustPostureFor } from '../../shared/verdict.js';
 
 export type EvidenceTabKey =
   | 'readme'
@@ -30,6 +31,21 @@ interface SauceIDEProps {
 
 export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }: SauceIDEProps) {
   const total = result.score.overall;
+  const er = result.extensionExploitRisk || { active: false, status: 'NONE' as const, reasons: [], confidence: 'medium' as const };
+  const verdict = verdictFor(total, {
+    advisorySummary: result.advisories,
+    maintainerConcentration: result.maintainerConcentration,
+    vendorSdkMatch: !!result.vendorSdk,
+    extensionExploitRisk: er,
+  });
+  const posture = trustPostureFor(total, {
+    advisorySummary: result.advisories,
+    maintainerConcentration: result.maintainerConcentration,
+    vendorSdkMatch: !!result.vendorSdk,
+    extensionExploitRisk: er,
+    hasDependabot: result.hasDependabot,
+    hasSast: result.hasSast,
+  });
 
   const breakdown = result.score.raw || {
     maintenance: (result.score.maintenance / 100) * 3.0,
@@ -120,9 +136,29 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
 
           <div className="flex items-center gap-4 flex-wrap">
             {/* Status label */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#efe8dc] border border-black text-[10px] font-black uppercase text-[#211a15]">
-              <span className="opacity-50">TRUST VERDICT:</span>
-              <span className="text-soy-red">{total >= 8 ? 'USE READY' : total >= 6 ? 'EVALUATE' : 'HIGH RISK'}</span>
+            <div className="flex items-center gap-4 px-3 py-1.5 bg-[#efe8dc] border border-black text-[10px] font-black uppercase text-[#211a15]">
+              <div className="flex flex-col pr-3 border-r border-black/20">
+                <span className="opacity-50 text-[8px] tracking-wider leading-none">PROJECT JUDGMENT</span>
+                <span className="text-xs font-black mt-0.5">SOYCE ENGINE</span>
+              </div>
+              <div className="flex flex-col pr-3 border-r border-black/20">
+                <span className="opacity-50 text-[8px] tracking-wider leading-none">Adoption</span>
+                <span className="text-soy-red font-black mt-0.5">{verdict}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="opacity-50 text-[8px] tracking-wider leading-none">Trust Posture</span>
+                <span className="text-soy-red font-black mt-0.5">{posture}</span>
+              </div>
+              {er.active && er.status !== 'NONE' && (
+                <div 
+                  className="flex flex-col pl-3 border-l border-black/20 cursor-help"
+                  title={`Confidence: ${er.confidence}\nReasons:\n${er.reasons.map(r => `• ${r.label}`).join('\n')}`}
+                >
+                  <span className="text-soy-red font-black bg-soy-red/10 border border-soy-red px-1.5 py-0.5 rounded-sm flex items-center gap-1 animate-pulse">
+                    ⚠ {er.status === 'HIJACK RISK' ? 'HIJACK RISK' : 'BOTTLENECK'}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Verdict Pill score capsule */}
@@ -156,7 +192,7 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             onActionTrigger={handleActionTrigger}
           />
 
-          {/* Right panel: SauceJudgePanel */}
+           {/* Right panel: SauceJudgePanel */}
           <SauceJudgePanel
             owner={repo.owner}
             repo={repo.name}
@@ -166,6 +202,9 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             activeFocus={evidenceFocus}
             setFocus={setEvidenceFocus}
             onActionTrigger={handleActionTrigger}
+            verdict={verdict}
+            trustPosture={posture}
+            extensionExploitRisk={er}
           />
         </div>
 

@@ -9,7 +9,7 @@
  * HIGH/CRITICAL advisories on its own code. Composite math was already
  * punishing security (0.1/2.0), but the band rules only looked at score.
  */
-import { verdictFor } from '../src/shared/verdict.js';
+import { verdictFor, detectExtensionExploitRisk, trustPostureFor } from '../src/shared/verdict.js';
 
 let passed = 0;
 let failed = 0;
@@ -350,6 +350,117 @@ test('verdictFor(7.0, { critical:1, high:0 }, vendorSdkMatch:true) === WATCHLIST
   );
 });
 
+// --- Extension Exploit / Hijack Risk & Posture tests -----------------------
+test('High score + VS Code extension target + single maintainer + 100 days drift => Adoption: WATCHLIST, Posture: HIJACK RISK', () => {
+  const repoData = { name: 'my-vscode-extension', description: 'Cool editor plugin', topics: ['vscode'] };
+  const mc = { isSingleMaintainer: true, daysSinceLastCommit: 100 };
+  const er = detectExtensionExploitRisk({
+    repoData,
+    workflows: null,
+    hasDependabot: false,
+    hasSast: false,
+    maintainerConcentration: mc
+  });
+  eq(er.active, true, 'exploit risk active');
+  eq(er.status, 'HIJACK RISK', 'status is HIJACK RISK');
+  
+  const adoption = verdictFor(9.5, { extensionExploitRisk: er, maintainerConcentration: mc });
+  eq(adoption, 'WATCHLIST', 'Adoption verdict capped at WATCHLIST');
+  
+  const posture = trustPostureFor(9.5, { extensionExploitRisk: er, maintainerConcentration: mc, hasDependabot: false, hasSast: false });
+  eq(posture, 'HIJACK RISK', 'Trust posture is HIJACK RISK');
+});
+
+test('High score + extension target + strong security posture => Adoption: FORKABLE (due to single maintainer cap), Trust: LIMITED TRUST, no hijack risk', () => {
+  const repoData = { name: 'my-vscode-extension', description: 'Cool editor plugin', topics: ['vscode'] };
+  const mc = { isSingleMaintainer: true, daysSinceLastCommit: 100 };
+  const er = detectExtensionExploitRisk({
+    repoData,
+    workflows: null,
+    hasDependabot: true,
+    hasSast: true,
+    maintainerConcentration: mc
+  });
+  eq(er.active, false, 'no exploit risk active');
+  eq(er.status, 'NONE', 'status is NONE');
+  
+  const adoption = verdictFor(9.5, { extensionExploitRisk: er, maintainerConcentration: mc });
+  eq(adoption, 'FORKABLE', 'Adoption verdict capped at FORKABLE due to single maintainer');
+  
+  const posture = trustPostureFor(9.5, { extensionExploitRisk: er, maintainerConcentration: mc, hasDependabot: true, hasSast: true });
+  eq(posture, 'LIMITED TRUST', 'Trust posture is LIMITED TRUST due to single maintainer');
+});
+
+test('High score + extension target + strong security posture + multiple maintainers => Adoption: USE READY, Trust: TRUSTED, no hijack risk', () => {
+  const repoData = { name: 'my-vscode-extension', description: 'Cool editor plugin', topics: ['vscode'] };
+  const mc = { isSingleMaintainer: false, daysSinceLastCommit: 5 };
+  const er = detectExtensionExploitRisk({
+    repoData,
+    workflows: null,
+    hasDependabot: true,
+    hasSast: true,
+    maintainerConcentration: mc
+  });
+  eq(er.active, false, 'no exploit risk active');
+  eq(er.status, 'NONE', 'status is NONE');
+  
+  const adoption = verdictFor(9.5, { extensionExploitRisk: er, maintainerConcentration: mc });
+  eq(adoption, 'USE READY', 'Adoption verdict stays USE READY');
+  
+  const posture = trustPostureFor(9.5, { extensionExploitRisk: er, maintainerConcentration: mc, hasDependabot: true, hasSast: true });
+  eq(posture, 'TRUSTED', 'Trust posture is TRUSTED');
+});
+
+
+test('Weak security posture + not a dev-tool target => no hijack risk', () => {
+  const repoData = { name: 'simple-utils', description: 'Just some library', topics: [] };
+  const mc = { isSingleMaintainer: true, daysSinceLastCommit: 100 };
+  const er = detectExtensionExploitRisk({
+    repoData,
+    workflows: null,
+    hasDependabot: false,
+    hasSast: false,
+    maintainerConcentration: mc
+  });
+  eq(er.active, false, 'no exploit risk active');
+  eq(er.status, 'NONE', 'status is NONE');
+});
+
+test('Unknown Dependabot + unknown SAST => no hijack risk, confidence low, reasons include unknown evidence', () => {
+  const repoData = { name: 'my-vscode-extension', description: 'Cool editor plugin', topics: ['vscode'] };
+  const mc = { isSingleMaintainer: true, daysSinceLastCommit: 100 };
+  const er = detectExtensionExploitRisk({
+    repoData,
+    workflows: null,
+    hasDependabot: 'unknown',
+    hasSast: 'unknown',
+    maintainerConcentration: mc
+  });
+  eq(er.active, false, 'no exploit risk active');
+  eq(er.status, 'NONE', 'status is NONE');
+  eq(er.confidence, 'low', 'confidence is low');
+  const hasUnknownCode = er.reasons.some(r => r.code === 'UNKNOWN_EVIDENCE_POSTURE');
+  eq(hasUnknownCode, true, 'has UNKNOWN_EVIDENCE_POSTURE reason code');
+});
+
+test('Maintainer bottleneck does not downgrade below already-lower adoption verdict => score 5.0 stays WATCHLIST, not FORKABLE', () => {
+  const repoData = { name: 'my-vscode-extension', description: 'Cool editor plugin', topics: ['vscode'] };
+  const mc = { isSingleMaintainer: true, daysSinceLastCommit: 40 }; // 40 days commit drift => BOTTLENECK
+  const er = detectExtensionExploitRisk({
+    repoData,
+    workflows: null,
+    hasDependabot: false,
+    hasSast: false,
+    maintainerConcentration: mc
+  });
+  eq(er.active, true, 'exploit risk active');
+  eq(er.status, 'MAINTAINER BOTTLENECK', 'status is MAINTAINER BOTTLENECK');
+  
+  const adoption = verdictFor(5.0, { extensionExploitRisk: er, maintainerConcentration: mc });
+  eq(adoption, 'WATCHLIST', 'Adoption verdict stays WATCHLIST, does not upgrade to FORKABLE');
+});
+
 console.log('');
 console.log(`Verdict tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
+

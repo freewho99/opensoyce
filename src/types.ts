@@ -95,7 +95,23 @@ export type Project = {
     ingredients: string[];
     outcome: string;
   };
+  extensionExploitRisk?: ExtensionExploitRisk | null;
+  trustPosture?: TrustPosture | null;
 };
+
+export type ExtensionExploitRiskReason = {
+  code: string;
+  label: string;
+};
+
+export type ExtensionExploitRisk = {
+  active: boolean;
+  status: 'HIJACK RISK' | 'MAINTAINER BOTTLENECK' | 'NONE';
+  reasons: ExtensionExploitRiskReason[];
+  confidence: 'low' | 'medium' | 'high';
+};
+
+export type TrustPosture = 'TRUSTED' | 'LIMITED TRUST' | 'HIJACK RISK' | 'COMPROMISED';
 
 export type Recipe = {
   id: string;

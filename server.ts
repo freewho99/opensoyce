@@ -11,7 +11,7 @@ import { runScan, mapWithConcurrency } from "./src/shared/runScan.js";
 import { computeMaintainerConcentration } from "./src/shared/maintainerConcentration.js";
 import { getVendorSdk } from "./src/data/vendorSdks.js";
 import { detectMigration, makeFetchForks } from "./src/shared/detectMigration.js";
-import { verdictFor } from "./src/shared/verdict.js";
+import { verdictFor, detectExtensionExploitRisk, trustPostureFor } from "./src/shared/verdict.js";
 // @ts-ignore — plain JS handler, no .d.ts
 import earlyAccessHandler from "./api/early-access.js";
 // @ts-ignore — plain JS handler, no .d.ts
@@ -98,7 +98,7 @@ async function startServer() {
       gh.getRepoAdvisories(owner, repo),
       gh.getRecentIssues(owner, repo),
       gh.getWorkflows(owner, repo).catch(() => null),
-      gh.checkDependabot(owner, repo).catch(() => false)
+      gh.checkDependabot(owner, repo).catch(() => 'unknown' as const)
     ]);
     if (!repoData) return null;
 
@@ -113,6 +113,18 @@ async function startServer() {
       }
     }
 
+    const hasSast = (() => {
+      if (workflows === null || workflows === undefined) return 'unknown';
+      if (!workflows.workflows || !Array.isArray(workflows.workflows)) return 'unknown';
+      const sastRegex = /(codeql|semgrep|snyk|trivy|osv|security|audit|scan|scorecard|socket|step-security)/i;
+      const match = workflows.workflows.some((w: any) => {
+        const name = w.name || '';
+        const path = w.path || '';
+        return sastRegex.test(name) || sastRegex.test(path);
+      });
+      return match ? true : false;
+    })();
+
     const scoreResult = calculateSoyceScore(
       repoData,
       commits || [],
@@ -123,16 +135,49 @@ async function startServer() {
       repoAdvisories,
       recentIssues,
       workflows,
-      hasDependabot
+      hasDependabot === true
     );
 
-    // AI signals v0.1 — surface the same maintainer-concentration + vendor-SDK
-    // fields the Vercel function (analyzeRepo.js) returns, so /api/analyze in
-    // dev (Express) matches the deployed shape.
+    if (scoreResult.meta) {
+      // @ts-ignore
+      scoreResult.meta.hasDependabot = hasDependabot;
+      // @ts-ignore
+      scoreResult.meta.hasSast = hasSast;
+    }
+
     const maintainerConcentration = computeMaintainerConcentration(contributors || [], commits || []);
     const vendorSdk = getVendorSdk(repoData.owner.login, repoData.name);
-    // Fork-velocity-of-namesake v0 — Express runtime parity with the Vercel
-    // function (analyzeRepo.js). Failure-isolated; null in the common case.
+
+    const extensionExploitRisk = detectExtensionExploitRisk({
+      repoData,
+      workflows,
+      hasDependabot,
+      hasSast,
+      maintainerConcentration
+    });
+
+    const trustPosture = trustPostureFor(scoreResult.total, {
+      advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
+      maintainerConcentration,
+      vendorSdkMatch: !!vendorSdk,
+      extensionExploitRisk,
+      hasDependabot,
+      hasSast,
+      workflows
+    });
+
+    // Re-run verdictFor using capped adoption rules with extensionExploitRisk
+    if (scoreResult.total) {
+      // @ts-ignore
+      scoreResult.verdict = verdictFor(scoreResult.total, {
+        earlyBreakout: false,
+        advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
+        maintainerConcentration,
+        vendorSdkMatch: !!vendorSdk,
+        extensionExploitRisk
+      });
+    }
+
     let migration = null;
     try {
       const verdict = verdictFor(scoreResult.total, {
@@ -140,6 +185,7 @@ async function startServer() {
         advisorySummary: (scoreResult.meta && scoreResult.meta.advisories) || null,
         maintainerConcentration,
         vendorSdkMatch: !!vendorSdk,
+        extensionExploitRisk
       });
       const ghHeaders: Record<string, string> = {
         'User-Agent': 'opensoyce',
@@ -163,6 +209,8 @@ async function startServer() {
       maintainerConcentration,
       vendorSdk,
       migration,
+      extensionExploitRisk,
+      trustPosture,
       repo: {
         name: repoData.name,
         description: repoData.description,

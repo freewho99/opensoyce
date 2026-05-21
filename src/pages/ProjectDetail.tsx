@@ -69,6 +69,13 @@ export default function ProjectDetail() {
           url: data.repo.url,
           advisories: data.meta.advisories ?? null,
           maintenanceBreakdown: data.meta.maintenanceBreakdown ?? null,
+          hasDependabot: data.meta.hasDependabot,
+          hasSast: data.meta.hasSast,
+          maintainerConcentration: data.maintainerConcentration ?? null,
+          vendorSdk: data.vendorSdk ?? null,
+          migration: data.migration ?? null,
+          extensionExploitRisk: data.extensionExploitRisk ?? null,
+          trustPosture: data.trustPosture ?? null,
         });
       } catch (err: any) {
         setError(err.message);
@@ -169,7 +176,7 @@ export default function ProjectDetail() {
                   tier and is not shown in the public score card. The curated flag stays in
                   src/data/categories.ts for internal use and is still surfaced via the
                   Compare / SimilarProjects "rising" marker. See src/shared/verdict.js. */}
-              <SoyceScore value={project.score.overall ?? 0} size="sm" advisorySummary={project.advisories ?? null} link />
+              <SoyceScore value={project.score.overall ?? 0} size="sm" advisorySummary={project.advisories ?? null} extensionExploitRisk={project.extensionExploitRisk} link />
             </div>
           </div>
         </div>

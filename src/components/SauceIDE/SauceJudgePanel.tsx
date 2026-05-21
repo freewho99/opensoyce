@@ -31,6 +31,14 @@ interface SauceJudgePanelProps {
   activeFocus: EvidenceFocus | null;
   setFocus: (focus: EvidenceFocus) => void;
   onActionTrigger: (action: string) => void;
+  verdict: string;
+  trustPosture: string;
+  extensionExploitRisk?: {
+    active: boolean;
+    status: 'HIJACK RISK' | 'MAINTAINER BOTTLENECK' | 'NONE';
+    reasons: { code: string; label: string }[];
+    confidence: 'low' | 'medium' | 'high';
+  } | null;
 }
 
 export default function SauceJudgePanel({
@@ -42,6 +50,9 @@ export default function SauceJudgePanel({
   activeFocus,
   setFocus,
   onActionTrigger,
+  verdict,
+  trustPosture,
+  extensionExploitRisk,
 }: SauceJudgePanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -166,18 +177,26 @@ export default function SauceJudgePanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
         {/* Sauce Verdict Score Card */}
         <div className="bg-[#100d0b] border-2 border-soy-bottle p-4 rounded shadow-[3px_3px_0px_#000] relative overflow-hidden">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[9px] font-black uppercase tracking-wider text-soy-red/80">Sauce Verdict</span>
-            <span className="bg-soy-red text-white text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded">
-              {score >= 8 ? 'USE READY' : score >= 6 ? 'EVALUATE' : 'HIGH RISK'}
-            </span>
+          <div className="flex flex-col gap-2 mb-4 border-b border-[#3a3028] pb-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-wider text-soy-label/50">Adoption Verdict</span>
+              <span className="bg-soy-red text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-sm">
+                {verdict}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-wider text-soy-label/50">Trust Posture</span>
+              <span className="bg-[#efe8dc] text-black border border-black text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-sm">
+                {trustPosture}
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-baseline gap-2 mb-4">
+          <div className="flex items-baseline gap-2 mb-3">
             <span className="text-4xl font-black text-soy-label tracking-tighter leading-none">{score.toFixed(1)}</span>
             <span className="text-xs text-soy-label/40 font-bold">/ 10.0</span>
-            <span className="text-sm font-black uppercase italic tracking-widest text-soy-red ml-auto">
-              {score >= 8 ? 'EXCELLENT' : score >= 6 ? 'STABLE' : 'RISKY'}
+            <span className="text-xs font-black uppercase italic tracking-widest text-soy-red ml-auto">
+              {score >= 8.5 ? 'EXCELLENT' : score >= 7.0 ? 'GOOD' : score >= 6.0 ? 'STABLE' : 'RISKY'}
             </span>
           </div>
 
@@ -221,6 +240,23 @@ export default function SauceJudgePanel({
               </button>
             ))}
           </div>
+          {extensionExploitRisk && extensionExploitRisk.active && (
+            <div className="bg-[#1c120c] border border-soy-red p-3 rounded space-y-2 mt-2">
+              <h4 className="text-[9px] font-black text-soy-red uppercase tracking-widest flex items-center gap-1.5">
+                <span>⚠ EXPLOIT RISK: {extensionExploitRisk.status}</span>
+              </h4>
+              <p className="text-[10px] text-soy-label/80 leading-normal font-sans">
+                This project is a developer tool target (confidence: <span className="font-bold text-soy-red">{extensionExploitRisk.confidence}</span>) but lacks security automation:
+              </p>
+              <div className="space-y-1 pl-2 border-l border-soy-red/30">
+                {extensionExploitRisk.reasons.map((r, idx) => (
+                  <div key={idx} className="text-[9px] text-soy-label/70 leading-normal">
+                    • {r.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Recommended Actions */}

@@ -105,16 +105,30 @@ export class GitHubService {
     return this.fetchGH(`/search/repositories?q=${encodeURIComponent(query)}+in:name,description&sort=stars&order=desc&per_page=8`);
   }
 
-  async checkDependabot(owner: string, repo: string): Promise<boolean> {
+  async checkDependabot(owner: string, repo: string): Promise<boolean | 'unknown'> {
+    let dependabotNull = false;
+    let renovateNull = false;
+
     try {
       const res = await this.fetchGH(`/repos/${owner}/${repo}/contents/.github/dependabot.yml`);
       if (res) return true;
-    } catch {}
+      if (res === null) dependabotNull = true;
+    } catch (e: any) {
+      if (e.message === 'RATE_LIMIT_HIT') return 'unknown';
+      return 'unknown';
+    }
+
     try {
       const res = await this.fetchGH(`/repos/${owner}/${repo}/contents/renovate.json`);
       if (res) return true;
-    } catch {}
-    return false;
+      if (res === null) renovateNull = true;
+    } catch (e: any) {
+      if (e.message === 'RATE_LIMIT_HIT') return 'unknown';
+      return 'unknown';
+    }
+
+    if (dependabotNull && renovateNull) return false;
+    return 'unknown';
   }
 }
 
