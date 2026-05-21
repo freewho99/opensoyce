@@ -48,6 +48,33 @@ interface SauceJudgePanelProps {
   setSimHasSast: (has: boolean) => void;
   simBusFactorHealthy: boolean;
   setSimBusFactorHealthy: (healthy: boolean) => void;
+  automergeResult: any;
+  depPackageName: string;
+  setDepPackageName: (name: string) => void;
+  depChangeType: 'patch' | 'minor' | 'major';
+  setDepChangeType: (type: 'patch' | 'minor' | 'major') => void;
+  depAddsLifecycleScript: boolean;
+  setDepAddsLifecycleScript: (val: boolean) => void;
+  depAddsNativeBinary: boolean;
+  setDepAddsNativeBinary: (val: boolean) => void;
+  depNewTransitiveDepsCount: number;
+  setDepNewTransitiveDepsCount: (count: number) => void;
+  depPublishAgeHours: number;
+  setDepPublishAgeHours: (hours: number) => void;
+  depProvenancePresent: boolean;
+  setDepProvenancePresent: (val: boolean) => void;
+  depRegistrySignatureVerified: boolean;
+  setDepRegistrySignatureVerified: (val: boolean) => void;
+  depMaintainerIdentityStable: boolean;
+  setDepMaintainerIdentityStable: (val: boolean) => void;
+  depSastUpstream: boolean;
+  setDepSastUpstream: (val: boolean) => void;
+  depVulnerabilityAuditPass: boolean;
+  setDepVulnerabilityAuditPass: (val: boolean) => void;
+  depCiPasses: boolean;
+  setDepCiPasses: (val: boolean) => void;
+  depLockfileDiffSize: 'small' | 'large';
+  setDepLockfileDiffSize: (val: 'small' | 'large') => void;
 }
 
 export default function SauceJudgePanel({
@@ -71,6 +98,33 @@ export default function SauceJudgePanel({
   setSimHasSast,
   simBusFactorHealthy,
   setSimBusFactorHealthy,
+  automergeResult,
+  depPackageName,
+  setDepPackageName,
+  depChangeType,
+  setDepChangeType,
+  depAddsLifecycleScript,
+  setDepAddsLifecycleScript,
+  depAddsNativeBinary,
+  setDepAddsNativeBinary,
+  depNewTransitiveDepsCount,
+  setDepNewTransitiveDepsCount,
+  depPublishAgeHours,
+  setDepPublishAgeHours,
+  depProvenancePresent,
+  setDepProvenancePresent,
+  depRegistrySignatureVerified,
+  setDepRegistrySignatureVerified,
+  depMaintainerIdentityStable,
+  setDepMaintainerIdentityStable,
+  depSastUpstream,
+  setDepSastUpstream,
+  depVulnerabilityAuditPass,
+  setDepVulnerabilityAuditPass,
+  depCiPasses,
+  setDepCiPasses,
+  depLockfileDiffSize,
+  setDepLockfileDiffSize,
 }: SauceJudgePanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -297,6 +351,155 @@ export default function SauceJudgePanel({
           </div>
         </div>
 
+        {/* Automerge Governor Card */}
+        <div className="bg-[#100d0b] border-2 border-soy-bottle p-4 rounded shadow-[3px_3px_0px_#000] relative overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[#3a3028] pb-2 mb-3">
+            <span className="text-[9px] font-black uppercase tracking-wider text-soy-label/50">Automerge Governor</span>
+            <span className="text-[8px] px-1.5 py-0.5 bg-black border border-[#3a3028] text-soy-label/60 font-black rounded-sm">
+              FIREWALL ACTIVE
+            </span>
+          </div>
+
+          {/* Dependency Info */}
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <div className="text-xs font-black text-soy-label uppercase">
+                {depPackageName}
+              </div>
+              <div className="text-[10px] text-soy-label/50 font-bold mt-0.5">
+                {depChangeType === 'major' ? '3.0.0 → 4.0.0' : depChangeType === 'minor' ? '4.17.0 → 4.18.0' : '4.17.21 → 4.17.22'} ({depChangeType})
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="bg-[#1c120c] text-amber-500 border border-amber-500/30 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm">
+                {automergeResult.tierName}
+              </span>
+            </div>
+          </div>
+
+          {/* Automerge Decision Badge */}
+          <div className="mb-3">
+            {(() => {
+              const decision = automergeResult.decision;
+              let badgeColorClass = "";
+              if (decision.includes("ALLOWED")) {
+                badgeColorClass = "text-emerald-500 border-emerald-500 bg-emerald-500/10";
+              } else if (decision.includes("DELAYED")) {
+                badgeColorClass = "text-amber-500 border-amber-500 bg-amber-500/10";
+              } else if (decision.includes("NEEDS REVIEW")) {
+                badgeColorClass = "text-sky-500 border-sky-500 bg-sky-500/10";
+              } else {
+                badgeColorClass = "text-rose-500 border-rose-500 bg-rose-500/10";
+              }
+              return (
+                <div className={`border-2 px-3 py-1.5 text-center font-black uppercase tracking-widest rounded-sm ${badgeColorClass}`}>
+                  {decision}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Behavior Diff */}
+          <div className="space-y-1 mb-3">
+            <div className="text-[9px] font-black text-soy-label/40 uppercase tracking-widest">Behavior Diff</div>
+            <div className="space-y-0.5">
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Lifecycle scripts</span>
+                <span className={depAddsLifecycleScript ? "text-rose-500 font-bold" : "text-emerald-500"}>
+                  {depAddsLifecycleScript ? "⚠ Adds postinstall/preinstall" : "✓ None added"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Native binary</span>
+                <span className={depAddsNativeBinary ? "text-rose-500 font-bold" : "text-emerald-500"}>
+                  {depAddsNativeBinary ? "⚠ Adds platform binary" : "✓ None added"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Transitive deps</span>
+                <span className={depNewTransitiveDepsCount > 10 ? "text-sky-500 font-bold" : "text-soy-label/50"}>
+                  {depNewTransitiveDepsCount > 0 ? `+ ${depNewTransitiveDepsCount} new` : "None introduced"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Publish age</span>
+                <span className={depPublishAgeHours < 24 ? "text-amber-500 font-bold" : depPublishAgeHours < 72 ? "text-amber-500/80 font-bold" : "text-emerald-500"}>
+                  {depPublishAgeHours} hours ago
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Trust & Integrity Signals */}
+          <div className="space-y-1 mb-3 border-t border-[#3a3028] pt-2">
+            <div className="text-[9px] font-black text-soy-label/40 uppercase tracking-widest">Trust & Integrity</div>
+            <div className="space-y-0.5">
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">NPM Provenance</span>
+                <span className={depProvenancePresent ? "text-emerald-500" : "text-amber-500"}>
+                  {depProvenancePresent ? "✓ Present" : "⚠ Missing"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Registry Signature</span>
+                <span className={depRegistrySignatureVerified ? "text-emerald-500" : "text-rose-500 font-bold"}>
+                  {depRegistrySignatureVerified ? "✓ Verified" : "✗ Verification failed"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Maintainer Profile</span>
+                <span className={depMaintainerIdentityStable ? "text-emerald-500" : "text-amber-500"}>
+                  {depMaintainerIdentityStable ? "✓ Stable" : "⚠ Unstable / Unknown"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Upstream SAST</span>
+                <span className={depSastUpstream ? "text-emerald-500" : "text-soy-label/50"}>
+                  {depSastUpstream ? "✓ Active" : "Missing / Unknown"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">Vulnerability Scan</span>
+                <span className={depVulnerabilityAuditPass ? "text-emerald-500" : "text-rose-500 font-bold"}>
+                  {depVulnerabilityAuditPass ? "✓ Clean (NPM audit)" : "✗ Vulnerable"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-soy-label/70">CI Status</span>
+                <span className={depCiPasses ? "text-emerald-500" : "text-rose-500 font-bold"}>
+                  {depCiPasses ? "✓ Passing" : "✗ Failing checks"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action / Explanation */}
+          <div className="border-t border-[#3a3028] pt-2 mt-2">
+            {automergeResult.reasons && automergeResult.reasons.length > 0 && (
+              <div className="mb-2 space-y-1">
+                <span className="text-[8px] font-black uppercase text-soy-red tracking-wider">Gate Failures ({automergeResult.reasons.length})</span>
+                <div className="space-y-1">
+                  {automergeResult.reasons.map((r: any, idx: number) => (
+                    <div key={idx} className="text-[9px] leading-normal flex items-start gap-1">
+                      <span className={`font-black shrink-0 ${
+                        r.severity === 'BLOCKED' ? 'text-rose-500' :
+                        r.severity === 'NEEDS REVIEW' ? 'text-sky-500' : 'text-amber-500'
+                      }`}>[{r.severity}]</span>
+                      <span className="text-soy-label/80">{r.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="bg-[#100d0b] p-2 border border-[#3a3028] rounded-sm">
+              <div className="text-[8px] font-black text-soy-label/40 uppercase tracking-widest">Recommended Action</div>
+              <p className="text-[10px] text-soy-label font-bold leading-normal mt-0.5">
+                {automergeResult.recommendedAction}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Primary Risks */}
         <div className="space-y-2">
           <h3 className="text-[9px] font-black text-soy-red uppercase tracking-widest opacity-60">Primary Risks</h3>
@@ -371,7 +574,12 @@ export default function SauceJudgePanel({
           </div>
 
           {simulatorActive && (
-            <div className="bg-[#100d0b] border border-[#3a3028] p-3 rounded space-y-2.5">
+            <div className="bg-[#100d0b] border border-[#3a3028] p-3 rounded space-y-3">
+              {/* Part 1: Adoption & Posture */}
+              <div className="border-b border-[#3a3028]/60 pb-1 mb-1 text-[8px] font-black text-soy-label/40 uppercase tracking-wider">
+                Adoption & Posture Overrides
+              </div>
+
               <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                 <input
                   type="checkbox"
@@ -401,9 +609,162 @@ export default function SauceJudgePanel({
                 />
                 <span>Expand maintainer base (multi-maintainer)</span>
               </label>
+
+              {/* Part 2: Dependency Automerge */}
+              <div className="border-b border-[#3a3028]/60 pb-1 pt-2 text-[8px] font-black text-soy-label/40 uppercase tracking-wider">
+                Dependency Update Overrides
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] text-soy-label/50 font-bold block">Package Name</label>
+                <input
+                  type="text"
+                  value={depPackageName}
+                  onChange={(e) => setDepPackageName(e.target.value)}
+                  className="w-full bg-black border border-[#3a3028] text-soy-label text-[10px] p-1.5 outline-none rounded focus:border-soy-red font-mono"
+                  placeholder="e.g. lodash"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] text-soy-label/50 font-bold block">Change Type</label>
+                <select
+                  value={depChangeType}
+                  onChange={(e) => setDepChangeType(e.target.value as 'patch' | 'minor' | 'major')}
+                  className="w-full bg-black border border-[#3a3028] text-soy-label text-[10px] p-1.5 outline-none rounded focus:border-soy-red font-mono cursor-pointer"
+                >
+                  <option value="patch">Patch update</option>
+                  <option value="minor">Minor update</option>
+                  <option value="major">Major update</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between text-[9px] text-soy-label/50 font-bold">
+                  <span>Publish Age</span>
+                  <span>{depPublishAgeHours} hours</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="120"
+                  value={depPublishAgeHours}
+                  onChange={(e) => setDepPublishAgeHours(Number(e.target.value))}
+                  className="w-full accent-soy-red bg-[#17130f] h-1 rounded cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between text-[9px] text-soy-label/50 font-bold">
+                  <span>New Transitive Deps</span>
+                  <span>{depNewTransitiveDepsCount} packages</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="30"
+                  value={depNewTransitiveDepsCount}
+                  onChange={(e) => setDepNewTransitiveDepsCount(Number(e.target.value))}
+                  className="w-full accent-soy-red bg-[#17130f] h-1 rounded cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] text-soy-label/50 font-bold block">Lockfile Diff Size</label>
+                <select
+                  value={depLockfileDiffSize}
+                  onChange={(e) => setDepLockfileDiffSize(e.target.value as 'small' | 'large')}
+                  className="w-full bg-black border border-[#3a3028] text-soy-label text-[10px] p-1.5 outline-none rounded focus:border-soy-red font-mono cursor-pointer"
+                >
+                  <option value="small">Small lockfile diff</option>
+                  <option value="large">Large lockfile diff</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-1.5 pt-1">
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={depAddsLifecycleScript}
+                    onChange={(e) => setDepAddsLifecycleScript(e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Adds lifecycle script</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={depAddsNativeBinary}
+                    onChange={(e) => setDepAddsNativeBinary(e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Adds native binary</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={!depProvenancePresent}
+                    onChange={(e) => setDepProvenancePresent(!e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Missing NPM provenance</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={!depRegistrySignatureVerified}
+                    onChange={(e) => setDepRegistrySignatureVerified(!e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Signature verification fails</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={!depMaintainerIdentityStable}
+                    onChange={(e) => setDepMaintainerIdentityStable(!e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Unstable maintainer profile</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={!depSastUpstream}
+                    onChange={(e) => setDepSastUpstream(!e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>No upstream SAST scanner</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={!depVulnerabilityAuditPass}
+                    onChange={(e) => setDepVulnerabilityAuditPass(!e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Fails vulnerability audit</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={!depCiPasses}
+                    onChange={(e) => setDepCiPasses(!e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>CI checks failing</span>
+                </label>
+              </div>
               
               <div className="text-[9px] text-soy-red font-black uppercase tracking-wider bg-soy-red/5 p-1.5 border border-soy-red/20 rounded-sm">
-                ⚠ Simulator mode overrides score calculations in real-time.
+                ⚠ Simulator mode overrides score & governor in real-time.
               </div>
             </div>
           )}
