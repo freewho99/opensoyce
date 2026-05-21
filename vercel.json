@@ -2,6 +2,6 @@
   "rewrites": [
     { "source": "/api/github/:owner/:repo", "destination": "/api/github" },
     { "source": "/api/badge/:owner/:repo.svg", "destination": "/api/badge" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|icons/|assets/|favicon.ico|og-image.png).*)", "destination": "/index.html" }
   ]
 }
