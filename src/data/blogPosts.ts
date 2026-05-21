@@ -1375,5 +1375,88 @@ The wars are ongoing. The shields matter.
 
 Check your stack's license exposure at opensoyce.com/scanner.
 `
+  },
+  {
+        slug: 'they-updated-the-code-the-code-wasnt-theirs',
+        primaryProductAction: 'guard',
+        title: "They Updated the Code. The Code Wasn't Theirs.",
+        subtitle: "ONE MALICIOUS VS CODE EXTENSION. ONE AUTO-UPDATE. GITHUB, TANSTACK, OPENAI, MISTRAL AI, GRAFANA LABS. ALL IN ONE WEEK.",
+        category: 'SECURITY',
+        emoji: "🏷️",
+        readTime: '7 min',
+        date: 'MAY 21, 2026',
+        featured: true,
+        heroImage: '/blog/check-the-label-before-building.png',
+        metaDescription: "A supply chain attack via a trojanized VS Code extension breached GitHub's internal repositories and hit OpenAI, TanStack, Mistral AI, and Grafana Labs. Here's what happened, why it worked, and how OpenSoyce Guard stops it before the next PR.",
+        tags: ["security", "supply-chain", "github", "vs-code", "extensions", "guard", "open-source-health", "hot-take"],
+        content: `## BEFORE YOU BUILD ON OPEN SOURCE, CHECK THE LABEL.
+
+        Look, I'm not gonna stand here and tell you the open source community got played. But somebody got played.
+
+        You ever let somebody borrow your car, and you come back and the seat's moved, the mirrors are adjusted, and there's a little "thank you" note on the dash — except the gas is gone, the glove box is open, and somehow your garage door opener works at a different house now? That's basically what happened to GitHub.
+
+        A VS Code extension. That's all it took. One little plugin — the kind developers install faster than they read the terms and conditions — and the whole thing unwrapped like a Christmas present nobody asked for.
+
+        The group behind it goes by **TeamPCP.** They slipped a trojanized version of a popular developer tool called *Nx Console* into the Visual Studio Code marketplace. And here's the part that'll make a tech person choke on their cold brew: it looked and acted completely normal. Did everything it was supposed to do. Opened files. Ran commands. Very professional. Very polite. And then, silently, on startup — it ran a little script on the side. Like a waiter who brings your food with a smile and also eats a fry off your plate before it gets to the table.
+
+        Nobody noticed for a while. Because why would you? You trusted the menu.
+
+        ## IT WASN'T JUST ONE COMPANY.
+
+        This wasn't just about GitHub. GitHub got hit. TanStack got hit. OpenAI, Mistral AI, Grafana Labs. A whole neighborhood of high-profile open source projects, all connected by the same digital plumbing, all sharing the same trust in the ecosystem. That's the supply chain. And when the supply chain sneezes, everybody reaches for a tissue.
+
+        GitHub confirmed some internal repositories were accessed — ones that could contain customer-related information. They were quick to note: no evidence of broad customer data exposure. Which is the kind of sentence that's both reassuring *and* the reason you still check your accounts anyway.
+
+        ## THE REAL JOKE — AND PAY ATTENTION BECAUSE THIS IS ACTUALLY USEFUL.
+
+        VS Code and most modern editors have **auto-update turned on by default.** The extension marketplace ships updates silently. Which is great! Keeps you current. Keeps you patched. Until the publisher of the extension gets compromised — and then auto-update becomes a very efficient delivery system for somebody else's agenda.
+
+        The security community has a word for this: a **supply chain attack.** The idea is simple. Instead of breaking down your front door, why not become the locksmith?
+
+        The extension looked and behaved like normal Nx Console, but on startup it silently ran a single shell script. Every popular extension marketplace ships with auto-update on by default. The trade-off stops making sense once you account for hostile or compromised publishers.
+
+        ## WHAT OPENSOYCE GUARD CHECKS ON EVERY PR.
+
+        Here's where it gets practical. OpenSoyce Guard scans dependency changes inside pull requests before they merge. Every added or upgraded dependency gets labeled across nine risk signals:
+
+        - **Postinstall scripts** — code that runs on npm install, always inspected. This is the exact attack vector TeamPCP used.
+        - **Maintainer concentration** — how many people actually control the code.
+        - **Known CVEs** — unresolved advisories surfaced immediately.
+        - **Typosquats** — names that look like popular packages but aren't.
+        - **Dependency confusion** — internal names colliding with public registries.
+        - **Fork velocity** — is the source repo moving or stalling.
+        - **License risk** — copyleft, custom, missing, or recently changed.
+        - **Advisory history** — repeat offenders flagged automatically.
+        - **Abandonment signals** — no releases, no commits, no answers.
+
+        One readable comment on the PR. No dashboard hunting. Block the risky stuff. Warn on the watchlist. Let the clean stuff through.
+
+        That compromised Nx Console extension? Guard checks postinstall scripts. Guard flags maintainer concentration risk. Guard would have put that dependency on the **Watchlist** before it ever hit a machine.
+
+        [img:/blog/stop-supply-chain-gamble.png:OpenSoyce Guard catches postinstall scripts and maintainer concentration risk before they merge.]
+
+        ## THE SOYCE SCORE WOULD HAVE FLAGGED IT.
+
+        Before TeamPCP touched that extension, the signals were already there. A single developer controlling the publisher account. Unusual activity patterns. The kind of maintainer concentration that drops a Soyce Score from a 9 to a 6 before any CVE gets filed.
+
+        The Soyce Score isn't a CVE lookup. It's a composite health signal — maintenance, community, security responsiveness, release cadence, ownership patterns. Signals that don't flip overnight. They drift. And drift is exactly what a supply chain attacker counts on nobody watching.
+
+        ## THE NUTRITION LABEL YOU SHOULD HAVE BEEN READING.
+
+        You read nutrition labels on your food. You check the reviews before you book a hotel. You would never hire a contractor without checking their license.
+
+        But a random package from a marketplace with 40 million developers and zero vetting? Oh yeah, ship it. LGTM.
+
+        The open source community is already having the conversation: how do we make the ecosystem trustworthy at scale when any one node can become a liability? It's a real, hard, and important question.
+
+        OpenSoyce is the trust layer that answers it. Before you build on open source — check the label.
+
+        [img:/blog/vulnerabilities-exposed.png:Move from blind trust to verifiable utility. Real-time scores for engineering leads.]
+
+        **Free scan:** Run your lockfile through [opensoyce.com/scanner](https://opensoyce.com/scanner) right now. No account required. See what's hiding in your resolved dependency tree.
+
+        **PR protection:** Install [OpenSoyce Guard](https://opensoyce.com/guard) on your repo in under a minute. It comments on the next risky pull request that lands.
+
+        All publicity is a reminder. And this one says: know what's running on your machine.`,
   }
 ];
