@@ -39,7 +39,14 @@ export class GitHubService {
   }
 
   async getContributors(owner: string, repo: string) {
-    return this.fetchGH(`/repos/${owner}/${repo}/contributors?per_page=30`);
+    try {
+      return await this.fetchGH(`/repos/${owner}/${repo}/contributors?per_page=30`);
+    } catch (e: any) {
+      if (e.message && e.message.includes('too large')) {
+        return [];
+      }
+      throw e;
+    }
   }
 
   async getReadme(owner: string, repo: string) {

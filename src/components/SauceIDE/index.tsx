@@ -289,7 +289,9 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
                 SOYCE SCORE
               </div>
               <div className="bg-soy-red text-white px-4 py-1 text-2xl font-black italic">
-                {total.toFixed(1)}
+                <span aria-label={`Soyce Score ${total.toFixed(1)} of 10`}>
+                  {total.toFixed(1)}
+                </span>
               </div>
             </div>
           </div>

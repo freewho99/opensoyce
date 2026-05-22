@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
