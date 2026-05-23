@@ -48,6 +48,9 @@ interface SauceJudgePanelProps {
   setSimHasSast: (has: boolean) => void;
   simBusFactorHealthy: boolean;
   setSimBusFactorHealthy: (healthy: boolean) => void;
+  baselineHasDependabot?: boolean;
+  baselineHasSast?: boolean;
+  baselineBusFactorHealthy?: boolean;
   automergeResult: any;
   depPackageName: string;
   setDepPackageName: (name: string) => void;
@@ -98,6 +101,9 @@ export default function SauceJudgePanel({
   setSimHasSast,
   simBusFactorHealthy,
   setSimBusFactorHealthy,
+  baselineHasDependabot = false,
+  baselineHasSast = false,
+  baselineBusFactorHealthy = true,
   automergeResult,
   depPackageName,
   setDepPackageName,
@@ -134,6 +140,8 @@ export default function SauceJudgePanel({
   const [hasSavedPreset, setHasSavedPreset] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
+  const [jsonCopied, setJsonCopied] = useState(false);
+  const [simActiveHelp, setSimActiveHelp] = useState<string | null>(null);
 
   // Staged states for Simulator overrides
   const [stagedHasDependabot, setStagedHasDependabot] = useState(simHasDependabot);
@@ -265,17 +273,31 @@ export default function SauceJudgePanel({
     setMessages([]);
   };
 
+  // Dynamic Suggestion Chips based on Repository Context & Score
   const suggestions = React.useMemo(() => {
-    if (score < 6) {
-      return ['Why is this repo risky?', 'How to resolve bus factor bottleneck?', 'Explain security gaps'];
-    } else if (score >= 8.5) {
-      return ['What makes this repo trusted?', 'Review security features', 'How to get badge code?'];
-    } else {
-      return ['How to reach TRUSTED?', 'Configure SAST?', 'Automerge details'];
+    const list = [];
+    if (!meta.hasDependabot) {
+      list.push('How to setup Dependabot?');
     }
-  }, [score]);
+    if (!meta.hasSast) {
+      list.push('How to enable SAST scans?');
+    }
+    if (!meta.busFactorHealthy) {
+      list.push('What is bus factor bottleneck?');
+    }
+    if (extensionExploitRisk && extensionExploitRisk.active && extensionExploitRisk.status !== 'NONE') {
+      list.push('Why is this repo risky?');
+    }
+    list.push('How to get badge code?');
+    list.push('What is Automerge Governor?');
+    return list.slice(0, 3);
+  }, [meta.hasDependabot, meta.hasSast, meta.busFactorHealthy, extensionExploitRisk, score]);
 
   const handleSavePreset = () => {
+    if (hasSavedPreset) {
+      const confirmOverwrite = window.confirm("An existing simulator preset already exists. Are you sure you want to overwrite it?");
+      if (!confirmOverwrite) return;
+    }
     const preset = {
       simHasDependabot: stagedHasDependabot,
       simHasSast: stagedHasSast,
@@ -355,6 +377,32 @@ export default function SauceJudgePanel({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleCopyPolicyJson = () => {
+    const dataToExport = {
+      timestamp: new Date().toISOString(),
+      targetPackage: {
+        name: depPackageName,
+        changeType: depChangeType,
+        publishAgeHours: depPublishAgeHours,
+        newTransitiveDepsCount: depNewTransitiveDepsCount,
+        lockfileDiffSize: depLockfileDiffSize,
+        addsLifecycleScript: depAddsLifecycleScript,
+        addsNativeBinary: depAddsNativeBinary,
+        provenancePresent: depProvenancePresent,
+        registrySignatureVerified: depRegistrySignatureVerified,
+        maintainerIdentityStable: depMaintainerIdentityStable,
+        sastUpstream: depSastUpstream,
+        vulnerabilityAuditPass: depVulnerabilityAuditPass,
+        ciPasses: depCiPasses
+      },
+      automergeResult
+    };
+
+    navigator.clipboard.writeText(JSON.stringify(dataToExport, null, 2));
+    setJsonCopied(true);
+    setTimeout(() => setJsonCopied(false), 2000);
   };
 
   // Load initial chat history or stream judgment completed summary
@@ -449,27 +497,46 @@ export default function SauceJudgePanel({
       reply = `🛡️ **Security Audit Details**:
 * Dependabot: ${meta.hasDependabot ? '✓ CONFIGURED' : '✗ MISSING'}
 * SAST analysis: ${meta.hasSast ? '✓ DETECTED' : '✗ NOT DETECTED'}
-* Risks: ${meta.hasDependabot ? 'None detected.' : 'Vulnerable packages could go undetected without dependabot alerts.'}`;
+* Risks: ${meta.hasDependabot ? 'None detected.' : 'Vulnerable packages could go undetected without Dependabot alerts.'}
+
+💡 *Try asking: "What is bus factor bottleneck?" next.*`;
     } else if (query.includes('risk') || query.includes('factor') || query.includes('bottleneck')) {
       reply = `⚠️ **Ownership & Risk Assessment**:
 * Contributor count: ${meta.contributors} developers
 * Bus Factor status: ${meta.busFactorHealthy ? '✓ HEALTHY' : '✗ BOTTLENECK RISK'}
-* Impact: ${meta.busFactorHealthy ? 'Low operational risk.' : 'A single primary maintainer commits most of the code base.'}`;
+* Impact: ${meta.busFactorHealthy ? 'Low operational risk.' : 'A single primary maintainer commits most of the code base.'}
+
+💡 *Try asking: "Explain security gaps" next.*`;
     } else if (query.includes('action') || query.includes('improve') || query.includes('reach trusted')) {
       reply = `💡 **Improvement Actions**:
 1. Setup Dependabot (click action below)
 2. Deploy a SECURITY.md file
-3. Claim repository to enable real-time scoring updates.`;
+3. Claim repository to enable real-time scoring updates.
+
+💡 *Try asking: "How to get badge code?" next.*`;
     } else if (query.includes('badge') || query.includes('claim') || query.includes('get badge code')) {
+      const badgeMarkdown = `[![OpenSoyce Score](https://img.shields.io/badge/OpenSoyce-${score.toFixed(1)}%20%2F%2010.0-success)](https://opensoyce.com/lookup)`;
       reply = `🏷️ **Badge Integration & Claiming**:
-To claim your repository and add a verified status badge to your README, click the **Claim Repository** button under Recommended Actions. This will authenticate you via GitHub OAuth and set up the official badge. You can view all claimed repositories inside the Claim page portfolio.`;
+To claim your repository, authenticate via GitHub OAuth by clicking the **Claim Repository** button under Recommended Actions.
+
+Once claimed, you can embed your live OpenSoyce health badge into your README.md:
+
+\`\`\`markdown
+${badgeMarkdown}
+\`\`\`
+
+💡 *Try asking: "What is Automerge Governor?" next.*`;
     } else if (query.includes('trusted') || query.includes('stable')) {
       reply = `🌟 **Trust Evaluation**:
 This repository has an overall score of **${score.toFixed(1)}/10.0** and is categorized under adoption band **${verdict}**.
-It demonstrates solid engineering practices, but security hygiene and ownership distribution are vital for high-assurance environments.`;
+It demonstrates solid engineering practices, but security hygiene and ownership distribution are vital for high-assurance environments.
+
+💡 *Try asking: "What is Automerge Governor?" next.*`;
     } else if (query.includes('automerge')) {
-      reply = `⚙️ **Automerge Policy**:
-The Automerge Governor checks dependency updates against live compliance rules. Packages failing lockfile checks or lacking signatures will hold auto-merges and trigger human reviews.`;
+      reply = `⚙️ **Automerge Governor**:
+The Automerge Governor checks dependency updates against live compliance rules. Packages failing lockfile checks or lacking signatures will hold auto-merges and trigger human reviews.
+
+💡 *Try asking: "Why is this repo risky?" next.*`;
     } else {
       reply = `I am the **Sauce Judge AI**. Ask me about the repository's **security configuration**, **bus factor risk**, or **how to improve the overall score**!`;
     }
@@ -540,7 +607,72 @@ The Automerge Governor checks dependency updates against live compliance rules. 
     onTrigger: () => onActionTrigger('badge')
   });
 
+  // Highlight comparison checks
+  const isDependabotOverride = stagedHasDependabot !== baselineHasDependabot;
+  const isSastOverride = stagedHasSast !== baselineHasSast;
+  const isBusFactorOverride = stagedBusFactorHealthy !== baselineBusFactorHealthy;
+  const isPackageOverride = stagedDepPackageName !== 'lodash';
+  const isChangeTypeOverride = stagedDepChangeType !== 'patch';
+  const isPublishAgeOverride = stagedDepPublishAgeHours !== 48;
+  const isTransitiveOverride = stagedDepNewTransitiveDepsCount !== 0;
+  const isLockfileOverride = stagedDepLockfileDiffSize !== 'small';
+  const isLifecycleOverride = stagedDepAddsLifecycleScript !== false;
+  const isNativeOverride = stagedDepAddsNativeBinary !== false;
+  const isProvenanceOverride = !stagedDepProvenancePresent;
+  const isSignatureOverride = !stagedDepRegistrySignatureVerified;
+  const isMaintainerOverride = !stagedDepMaintainerIdentityStable;
+  const isSastUpstreamOverride = !stagedDepSastUpstream;
+  const isVulnerabilityOverride = !stagedDepVulnerabilityAuditPass;
+  const isCiOverride = !stagedDepCiPasses;
 
+  const toggleSimHelp = (key: string) => {
+    setSimActiveHelp(prev => prev === key ? null : key);
+  };
+
+  const renderSimHelpText = (key: string, text: string) => {
+    if (simActiveHelp !== key) return null;
+    return (
+      <div className="mt-1 p-2 rounded text-[9px] bg-soy-bottle/20 text-soy-label border border-[#3a3028] font-sans leading-relaxed">
+        {text}
+      </div>
+    );
+  };
+
+  // Helper to highlight and parse technical terms in chat response
+  const renderChatMessageText = (text: string) => {
+    const terms = ['Dependabot', 'SAST', 'Bus Factor', 'Automerge Governor'];
+    let elements: React.ReactNode[] = [text];
+    
+    terms.forEach(term => {
+      const nextElements: React.ReactNode[] = [];
+      elements.forEach(el => {
+        if (typeof el === 'string') {
+          const parts = el.split(new RegExp(`\\b(${term})\\b`, 'gi'));
+          parts.forEach((part, index) => {
+            if (part.toLowerCase() === term.toLowerCase()) {
+              nextElements.push(
+                <button
+                  key={`${term}-${index}`}
+                  type="button"
+                  onClick={() => setShowGlossary(true)}
+                  className="text-soy-red font-bold underline hover:text-red-500 cursor-pointer inline p-0 bg-transparent border-0 font-mono text-[10px] select-text"
+                  title={`Click to view ${term} in Glossary`}
+                >
+                  {part}
+                </button>
+              );
+            } else {
+              nextElements.push(part);
+            }
+          });
+        } else {
+          nextElements.push(el);
+        }
+      });
+      elements = nextElements;
+    });
+    return elements;
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#17130f] text-soy-label select-none text-xs font-mono">
@@ -596,6 +728,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
             ].map((pillar) => (
               <button
                 key={pillar.name}
+                type="button"
                 onClick={() => setFocus({ tab: pillar.tab, source: 'signal', reason: pillar.reason })}
                 className="w-full flex justify-between items-center text-[10px] text-soy-label/80 hover:text-soy-red transition-all text-left py-0.5 cursor-pointer"
               >
@@ -609,7 +742,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
         {/* Automerge Governor Card */}
         <div className="bg-[#100d0b] border-2 border-soy-bottle p-4 rounded shadow-[3px_3px_0px_#000] relative overflow-hidden">
           <div className="flex items-center justify-between border-b border-[#3a3028] pb-2 mb-3">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[9px] font-black uppercase tracking-wider text-soy-label/50">Automerge Governor</span>
               <button
                 type="button"
@@ -617,19 +750,27 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                 onClick={handleExportPolicy}
                 className="text-soy-red hover:underline text-[9px] cursor-pointer"
               >
-                [Export Policy JSON]
+                [Export JSON]
+              </button>
+              <button
+                type="button"
+                id="copy-policy-json-btn"
+                onClick={handleCopyPolicyJson}
+                className="text-soy-red hover:underline text-[9px] cursor-pointer"
+              >
+                {jsonCopied ? '[✓ Copied]' : '[📋 Copy JSON]'}
               </button>
               <button
                 type="button"
                 id="publish-live-policy-btn"
                 onClick={handlePublishPolicy}
-                className="text-soy-red hover:underline text-[9px] cursor-pointer ml-1"
+                className="text-soy-red hover:underline text-[9px] cursor-pointer"
               >
-                [Publish to Live Policy]
+                [Publish]
               </button>
               {publishSuccess && (
                 <span className="text-[8px] bg-green-900 text-green-300 px-1 border border-green-700 rounded animate-bounce">
-                  PUBLISHED SUCCESSFULLY!
+                  PUBLISHED!
                 </span>
               )}
             </div>
@@ -775,6 +916,21 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                 {automergeResult.recommendedAction}
               </p>
             </div>
+            {!simulatorActive && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSimulatorActive(true);
+                  setTimeout(() => {
+                    const el = document.getElementById("trust-posture-simulator-section");
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 50);
+                }}
+                className="w-full text-soy-red hover:underline text-[9px] cursor-pointer mt-2 text-center font-bold"
+              >
+                [⚙ Simulate override settings for this governor below]
+              </button>
+            )}
           </div>
         </div>
 
@@ -785,8 +941,9 @@ The Automerge Governor checks dependency updates against live compliance rules. 
             {primaryRisks.map((risk, idx) => (
               <button
                 key={idx}
+                type="button"
                 onClick={() => setFocus({ tab: risk.tab, source: 'risk', reason: risk.reason })}
-                className="w-full flex items-start gap-2 text-[10px] text-left text-soy-label/70 hover:text-soy-red transition-all cursor-pointer"
+                className="w-full flex items-start gap-2 text-[10px] text-left text-soy-label/70 hover:text-soy-red transition-all cursor-pointer bg-transparent border-0 font-mono"
               >
                 <AlertTriangle size={12} className="text-amber-500 shrink-0 mt-0.5" />
                 <span className="leading-tight">{risk.text}</span>
@@ -819,6 +976,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
             {recommendedActions.map((action, idx) => (
               <button
                 key={idx}
+                type="button"
                 onClick={() => {
                   setFocus({ tab: action.tab, source: 'action', reason: action.reason });
                   action.onTrigger?.();
@@ -833,7 +991,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
         </div>
 
         {/* Trust Posture Simulator */}
-        <div className="space-y-2 border-t border-[#3a3028] pt-4">
+        <div className="space-y-2 border-t border-[#3a3028] pt-4" id="trust-posture-simulator-section">
           <div className="flex items-center justify-between">
             <h3 className="text-[9px] font-black text-soy-label/40 uppercase tracking-widest">
               Trust Posture Simulator
@@ -921,7 +1079,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                 Adoption & Posture Overrides
               </div>
 
-              <div className="flex flex-col gap-0.5">
+              <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isDependabotOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                 <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                   <input
                     type="checkbox"
@@ -930,13 +1088,26 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                     className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                   />
                   <span>Add Dependabot scanning</span>
+                  {isDependabotOverride && (
+                    <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">
+                      OVERRIDE
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('dependabot')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
                 </label>
+                {renderSimHelpText('dependabot', 'Simulates adding Dependabot config. Standard configuration scans manifest file updates and reports known security vulnerabilities.')}
                 <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                   (Enables automatic security alert tracking and update PRs)
                 </span>
               </div>
 
-              <div className="flex flex-col gap-0.5">
+              <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isSastOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                 <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                   <input
                     type="checkbox"
@@ -945,13 +1116,26 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                     className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                   />
                   <span>Configure CodeQL/Semgrep SAST</span>
+                  {isSastOverride && (
+                    <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">
+                      OVERRIDE
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('sast')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
                 </label>
+                {renderSimHelpText('sast', 'Static Application Security Testing. Detects security issues like SQL Injection, path traversal, or hardcoded secrets in the source code.')}
                 <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                   (Integrates automated static analysis scanning workflows)
                 </span>
               </div>
 
-              <div className="flex flex-col gap-0.5">
+              <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isBusFactorOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                 <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                   <input
                     type="checkbox"
@@ -960,7 +1144,20 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                     className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                   />
                   <span>Expand maintainer base (multi-maintainer)</span>
+                  {isBusFactorOverride && (
+                    <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">
+                      OVERRIDE
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('busFactor')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
                 </label>
+                {renderSimHelpText('busFactor', 'Simulates adding multiple maintainers to mitigate operational bottlenecks if the primary maintainer goes inactive.')}
                 <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                   (Clears single-maintainer bottleneck and abandonment caps)
                 </span>
@@ -971,8 +1168,19 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                 Dependency Update Overrides
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[9px] text-soy-label/50 font-bold block">Package Name</label>
+              <div className={`space-y-1 p-1 rounded-sm border ${isPackageOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] text-soy-label/50 font-bold block">Package Name</label>
+                  {isPackageOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('packageName')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
+                </div>
+                {renderSimHelpText('packageName', 'Specify the package name being updated to evaluate against custom organization-wide rule lists.')}
                 <input
                   type="text"
                   value={stagedDepPackageName}
@@ -980,13 +1188,21 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                   className="w-full bg-black border border-[#3a3028] text-soy-label text-[10px] p-1.5 outline-none rounded focus:border-soy-red font-mono"
                   placeholder="e.g. lodash"
                 />
-                <span className="text-[8px] text-soy-label/40 block leading-none">
-                  (Specific dependency identifier evaluated by automerge rules)
-                </span>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[9px] text-soy-label/50 font-bold block">Change Type</label>
+              <div className={`space-y-1 p-1 rounded-sm border ${isChangeTypeOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] text-soy-label/50 font-bold block">Change Type</label>
+                  {isChangeTypeOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('changeType')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
+                </div>
+                {renderSimHelpText('changeType', 'Major changes signify breaking API changes. The Automerge Governor blocks major auto-updates by default.')}
                 <select
                   value={stagedDepChangeType}
                   onChange={(e) => setStagedDepChangeType(e.target.value as 'patch' | 'minor' | 'major')}
@@ -996,16 +1212,24 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                   <option value="minor">Minor update</option>
                   <option value="major">Major update</option>
                 </select>
-                <span className="text-[8px] text-soy-label/40 block leading-none">
-                  (Major releases are blocked by default due to breaking changes risk)
-                </span>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex justify-between text-[9px] text-soy-label/50 font-bold">
-                  <span>Publish Age</span>
-                  <span>{stagedDepPublishAgeHours} hours</span>
+              <div className={`space-y-1 p-1 rounded-sm border ${isPublishAgeOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] text-soy-label/50 font-bold">Publish Age:</span>
+                    <span className="text-white font-bold">{stagedDepPublishAgeHours} hours</span>
+                  </div>
+                  {isPublishAgeOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('publishAge')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
                 </div>
+                {renderSimHelpText('publishAge', 'Mitigates zero-day malware attacks. Releases under 24-72 hours are held back by the governor to allow community analysis.')}
                 <input
                   type="range"
                   min="1"
@@ -1014,16 +1238,24 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                   onChange={(e) => setStagedDepPublishAgeHours(Number(e.target.value))}
                   className="w-full accent-soy-red bg-[#17130f] h-1 rounded cursor-pointer"
                 />
-                <span className="text-[8px] text-soy-label/40 block leading-none">
-                  (Releases under 24-72h trigger delay gates to mitigate malware zero-days)
-                </span>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex justify-between text-[9px] text-soy-label/50 font-bold">
-                  <span>New Transitive Deps</span>
-                  <span>{stagedDepNewTransitiveDepsCount} packages</span>
+              <div className={`space-y-1 p-1 rounded-sm border ${isTransitiveOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] text-soy-label/50 font-bold">New Transitive Deps:</span>
+                    <span className="text-white font-bold">{stagedDepNewTransitiveDepsCount} packages</span>
+                  </div>
+                  {isTransitiveOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('transitiveDeps')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
                 </div>
+                {renderSimHelpText('transitiveDeps', 'Recursively added dependencies. Introducing a high count of transitive dependencies raises audit complexity.')}
                 <input
                   type="range"
                   min="0"
@@ -1032,13 +1264,21 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                   onChange={(e) => setStagedDepNewTransitiveDepsCount(Number(e.target.value))}
                   className="w-full accent-soy-red bg-[#17130f] h-1 rounded cursor-pointer"
                 />
-                <span className="text-[8px] text-soy-label/40 block leading-none">
-                  (New recursive dependencies require manual verification if count is high)
-                </span>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[9px] text-soy-label/50 font-bold block">Lockfile Diff Size</label>
+              <div className={`space-y-1 p-1 rounded-sm border ${isLockfileOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] text-soy-label/50 font-bold block">Lockfile Diff Size</label>
+                  {isLockfileOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                  <button
+                    type="button"
+                    onClick={() => toggleSimHelp('lockfileDiff')}
+                    className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                  >
+                    <HelpCircle size={10} />
+                  </button>
+                </div>
+                {renderSimHelpText('lockfileDiff', 'Large changes in lockfiles can hide malicious dependencies or modified source lines.')}
                 <select
                   value={stagedDepLockfileDiffSize}
                   onChange={(e) => setStagedDepLockfileDiffSize(e.target.value as 'small' | 'large')}
@@ -1047,13 +1287,10 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                   <option value="small">Small lockfile diff</option>
                   <option value="large">Large lockfile diff</option>
                 </select>
-                <span className="text-[8px] text-soy-label/40 block leading-none">
-                  (Large lockfile diffs are flagged due to potential hidden source shifts)
-                </span>
               </div>
 
               <div className="grid grid-cols-1 gap-1.5 pt-1">
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isLifecycleOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1062,13 +1299,22 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>Adds lifecycle script</span>
+                    {isLifecycleOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('lifecycleScript')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('lifecycleScript', 'Scripts (e.g. postinstall) run automatically during npm installation. The governor blocks auto-updates with new lifecycle scripts.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (⚠ Scripts run on install — triggers immediate block firewall gate)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isNativeOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1077,13 +1323,22 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>Adds native binary</span>
+                    {isNativeOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('nativeBinary')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('nativeBinary', 'Pre-compiled binaries can bypass source code auditing and present high exploit capability.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (⚠ Pre-compiled platform-specific machine code — high audit overhead)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isProvenanceOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1092,13 +1347,22 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>Missing NPM provenance</span>
+                    {isProvenanceOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('provenance')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('provenance', 'Provenance links the published npm package cryptographically to its build workflow and source Git repository.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (⚠ Cryptographic proof linking the registry bundle to source git ref is missing)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isSignatureOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1107,13 +1371,22 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>Signature verification fails</span>
+                    {isSignatureOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('signature')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('signature', 'Cryptographic package signatures verify that the registry package matches the publisher\'s key.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (✗ Package registry signature could not be verified by trust governors)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isMaintainerOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1122,13 +1395,22 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>Unstable maintainer profile</span>
+                    {isMaintainerOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('maintainerIdentity')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('maintainerIdentity', 'Triggers alerts if the publishing developer account is new, has low activity, or lacks 2FA security settings.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (⚠ Newly added authors or accounts missing 2FA security status)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isSastUpstreamOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1137,13 +1419,22 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>No upstream SAST scanner</span>
+                    {isSastUpstreamOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('sastUpstream')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('sastUpstream', 'Assesses whether the upstream package repository runs static analysis checks in its CI pipeline.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (⚠ Static application security auditing workflows not detected in source)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isVulnerabilityOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1152,13 +1443,22 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>Fails vulnerability audit</span>
+                    {isVulnerabilityOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('vulnerabilityScan')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('vulnerabilityScan', 'Blocks auto-merging if the new package version has known CVE security advisory entries.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (✗ Known CVE advisory entries currently match the package version)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-0.5">
+                <div className={`flex flex-col gap-0.5 p-1 rounded-sm border ${isCiOverride ? 'border-amber-600/40 bg-amber-600/5' : 'border-transparent'}`}>
                   <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
                     <input
                       type="checkbox"
@@ -1167,7 +1467,16 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                       className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
                     />
                     <span>CI checks failing</span>
+                    {isCiOverride && <span className="text-[7px] bg-amber-600 text-white font-sans px-1 rounded-sm uppercase tracking-wide font-black">OVERRIDE</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggleSimHelp('ciStatus')}
+                      className="text-soy-red hover:underline p-0.5 ml-auto flex items-center justify-center bg-transparent border-0 cursor-pointer"
+                    >
+                      <HelpCircle size={10} />
+                    </button>
                   </label>
+                  {renderSimHelpText('ciStatus', 'Checks if automated test workflows pass successfully on the dependency version.')}
                   <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
                     (✗ Source code build checks or regression testing suites are failing)
                   </span>
@@ -1259,7 +1568,20 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                     ? 'bg-soy-red text-white'
                     : 'bg-[#100d0b] text-soy-label/85 border border-[#3a3028]'
                 }`}>
-                  {msg.text}
+                  {renderChatMessageText(msg.text)}
+                  {msg.text.includes("```markdown") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const badgeMarkdown = `[![OpenSoyce Score](https://img.shields.io/badge/OpenSoyce-${score.toFixed(1)}%20%2F%2010.0-success)](https://opensoyce.com/lookup)`;
+                        navigator.clipboard.writeText(badgeMarkdown);
+                        alert("Badge Markdown copied to clipboard!");
+                      }}
+                      className="mt-1.5 px-2 py-0.5 bg-soy-red hover:bg-soy-red/80 text-white rounded font-sans font-bold text-[8px] uppercase cursor-pointer block"
+                    >
+                      Copy Badge Markdown 📋
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1278,6 +1600,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
             {suggestions.map((sug) => (
               <button
                 key={sug}
+                type="button"
                 onClick={() => handleSendMessage(sug)}
                 className="flex items-center gap-1 px-1.5 py-0.5 text-[8px] bg-[#100d0b] border border-[#3a3028] hover:border-soy-red hover:text-white rounded text-soy-label/50 cursor-pointer"
               >
@@ -1307,7 +1630,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
             />
             <button
               type="submit"
-              className="px-2.5 bg-soy-red hover:bg-soy-red/80 text-white rounded transition-all cursor-pointer flex items-center justify-center"
+              className="px-2.5 bg-soy-red hover:bg-soy-red/80 text-white rounded transition-all cursor-pointer flex items-center justify-center border-0"
             >
               <Send size={10} />
             </button>

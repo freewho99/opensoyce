@@ -197,12 +197,12 @@ function ClaimedPortfolio() {
           <table className="w-full border-collapse text-left font-mono">
             <thead>
               <tr className="bg-soy-bottle text-soy-label border-b-4 border-soy-bottle">
-                <th className="p-3 md:p-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Verdict Band</th>
-                <th className="p-3 md:p-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Score</th>
-                <th className="p-3 md:p-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Repository</th>
-                <th className="p-3 md:p-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Status</th>
-                <th className="p-3 md:p-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Claim Date</th>
-                <th className="p-3 md:p-4 text-xs font-black uppercase tracking-wider">Actions</th>
+                <th className="py-2 px-3 md:py-2.5 md:px-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Verdict Band</th>
+                <th className="py-2 px-3 md:py-2.5 md:px-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Score</th>
+                <th className="py-2 px-3 md:py-2.5 md:px-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Repository</th>
+                <th className="py-2 px-3 md:py-2.5 md:px-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Status</th>
+                <th className="py-2 px-3 md:py-2.5 md:px-4 text-xs font-black uppercase tracking-wider border-r-2 border-soy-bottle">Claim Date</th>
+                <th className="py-2 px-3 md:py-2.5 md:px-4 text-xs font-black uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -211,31 +211,31 @@ function ClaimedPortfolio() {
                   key={`${r.owner}/${r.repo}`}
                   className="border-b-2 border-soy-bottle last:border-b-0 hover:bg-soy-label/10 transition-colors"
                 >
-                  <td className="p-3 md:p-4 border-r-2 border-soy-bottle">
+                  <td className="py-2 px-3 md:py-2.5 md:px-4 border-r-2 border-soy-bottle">
                     <span className="bg-soy-bottle/10 text-soy-bottle border border-soy-bottle/20 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-sm">
                       {r.verdict}
                     </span>
                   </td>
-                  <td className="p-3 md:p-4 border-r-2 border-soy-bottle">
-                    <div className="bg-soy-red text-white font-black italic px-3 py-1 border-2 border-black text-sm shadow-[2px_2px_0px_#000] inline-block">
+                  <td className="py-2 px-3 md:py-2.5 md:px-4 border-r-2 border-soy-bottle">
+                    <div className="bg-soy-red text-white font-black italic px-2 py-0.5 border-2 border-black text-xs shadow-[1.5px_1.5px_0px_#000] inline-block">
                       {r.score}
                     </div>
                   </td>
-                  <td className="p-3 md:p-4 border-r-2 border-soy-bottle font-black text-soy-bottle break-all">
-                    <h3 className="text-lg font-black uppercase tracking-tight text-soy-bottle inline-block leading-none">
+                  <td className="py-2 px-3 md:py-2.5 md:px-4 border-r-2 border-soy-bottle font-black text-soy-bottle break-all">
+                    <h3 className="text-sm md:text-base font-black uppercase tracking-tight text-soy-bottle inline-block leading-none">
                       {r.owner}/{r.repo}
                     </h3>
                   </td>
-                  <td className="p-3 md:p-4 border-r-2 border-soy-bottle">
+                  <td className="py-2 px-3 md:py-2.5 md:px-4 border-r-2 border-soy-bottle">
                     <span className="bg-emerald-500/10 text-emerald-700 border border-emerald-500/20 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-sm">
                       {r.status}
                     </span>
                   </td>
-                  <td className="p-3 md:p-4 border-r-2 border-soy-bottle text-xs font-bold uppercase tracking-widest opacity-60">
+                  <td className="py-2 px-3 md:py-2.5 md:px-4 border-r-2 border-soy-bottle text-[10px] font-bold uppercase tracking-widest opacity-60">
                     {r.date}
                   </td>
-                  <td className="p-3 md:p-4">
-                    <div className="flex flex-wrap items-center gap-4 text-xs font-bold uppercase tracking-widest">
+                  <td className="py-2 px-3 md:py-2.5 md:px-4">
+                    <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold uppercase tracking-widest">
                       <Link
                         to={`/lookup/${r.owner}/${r.repo}`}
                         className="text-soy-red hover:underline flex items-center gap-1 font-black"
@@ -248,7 +248,7 @@ function ClaimedPortfolio() {
                         rel="noopener noreferrer"
                         className="opacity-50 hover:opacity-100 transition-opacity flex items-center gap-1 font-bold"
                       >
-                        GitHub <ExternalLink size={12} />
+                        GitHub <ExternalLink size={10} />
                       </a>
                     </div>
                   </td>

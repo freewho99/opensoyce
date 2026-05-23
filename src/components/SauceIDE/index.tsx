@@ -386,6 +386,9 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             setSimHasSast={setSimHasSast}
             simBusFactorHealthy={simBusFactorHealthy}
             setSimBusFactorHealthy={setSimBusFactorHealthy}
+            baselineHasDependabot={!!result.hasDependabot}
+            baselineHasSast={!!result.hasSast}
+            baselineBusFactorHealthy={result.busFactorHealthy !== false}
             automergeResult={automergeResult}
             depPackageName={depPackageName}
             setDepPackageName={setDepPackageName}
