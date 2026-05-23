@@ -11,7 +11,7 @@ interface EvidenceViewerProps {
 }
 
 export default function EvidenceViewer({
-  owner,h
+  owner,
   repo,
   activeFocus,
   setFocus,
