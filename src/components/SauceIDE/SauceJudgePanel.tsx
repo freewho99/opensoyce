@@ -131,25 +131,262 @@ export default function SauceJudgePanel({
   const [isTyping, setIsTyping] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Stream initial judgment completed summary
-  useEffect(() => {
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const assessment =
-      score >= 8
-        ? 'Healthy code distribution, active release cadences, and standard license posture verify this as stable.'
-        : score >= 6
-        ? 'A stable repository. However, minor gaps like missing SECURITY policies or low automated scanners adjust the score.'
-        : 'High risk detected. Low commit frequency, lack of package updates, and ownership concentration found.';
+  const [hasSavedPreset, setHasSavedPreset] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
 
-    const verdictText = `📢 **Verdict Summary**: Overall Score of **${score.toFixed(1)}/10.0**. ${assessment}`;
-    streamResponse(verdictText);
-  }, [owner, repo, score]);
+  // Staged states for Simulator overrides
+  const [stagedHasDependabot, setStagedHasDependabot] = useState(simHasDependabot);
+  const [stagedHasSast, setStagedHasSast] = useState(simHasSast);
+  const [stagedBusFactorHealthy, setStagedBusFactorHealthy] = useState(simBusFactorHealthy);
+  const [stagedDepPackageName, setStagedDepPackageName] = useState(depPackageName);
+  const [stagedDepChangeType, setStagedDepChangeType] = useState(depChangeType);
+  const [stagedDepAddsLifecycleScript, setStagedDepAddsLifecycleScript] = useState(depAddsLifecycleScript);
+  const [stagedDepAddsNativeBinary, setStagedDepAddsNativeBinary] = useState(depAddsNativeBinary);
+  const [stagedDepNewTransitiveDepsCount, setStagedDepNewTransitiveDepsCount] = useState(depNewTransitiveDepsCount);
+  const [stagedDepPublishAgeHours, setStagedDepPublishAgeHours] = useState(depPublishAgeHours);
+  const [stagedDepProvenancePresent, setStagedDepProvenancePresent] = useState(depProvenancePresent);
+  const [stagedDepRegistrySignatureVerified, setStagedDepRegistrySignatureVerified] = useState(depRegistrySignatureVerified);
+  const [stagedDepMaintainerIdentityStable, setStagedDepMaintainerIdentityStable] = useState(depMaintainerIdentityStable);
+  const [stagedDepSastUpstream, setStagedDepSastUpstream] = useState(depSastUpstream);
+  const [stagedDepVulnerabilityAuditPass, setStagedDepVulnerabilityAuditPass] = useState(depVulnerabilityAuditPass);
+  const [stagedDepCiPasses, setStagedDepCiPasses] = useState(depCiPasses);
+  const [stagedDepLockfileDiffSize, setStagedDepLockfileDiffSize] = useState(depLockfileDiffSize);
+
+  // Sync staged states with applied props when simulator active status, repository, or owner changes
+  useEffect(() => {
+    setStagedHasDependabot(simHasDependabot);
+    setStagedHasSast(simHasSast);
+    setStagedBusFactorHealthy(simBusFactorHealthy);
+    setStagedDepPackageName(depPackageName);
+    setStagedDepChangeType(depChangeType);
+    setStagedDepAddsLifecycleScript(depAddsLifecycleScript);
+    setStagedDepAddsNativeBinary(depAddsNativeBinary);
+    setStagedDepNewTransitiveDepsCount(depNewTransitiveDepsCount);
+    setStagedDepPublishAgeHours(depPublishAgeHours);
+    setStagedDepProvenancePresent(depProvenancePresent);
+    setStagedDepRegistrySignatureVerified(depRegistrySignatureVerified);
+    setStagedDepMaintainerIdentityStable(depMaintainerIdentityStable);
+    setStagedDepSastUpstream(depSastUpstream);
+    setStagedDepVulnerabilityAuditPass(depVulnerabilityAuditPass);
+    setStagedDepCiPasses(depCiPasses);
+    setStagedDepLockfileDiffSize(depLockfileDiffSize);
+  }, [owner, repo, simulatorActive]);
+
+  useEffect(() => {
+    setHasSavedPreset(!!localStorage.getItem('opensoyce_simulator_preset'));
+  }, []);
+
+  const isPresetModified = React.useMemo(() => {
+    const saved = localStorage.getItem('opensoyce_simulator_preset');
+    if (!saved) return false;
+    try {
+      const p = JSON.parse(saved);
+      return (
+        p.simHasDependabot !== stagedHasDependabot ||
+        p.simHasSast !== stagedHasSast ||
+        p.simBusFactorHealthy !== stagedBusFactorHealthy ||
+        p.depPackageName !== stagedDepPackageName ||
+        p.depChangeType !== stagedDepChangeType ||
+        p.depAddsLifecycleScript !== stagedDepAddsLifecycleScript ||
+        p.depAddsNativeBinary !== stagedDepAddsNativeBinary ||
+        p.depNewTransitiveDepsCount !== stagedDepNewTransitiveDepsCount ||
+        p.depPublishAgeHours !== stagedDepPublishAgeHours ||
+        p.depProvenancePresent !== stagedDepProvenancePresent ||
+        p.depRegistrySignatureVerified !== stagedDepRegistrySignatureVerified ||
+        p.depMaintainerIdentityStable !== stagedDepMaintainerIdentityStable ||
+        p.depSastUpstream !== stagedDepSastUpstream ||
+        p.depVulnerabilityAuditPass !== stagedDepVulnerabilityAuditPass ||
+        p.depCiPasses !== stagedDepCiPasses ||
+        p.depLockfileDiffSize !== stagedDepLockfileDiffSize
+      );
+    } catch {
+      return false;
+    }
+  }, [
+    stagedHasDependabot, stagedHasSast, stagedBusFactorHealthy,
+    stagedDepPackageName, stagedDepChangeType, stagedDepAddsLifecycleScript,
+    stagedDepAddsNativeBinary, stagedDepNewTransitiveDepsCount, stagedDepPublishAgeHours,
+    stagedDepProvenancePresent, stagedDepRegistrySignatureVerified, stagedDepMaintainerIdentityStable,
+    stagedDepSastUpstream, stagedDepVulnerabilityAuditPass, stagedDepCiPasses, stagedDepLockfileDiffSize,
+    hasSavedPreset
+  ]);
+
+  const diffsCount = [
+    stagedHasDependabot !== simHasDependabot,
+    stagedHasSast !== simHasSast,
+    stagedBusFactorHealthy !== simBusFactorHealthy,
+    stagedDepPackageName !== depPackageName,
+    stagedDepChangeType !== depChangeType,
+    stagedDepAddsLifecycleScript !== depAddsLifecycleScript,
+    stagedDepAddsNativeBinary !== depAddsNativeBinary,
+    stagedDepNewTransitiveDepsCount !== depNewTransitiveDepsCount,
+    stagedDepPublishAgeHours !== depPublishAgeHours,
+    stagedDepProvenancePresent !== depProvenancePresent,
+    stagedDepRegistrySignatureVerified !== depRegistrySignatureVerified,
+    stagedDepMaintainerIdentityStable !== depMaintainerIdentityStable,
+    stagedDepSastUpstream !== depSastUpstream,
+    stagedDepVulnerabilityAuditPass !== depVulnerabilityAuditPass,
+    stagedDepCiPasses !== depCiPasses,
+    stagedDepLockfileDiffSize !== depLockfileDiffSize
+  ].filter(Boolean).length;
+
+  const hasUnstagedChanges = diffsCount > 0;
+
+  const handleApplyChanges = () => {
+    setSimHasDependabot(stagedHasDependabot);
+    setSimHasSast(stagedHasSast);
+    setSimBusFactorHealthy(stagedBusFactorHealthy);
+    setDepPackageName(stagedDepPackageName);
+    setDepChangeType(stagedDepChangeType);
+    setDepAddsLifecycleScript(stagedDepAddsLifecycleScript);
+    setDepAddsNativeBinary(stagedDepAddsNativeBinary);
+    setDepNewTransitiveDepsCount(stagedDepNewTransitiveDepsCount);
+    setDepPublishAgeHours(stagedDepPublishAgeHours);
+    setDepProvenancePresent(stagedDepProvenancePresent);
+    setDepRegistrySignatureVerified(stagedDepRegistrySignatureVerified);
+    setDepMaintainerIdentityStable(stagedDepMaintainerIdentityStable);
+    setDepSastUpstream(stagedDepSastUpstream);
+    setDepVulnerabilityAuditPass(stagedDepVulnerabilityAuditPass);
+    setDepCiPasses(stagedDepCiPasses);
+    setDepLockfileDiffSize(stagedDepLockfileDiffSize);
+  };
+
+  const handlePublishPolicy = () => {
+    setPublishSuccess(true);
+    setTimeout(() => {
+      setPublishSuccess(false);
+    }, 3000);
+  };
+
+  const handleClearChat = () => {
+    const key = `opensoyce_chat_history_${owner}/${repo}`;
+    localStorage.removeItem(key);
+    setMessages([]);
+  };
+
+  const suggestions = React.useMemo(() => {
+    if (score < 6) {
+      return ['Why is this repo risky?', 'How to resolve bus factor bottleneck?', 'Explain security gaps'];
+    } else if (score >= 8.5) {
+      return ['What makes this repo trusted?', 'Review security features', 'How to get badge code?'];
+    } else {
+      return ['How to reach TRUSTED?', 'Configure SAST?', 'Automerge details'];
+    }
+  }, [score]);
+
+  const handleSavePreset = () => {
+    const preset = {
+      simHasDependabot: stagedHasDependabot,
+      simHasSast: stagedHasSast,
+      simBusFactorHealthy: stagedBusFactorHealthy,
+      depPackageName: stagedDepPackageName,
+      depChangeType: stagedDepChangeType,
+      depAddsLifecycleScript: stagedDepAddsLifecycleScript,
+      depAddsNativeBinary: stagedDepAddsNativeBinary,
+      depNewTransitiveDepsCount: stagedDepNewTransitiveDepsCount,
+      depPublishAgeHours: stagedDepPublishAgeHours,
+      depProvenancePresent: stagedDepProvenancePresent,
+      depRegistrySignatureVerified: stagedDepRegistrySignatureVerified,
+      depMaintainerIdentityStable: stagedDepMaintainerIdentityStable,
+      depSastUpstream: stagedDepSastUpstream,
+      depVulnerabilityAuditPass: stagedDepVulnerabilityAuditPass,
+      depCiPasses: stagedDepCiPasses,
+      depLockfileDiffSize: stagedDepLockfileDiffSize
+    };
+    localStorage.setItem('opensoyce_simulator_preset', JSON.stringify(preset));
+    setHasSavedPreset(true);
+  };
+
+  const handleLoadPreset = () => {
+    const saved = localStorage.getItem('opensoyce_simulator_preset');
+    if (saved) {
+      try {
+        const preset = JSON.parse(saved);
+        if (preset.simHasDependabot !== undefined) setStagedHasDependabot(preset.simHasDependabot);
+        if (preset.simHasSast !== undefined) setStagedHasSast(preset.simHasSast);
+        if (preset.simBusFactorHealthy !== undefined) setStagedBusFactorHealthy(preset.simBusFactorHealthy);
+        if (preset.depPackageName !== undefined) setStagedDepPackageName(preset.depPackageName);
+        if (preset.depChangeType !== undefined) setStagedDepChangeType(preset.depChangeType);
+        if (preset.depAddsLifecycleScript !== undefined) setStagedDepAddsLifecycleScript(preset.depAddsLifecycleScript);
+        if (preset.depAddsNativeBinary !== undefined) setStagedDepAddsNativeBinary(preset.depAddsNativeBinary);
+        if (preset.depNewTransitiveDepsCount !== undefined) setStagedDepNewTransitiveDepsCount(preset.depNewTransitiveDepsCount);
+        if (preset.depPublishAgeHours !== undefined) setStagedDepPublishAgeHours(preset.depPublishAgeHours);
+        if (preset.depProvenancePresent !== undefined) setStagedDepProvenancePresent(preset.depProvenancePresent);
+        if (preset.depRegistrySignatureVerified !== undefined) setStagedDepRegistrySignatureVerified(preset.depRegistrySignatureVerified);
+        if (preset.depMaintainerIdentityStable !== undefined) setStagedDepMaintainerIdentityStable(preset.depMaintainerIdentityStable);
+        if (preset.depSastUpstream !== undefined) setStagedDepSastUpstream(preset.depSastUpstream);
+        if (preset.depVulnerabilityAuditPass !== undefined) setStagedDepVulnerabilityAuditPass(preset.depVulnerabilityAuditPass);
+        if (preset.depCiPasses !== undefined) setStagedDepCiPasses(preset.depCiPasses);
+        if (preset.depLockfileDiffSize !== undefined) setStagedDepLockfileDiffSize(preset.depLockfileDiffSize);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const handleExportPolicy = () => {
+    const dataToExport = {
+      timestamp: new Date().toISOString(),
+      targetPackage: {
+        name: depPackageName,
+        changeType: depChangeType,
+        publishAgeHours: depPublishAgeHours,
+        newTransitiveDepsCount: depNewTransitiveDepsCount,
+        lockfileDiffSize: depLockfileDiffSize,
+        addsLifecycleScript: depAddsLifecycleScript,
+        addsNativeBinary: depAddsNativeBinary,
+        provenancePresent: depProvenancePresent,
+        registrySignatureVerified: depRegistrySignatureVerified,
+        maintainerIdentityStable: depMaintainerIdentityStable,
+        sastUpstream: depSastUpstream,
+        vulnerabilityAuditPass: depVulnerabilityAuditPass,
+        ciPasses: depCiPasses
+      },
+      automergeResult
+    };
+
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'automerge-policy-diff.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Load initial chat history or stream judgment completed summary
+  useEffect(() => {
+    const key = `opensoyce_chat_history_${owner}/${repo}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        setMessages(JSON.parse(stored));
+      } catch (e) {
+        console.error(e);
+        setMessages([]);
+      }
+    } else {
+      const assessment =
+        score >= 8
+          ? 'Healthy code distribution, active release cadences, and standard license posture verify this as stable.'
+          : score >= 6
+          ? 'A stable repository. However, minor gaps like missing SECURITY policies or low automated scanners adjust the score.'
+          : 'High risk detected. Low commit frequency, lack of package updates, and ownership concentration found.';
+
+      const verdictText = `📢 **Verdict Summary**: Overall Score of **${score.toFixed(1)}/10.0**. ${assessment}`;
+      setMessages([]);
+      streamResponse(verdictText, []);
+    }
+  }, [owner, repo]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const streamResponse = (fullText: string) => {
+  const streamResponse = (fullText: string, currentMessagesList?: ChatMessage[]) => {
     setIsTyping(true);
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -159,14 +396,16 @@ export default function SauceJudgePanel({
       let currentText = '';
       let index = 0;
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: 'agent',
-          text: '',
-          timestamp,
-        },
-      ]);
+      const baseMessages = currentMessagesList !== undefined ? currentMessagesList : messages;
+
+      const newAgentMsg: ChatMessage = {
+        sender: 'agent',
+        text: '',
+        timestamp,
+      };
+      
+      const newMessages = [...baseMessages, newAgentMsg];
+      setMessages(newMessages);
 
       const interval = setInterval(() => {
         if (index < words.length) {
@@ -181,6 +420,11 @@ export default function SauceJudgePanel({
           index++;
         } else {
           clearInterval(interval);
+          setMessages((prev) => {
+            const key = `opensoyce_chat_history_${owner}/${repo}`;
+            localStorage.setItem(key, JSON.stringify(prev));
+            return prev;
+          });
         }
       }, 30);
     }, 600);
@@ -188,19 +432,20 @@ export default function SauceJudgePanel({
 
   const handleSendMessage = (textToSend: string) => {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setMessages((prev) => [
-      ...prev,
-      {
-        sender: 'user',
-        text: textToSend,
-        timestamp,
-      },
-    ]);
+    const userMsg: ChatMessage = {
+      sender: 'user',
+      text: textToSend,
+      timestamp,
+    };
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
+    const key = `opensoyce_chat_history_${owner}/${repo}`;
+    localStorage.setItem(key, JSON.stringify(updatedMessages));
 
     const query = textToSend.toLowerCase();
     let reply = '';
 
-    if (query.includes('security') || query.includes('dependabot') || query.includes('sast')) {
+    if (query.includes('security') || query.includes('dependabot') || query.includes('sast') || query.includes('gap')) {
       reply = `🛡️ **Security Audit Details**:
 * Dependabot: ${meta.hasDependabot ? '✓ CONFIGURED' : '✗ MISSING'}
 * SAST analysis: ${meta.hasSast ? '✓ DETECTED' : '✗ NOT DETECTED'}
@@ -210,16 +455,26 @@ export default function SauceJudgePanel({
 * Contributor count: ${meta.contributors} developers
 * Bus Factor status: ${meta.busFactorHealthy ? '✓ HEALTHY' : '✗ BOTTLENECK RISK'}
 * Impact: ${meta.busFactorHealthy ? 'Low operational risk.' : 'A single primary maintainer commits most of the code base.'}`;
-    } else if (query.includes('action') || query.includes('improve')) {
+    } else if (query.includes('action') || query.includes('improve') || query.includes('reach trusted')) {
       reply = `💡 **Improvement Actions**:
 1. Setup Dependabot (click action below)
 2. Deploy a SECURITY.md file
 3. Claim repository to enable real-time scoring updates.`;
+    } else if (query.includes('badge') || query.includes('claim') || query.includes('get badge code')) {
+      reply = `🏷️ **Badge Integration & Claiming**:
+To claim your repository and add a verified status badge to your README, click the **Claim Repository** button under Recommended Actions. This will authenticate you via GitHub OAuth and set up the official badge. You can view all claimed repositories inside the Claim page portfolio.`;
+    } else if (query.includes('trusted') || query.includes('stable')) {
+      reply = `🌟 **Trust Evaluation**:
+This repository has an overall score of **${score.toFixed(1)}/10.0** and is categorized under adoption band **${verdict}**.
+It demonstrates solid engineering practices, but security hygiene and ownership distribution are vital for high-assurance environments.`;
+    } else if (query.includes('automerge')) {
+      reply = `⚙️ **Automerge Policy**:
+The Automerge Governor checks dependency updates against live compliance rules. Packages failing lockfile checks or lacking signatures will hold auto-merges and trigger human reviews.`;
     } else {
       reply = `I am the **Sauce Judge AI**. Ask me about the repository's **security configuration**, **bus factor risk**, or **how to improve the overall score**!`;
     }
 
-    streamResponse(reply);
+    streamResponse(reply, updatedMessages);
   };
 
   // Determine primary risks dynamically
@@ -285,7 +540,7 @@ export default function SauceJudgePanel({
     onTrigger: () => onActionTrigger('badge')
   });
 
-  const suggestions = ['Explain Security score', 'Show ownership risk', 'How to improve?'];
+
 
   return (
     <div className="flex flex-col h-full bg-[#17130f] text-soy-label select-none text-xs font-mono">
@@ -354,7 +609,30 @@ export default function SauceJudgePanel({
         {/* Automerge Governor Card */}
         <div className="bg-[#100d0b] border-2 border-soy-bottle p-4 rounded shadow-[3px_3px_0px_#000] relative overflow-hidden">
           <div className="flex items-center justify-between border-b border-[#3a3028] pb-2 mb-3">
-            <span className="text-[9px] font-black uppercase tracking-wider text-soy-label/50">Automerge Governor</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[9px] font-black uppercase tracking-wider text-soy-label/50">Automerge Governor</span>
+              <button
+                type="button"
+                id="export-policy-json-btn"
+                onClick={handleExportPolicy}
+                className="text-soy-red hover:underline text-[9px] cursor-pointer"
+              >
+                [Export Policy JSON]
+              </button>
+              <button
+                type="button"
+                id="publish-live-policy-btn"
+                onClick={handlePublishPolicy}
+                className="text-soy-red hover:underline text-[9px] cursor-pointer ml-1"
+              >
+                [Publish to Live Policy]
+              </button>
+              {publishSuccess && (
+                <span className="text-[8px] bg-green-900 text-green-300 px-1 border border-green-700 rounded animate-bounce">
+                  PUBLISHED SUCCESSFULLY!
+                </span>
+              )}
+            </div>
             <span className="text-[8px] px-1.5 py-0.5 bg-black border border-[#3a3028] text-soy-label/60 font-black rounded-sm">
               FIREWALL ACTIVE
             </span>
@@ -575,40 +853,118 @@ export default function SauceJudgePanel({
 
           {simulatorActive && (
             <div className="bg-[#100d0b] border border-[#3a3028] p-3 rounded space-y-3">
+              {/* Preset management */}
+              <div className="flex flex-col gap-1 pb-2 border-b border-[#3a3028]/60">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    id="save-preset-btn"
+                    onClick={handleSavePreset}
+                    className="flex-1 bg-[#1c120c] hover:bg-soy-red hover:text-white border border-[#3a3028] py-1 rounded font-bold uppercase tracking-wider text-[9px] cursor-pointer text-center text-soy-label"
+                  >
+                    Save Preset
+                  </button>
+                  <button
+                    type="button"
+                    id="load-preset-btn"
+                    onClick={handleLoadPreset}
+                    disabled={!hasSavedPreset}
+                    className={`flex-1 border py-1 rounded font-bold uppercase tracking-wider text-[9px] cursor-pointer text-center ${
+                      hasSavedPreset
+                        ? 'bg-[#1c120c] hover:bg-soy-red hover:text-white border-[#3a3028] text-soy-label'
+                        : 'bg-black/40 border-black/20 text-soy-label/20 cursor-not-allowed'
+                    }`}
+                  >
+                    Load Preset
+                  </button>
+                </div>
+                {hasSavedPreset && (
+                  <div className="text-[8px] font-bold uppercase tracking-widest text-right flex items-center justify-end gap-1 mt-0.5">
+                    <span className="opacity-45">Active Preset:</span>
+                    {isPresetModified ? (
+                      <span className="text-amber-500 animate-pulse font-black">Modified ⚠</span>
+                    ) : (
+                      <span className="text-green-500 font-black">Synced ✓</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Apply Changes Button & Export JSON */}
+              <div className="pb-2 border-b border-[#3a3028]/60 flex gap-2">
+                <button
+                  type="button"
+                  id="apply-simulator-changes-btn"
+                  onClick={handleApplyChanges}
+                  disabled={!hasUnstagedChanges}
+                  className={`flex-[2] py-2 rounded font-black uppercase tracking-wider text-[10px] text-center transition-all cursor-pointer ${
+                    hasUnstagedChanges
+                      ? 'bg-soy-red text-white border-black animate-pulse shadow-[2px_2px_0px_#000]'
+                      : 'bg-black/40 border-black/20 text-soy-label/20 cursor-not-allowed'
+                  }`}
+                >
+                  Apply Changes {hasUnstagedChanges ? `(${diffsCount} pending)` : ''}
+                </button>
+                <button
+                  type="button"
+                  id="simulator-export-policy-json-btn"
+                  onClick={handleExportPolicy}
+                  className="bg-[#1c120c] hover:bg-soy-red hover:text-white border border-[#3a3028] px-2 py-2 rounded font-bold uppercase tracking-wider text-[9px] cursor-pointer text-center text-soy-label flex-1"
+                  title="Export current policy and simulated overrides to JSON file"
+                >
+                  Export JSON
+                </button>
+              </div>
+
               {/* Part 1: Adoption & Posture */}
               <div className="border-b border-[#3a3028]/60 pb-1 mb-1 text-[8px] font-black text-soy-label/40 uppercase tracking-wider">
                 Adoption & Posture Overrides
               </div>
 
-              <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                <input
-                  type="checkbox"
-                  checked={simHasDependabot}
-                  onChange={(e) => setSimHasDependabot(e.target.checked)}
-                  className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                />
-                <span>Add Dependabot scanning</span>
-              </label>
+              <div className="flex flex-col gap-0.5">
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={stagedHasDependabot}
+                    onChange={(e) => setStagedHasDependabot(e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Add Dependabot scanning</span>
+                </label>
+                <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                  (Enables automatic security alert tracking and update PRs)
+                </span>
+              </div>
 
-              <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                <input
-                  type="checkbox"
-                  checked={simHasSast}
-                  onChange={(e) => setSimHasSast(e.target.checked)}
-                  className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                />
-                <span>Configure CodeQL/Semgrep SAST</span>
-              </label>
+              <div className="flex flex-col gap-0.5">
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={stagedHasSast}
+                    onChange={(e) => setStagedHasSast(e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Configure CodeQL/Semgrep SAST</span>
+                </label>
+                <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                  (Integrates automated static analysis scanning workflows)
+                </span>
+              </div>
 
-              <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                <input
-                  type="checkbox"
-                  checked={simBusFactorHealthy}
-                  onChange={(e) => setSimBusFactorHealthy(e.target.checked)}
-                  className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                />
-                <span>Expand maintainer base (multi-maintainer)</span>
-              </label>
+              <div className="flex flex-col gap-0.5">
+                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={stagedBusFactorHealthy}
+                    onChange={(e) => setStagedBusFactorHealthy(e.target.checked)}
+                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                  />
+                  <span>Expand maintainer base (multi-maintainer)</span>
+                </label>
+                <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                  (Clears single-maintainer bottleneck and abandonment caps)
+                </span>
+              </div>
 
               {/* Part 2: Dependency Automerge */}
               <div className="border-b border-[#3a3028]/60 pb-1 pt-2 text-[8px] font-black text-soy-label/40 uppercase tracking-wider">
@@ -619,152 +975,219 @@ export default function SauceJudgePanel({
                 <label className="text-[9px] text-soy-label/50 font-bold block">Package Name</label>
                 <input
                   type="text"
-                  value={depPackageName}
-                  onChange={(e) => setDepPackageName(e.target.value)}
+                  value={stagedDepPackageName}
+                  onChange={(e) => setStagedDepPackageName(e.target.value)}
                   className="w-full bg-black border border-[#3a3028] text-soy-label text-[10px] p-1.5 outline-none rounded focus:border-soy-red font-mono"
                   placeholder="e.g. lodash"
                 />
+                <span className="text-[8px] text-soy-label/40 block leading-none">
+                  (Specific dependency identifier evaluated by automerge rules)
+                </span>
               </div>
 
               <div className="space-y-1">
                 <label className="text-[9px] text-soy-label/50 font-bold block">Change Type</label>
                 <select
-                  value={depChangeType}
-                  onChange={(e) => setDepChangeType(e.target.value as 'patch' | 'minor' | 'major')}
+                  value={stagedDepChangeType}
+                  onChange={(e) => setStagedDepChangeType(e.target.value as 'patch' | 'minor' | 'major')}
                   className="w-full bg-black border border-[#3a3028] text-soy-label text-[10px] p-1.5 outline-none rounded focus:border-soy-red font-mono cursor-pointer"
                 >
                   <option value="patch">Patch update</option>
                   <option value="minor">Minor update</option>
                   <option value="major">Major update</option>
                 </select>
+                <span className="text-[8px] text-soy-label/40 block leading-none">
+                  (Major releases are blocked by default due to breaking changes risk)
+                </span>
               </div>
 
               <div className="space-y-1">
                 <div className="flex justify-between text-[9px] text-soy-label/50 font-bold">
                   <span>Publish Age</span>
-                  <span>{depPublishAgeHours} hours</span>
+                  <span>{stagedDepPublishAgeHours} hours</span>
                 </div>
                 <input
                   type="range"
                   min="1"
                   max="120"
-                  value={depPublishAgeHours}
-                  onChange={(e) => setDepPublishAgeHours(Number(e.target.value))}
+                  value={stagedDepPublishAgeHours}
+                  onChange={(e) => setStagedDepPublishAgeHours(Number(e.target.value))}
                   className="w-full accent-soy-red bg-[#17130f] h-1 rounded cursor-pointer"
                 />
+                <span className="text-[8px] text-soy-label/40 block leading-none">
+                  (Releases under 24-72h trigger delay gates to mitigate malware zero-days)
+                </span>
               </div>
 
               <div className="space-y-1">
                 <div className="flex justify-between text-[9px] text-soy-label/50 font-bold">
                   <span>New Transitive Deps</span>
-                  <span>{depNewTransitiveDepsCount} packages</span>
+                  <span>{stagedDepNewTransitiveDepsCount} packages</span>
                 </div>
                 <input
                   type="range"
                   min="0"
                   max="30"
-                  value={depNewTransitiveDepsCount}
-                  onChange={(e) => setDepNewTransitiveDepsCount(Number(e.target.value))}
+                  value={stagedDepNewTransitiveDepsCount}
+                  onChange={(e) => setStagedDepNewTransitiveDepsCount(Number(e.target.value))}
                   className="w-full accent-soy-red bg-[#17130f] h-1 rounded cursor-pointer"
                 />
+                <span className="text-[8px] text-soy-label/40 block leading-none">
+                  (New recursive dependencies require manual verification if count is high)
+                </span>
               </div>
 
               <div className="space-y-1">
                 <label className="text-[9px] text-soy-label/50 font-bold block">Lockfile Diff Size</label>
                 <select
-                  value={depLockfileDiffSize}
-                  onChange={(e) => setDepLockfileDiffSize(e.target.value as 'small' | 'large')}
+                  value={stagedDepLockfileDiffSize}
+                  onChange={(e) => setStagedDepLockfileDiffSize(e.target.value as 'small' | 'large')}
                   className="w-full bg-black border border-[#3a3028] text-soy-label text-[10px] p-1.5 outline-none rounded focus:border-soy-red font-mono cursor-pointer"
                 >
                   <option value="small">Small lockfile diff</option>
                   <option value="large">Large lockfile diff</option>
                 </select>
+                <span className="text-[8px] text-soy-label/40 block leading-none">
+                  (Large lockfile diffs are flagged due to potential hidden source shifts)
+                </span>
               </div>
 
               <div className="grid grid-cols-1 gap-1.5 pt-1">
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={depAddsLifecycleScript}
-                    onChange={(e) => setDepAddsLifecycleScript(e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>Adds lifecycle script</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={stagedDepAddsLifecycleScript}
+                      onChange={(e) => setStagedDepAddsLifecycleScript(e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>Adds lifecycle script</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (⚠ Scripts run on install — triggers immediate block firewall gate)
+                  </span>
+                </div>
 
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={depAddsNativeBinary}
-                    onChange={(e) => setDepAddsNativeBinary(e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>Adds native binary</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={stagedDepAddsNativeBinary}
+                      onChange={(e) => setStagedDepAddsNativeBinary(e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>Adds native binary</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (⚠ Pre-compiled platform-specific machine code — high audit overhead)
+                  </span>
+                </div>
 
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={!depProvenancePresent}
-                    onChange={(e) => setDepProvenancePresent(!e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>Missing NPM provenance</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={!stagedDepProvenancePresent}
+                      onChange={(e) => setStagedDepProvenancePresent(!e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>Missing NPM provenance</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (⚠ Cryptographic proof linking the registry bundle to source git ref is missing)
+                  </span>
+                </div>
 
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={!depRegistrySignatureVerified}
-                    onChange={(e) => setDepRegistrySignatureVerified(!e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>Signature verification fails</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={!stagedDepRegistrySignatureVerified}
+                      onChange={(e) => setStagedDepRegistrySignatureVerified(!e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>Signature verification fails</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (✗ Package registry signature could not be verified by trust governors)
+                  </span>
+                </div>
 
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={!depMaintainerIdentityStable}
-                    onChange={(e) => setDepMaintainerIdentityStable(!e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>Unstable maintainer profile</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={!stagedDepMaintainerIdentityStable}
+                      onChange={(e) => setStagedDepMaintainerIdentityStable(!e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>Unstable maintainer profile</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (⚠ Newly added authors or accounts missing 2FA security status)
+                  </span>
+                </div>
 
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={!depSastUpstream}
-                    onChange={(e) => setDepSastUpstream(!e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>No upstream SAST scanner</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={!stagedDepSastUpstream}
+                      onChange={(e) => setStagedDepSastUpstream(!e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>No upstream SAST scanner</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (⚠ Static application security auditing workflows not detected in source)
+                  </span>
+                </div>
 
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={!depVulnerabilityAuditPass}
-                    onChange={(e) => setDepVulnerabilityAuditPass(!e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>Fails vulnerability audit</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={!stagedDepVulnerabilityAuditPass}
+                      onChange={(e) => setStagedDepVulnerabilityAuditPass(!e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>Fails vulnerability audit</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (✗ Known CVE advisory entries currently match the package version)
+                  </span>
+                </div>
 
-                <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={!depCiPasses}
-                    onChange={(e) => setDepCiPasses(!e.target.checked)}
-                    className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
-                  />
-                  <span>CI checks failing</span>
-                </label>
+                <div className="flex flex-col gap-0.5">
+                  <label className="flex items-center gap-2 text-[10px] cursor-pointer text-soy-label/70 hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={!stagedDepCiPasses}
+                      onChange={(e) => setStagedDepCiPasses(!e.target.checked)}
+                      className="accent-soy-red border-[#3a3028] bg-black rounded-sm"
+                    />
+                    <span>CI checks failing</span>
+                  </label>
+                  <span className="text-[8px] text-soy-label/40 pl-6 leading-none">
+                    (✗ Source code build checks or regression testing suites are failing)
+                  </span>
+                </div>
               </div>
+
+              {/* Apply Changes Button at bottom if unstaged exists */}
+              {hasUnstagedChanges && (
+                <button
+                  type="button"
+                  id="apply-simulator-changes-bottom-btn"
+                  onClick={handleApplyChanges}
+                  className="w-full py-2 bg-soy-red text-white border border-black animate-pulse shadow-[2px_2px_0px_#000] rounded font-black uppercase tracking-wider text-[10px] text-center transition-all cursor-pointer"
+                >
+                  Apply Simulator Changes ({diffsCount} pending)
+                </button>
+              )}
               
-              <div className="text-[9px] text-soy-red font-black uppercase tracking-wider bg-soy-red/5 p-1.5 border border-soy-red/20 rounded-sm">
-                ⚠ Simulator mode overrides score & governor in real-time.
+              <div className="text-[9px] text-soy-red font-black uppercase tracking-wider bg-soy-red/5 p-1.5 border border-soy-red/20 rounded-sm text-center">
+                ⚠ Click 'Apply Simulator Changes' to update overall score & verdicts.
               </div>
             </div>
           )}
@@ -772,10 +1195,60 @@ export default function SauceJudgePanel({
 
         {/* AI Chat Widget */}
         <div className="space-y-2 border-t border-[#3a3028] pt-4">
-          <h3 className="text-[9px] font-black text-soy-label/40 uppercase tracking-widest flex items-center gap-1.5">
-            <span>Ask Sauce Auditor</span>
-            <span className="w-1.5 h-1.5 bg-soy-red rounded-full animate-pulse" />
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-[9px] font-black text-soy-label/40 uppercase tracking-widest flex items-center gap-1.5">
+              <span>Ask Sauce Auditor</span>
+              <span className="w-1.5 h-1.5 bg-soy-red rounded-full animate-pulse" />
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                id="clear-chat-btn"
+                onClick={handleClearChat}
+                className="text-soy-red hover:underline text-[9px] cursor-pointer"
+              >
+                [Clear Chat]
+              </button>
+              <button
+                type="button"
+                id="glossary-help-btn"
+                onClick={() => setShowGlossary(!showGlossary)}
+                className="text-soy-red hover:underline text-[9px] cursor-pointer"
+              >
+                [?] Help Definitions
+              </button>
+            </div>
+          </div>
+
+          {showGlossary && (
+            <div className="bg-[#100d0b] border border-[#3a3028] p-3 rounded space-y-2 text-[10px] leading-relaxed relative">
+              <button
+                type="button"
+                onClick={() => setShowGlossary(false)}
+                className="absolute top-1 right-2 text-soy-label/40 hover:text-white"
+              >
+                ✕
+              </button>
+              <div className="text-[9px] font-black text-soy-red uppercase tracking-wider mb-1">Glossary Helper</div>
+              <div className="space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar pr-1">
+                <div>
+                  <span className="font-bold text-white">Automerge Governor:</span> An automated firewall that determines whether direct dependencies can be safely auto-merged into the codebase based on strict security checks and publish parameters.
+                </div>
+                <div>
+                  <span className="font-bold text-white">Bus Factor:</span> The number of key developers who would need to leave or become inactive before the project stalls. A low bus factor indicates high ownership concentration risk.
+                </div>
+                <div>
+                  <span className="font-bold text-white">SAST Analysis:</span> Static Application Security Testing. Scans source code for potential vulnerabilities, hardcoded credentials, and formatting defects.
+                </div>
+                <div>
+                  <span className="font-bold text-white">Dependabot:</span> An automated bot that scans the project's dependency manifest files and alerts developers to outdated packages or security vulnerability advisories.
+                </div>
+                <div>
+                  <span className="font-bold text-white">Adoption Verdicts:</span> Recommended bands (like TRUSTED, STABLE, WATCHLIST, FORKABLE) indicating suitability for use in enterprise production environments.
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Messages */}
           <div className="max-h-[140px] overflow-y-auto space-y-3 bg-[#100d0b]/40 p-2 border border-[#3a3028] rounded custom-scrollbar">
