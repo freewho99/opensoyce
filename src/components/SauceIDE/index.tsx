@@ -246,7 +246,7 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
   };
 
   return (
-    <div className="w-full bg-soy-label p-6 font-mono text-soy-bottle selection:bg-soy-red/20 flex flex-col items-center select-none">
+          <div className="fixed inset-0 top-14 bg-soy-label p-6 font-mono text-soy-bottle selection:bg-soy-red/20 flex flex-col items-center select-none z-40 overflow-auto">
       {/* Evidence IDE border container */}
       <div className="w-full max-w-[1500px] border-2 border-black bg-[#17130f] shadow-[6px_6px_0_#000] overflow-hidden rounded-sm flex flex-col relative">
         
