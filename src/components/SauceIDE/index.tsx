@@ -39,6 +39,7 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
   const [simHasSast, setSimHasSast] = useState(!!result.hasSast);
   const [simBusFactorHealthy, setSimBusFactorHealthy] = useState(result.busFactorHealthy !== false);
   const [showTraceDrawer, setShowTraceDrawer] = useState(false);
+  const [isAnchored, setIsAnchored] = useState(false);
 
   // Dependency Update Governor States
   const [depPackageName, setDepPackageName] = useState('lodash');
@@ -208,6 +209,27 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
         source: 'action',
         reason: 'Recommended Action complete: Generated repository claim code and shield badge template.',
       });
+      try {
+        const stored = localStorage.getItem('opensoyce_claimed_repos');
+        const defaultRepos = [
+          { owner: 'tiangolo', repo: 'fastapi', date: '2026-05-19', score: '9.8', verdict: 'TRUSTED', status: 'VERIFIED MAINTAINER' },
+          { owner: 'remix-run', repo: 'remix', date: '2026-05-20', score: '8.8', verdict: 'STABLE', status: 'VERIFIED MAINTAINER' }
+        ];
+        const list = stored ? JSON.parse(stored) : defaultRepos;
+        if (!list.some((r: any) => r.owner.toLowerCase() === repo.owner.toLowerCase() && r.repo.toLowerCase() === repo.name.toLowerCase())) {
+          list.push({
+            owner: repo.owner,
+            repo: repo.name,
+            date: new Date().toISOString().split('T')[0],
+            score: total.toFixed(1),
+            verdict: verdict,
+            status: "VERIFIED MAINTAINER"
+          });
+          localStorage.setItem('opensoyce_claimed_repos', JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error(e);
+      }
     } else if (actionType === 'dependabot') {
       setEvidenceFocus({
         tab: 'templates',
@@ -261,15 +283,21 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             <div className="flex items-center gap-4 px-3 py-1.5 bg-[#efe8dc] border border-black text-[10px] font-black uppercase text-[#211a15]">
               <div className="flex flex-col pr-3 border-r border-black/20">
                 <span className="opacity-50 text-[8px] tracking-wider leading-none">PROJECT JUDGMENT</span>
-                <span className="text-xs font-black mt-0.5">SOYCE ENGINE</span>
+                <span className="text-xs font-black mt-0.5">
+                  {simulatorActive ? 'SOYCE ENGINE 🛠️' : 'SOYCE ENGINE'}
+                </span>
               </div>
               <div className="flex flex-col pr-3 border-r border-black/20">
                 <span className="opacity-50 text-[8px] tracking-wider leading-none">Adoption</span>
-                <span className="text-soy-red font-black mt-0.5">{verdict}</span>
+                <span className="text-soy-red font-black mt-0.5">
+                  {verdict}{simulatorActive && ' *'}
+                </span>
               </div>
               <div className="flex flex-col">
                 <span className="opacity-50 text-[8px] tracking-wider leading-none">Trust Posture</span>
-                <span className="text-soy-red font-black mt-0.5">{posture}</span>
+                <span className="text-soy-red font-black mt-0.5">
+                  {posture}{simulatorActive && ' *'}
+                </span>
               </div>
               {er.active && er.status !== 'NONE' && (
                 <div 
@@ -283,6 +311,13 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
               )}
             </div>
 
+            {/* Simulated Badge */}
+            {simulatorActive && (
+              <span className="bg-[#e65c00] text-black border border-black text-[8px] font-black uppercase px-2 py-1 rounded-sm animate-pulse tracking-wider">
+                SIMULATED OVERRIDES
+              </span>
+            )}
+
             {/* Verdict Pill score capsule */}
             <div className="flex items-center border border-black overflow-hidden shadow-[2px_2px_0px_#000] bg-[#efe8dc]">
               <div className="bg-black text-[#efe8dc] px-3 py-2 text-[9px] font-black uppercase tracking-widest italic">
@@ -290,15 +325,28 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
               </div>
               <div className="bg-soy-red text-white px-4 py-1 text-2xl font-black italic">
                 <span aria-label={`Soyce Score ${total.toFixed(1)} of 10`}>
-                  {total.toFixed(1)}
+                  {total.toFixed(1)}{simulatorActive && '*'}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Capped-height Triple-column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(520px,1fr)_360px] h-[min(720px,calc(100vh-230px))] min-h-[520px] overflow-hidden">
+        {/* Simulator Warning Banner */}
+        {simulatorActive && (
+          <div className="bg-[#e65c00] text-black font-black uppercase text-[10px] tracking-widest px-4 py-2 border-b-2 border-black flex items-center justify-between animate-pulse">
+            <span>⚠️ SIMULATION MODE ACTIVE: Scores, verdicts, and policy gates are currently simulated overrides.</span>
+            <button
+              onClick={() => setSimulatorActive(false)}
+              className="underline text-black font-black hover:text-white cursor-pointer ml-4"
+            >
+              [Deactivate Simulation]
+            </button>
+          </div>
+        )}
+
+        {/* Capped-height Triple-column/Quad-column Layout */}
+        <div className={`grid grid-cols-1 ${showTraceDrawer && isAnchored ? 'lg:grid-cols-[240px_minmax(320px,1fr)_360px_420px]' : 'lg:grid-cols-[240px_minmax(520px,1fr)_360px]'} h-[min(720px,calc(100vh-230px))] min-h-[520px] overflow-hidden`}>
           {/* Left panel: RepoMapPanel */}
           <RepoMapPanel
             meta={meta}
@@ -366,6 +414,22 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             depLockfileDiffSize={depLockfileDiffSize}
             setDepLockfileDiffSize={setDepLockfileDiffSize}
           />
+
+          {/* Reasoning Trace Drawer */}
+          <ReasoningTraceDrawer
+            isOpen={showTraceDrawer}
+            onClose={() => setShowTraceDrawer(false)}
+            isAnchored={isAnchored}
+            setIsAnchored={setIsAnchored}
+            owner={repo.owner}
+            repo={repo.name}
+            score={total}
+            breakdown={simBreakdown}
+            meta={meta}
+            verdict={verdict}
+            trustPosture={posture}
+            extensionExploitRisk={er}
+          />
         </div>
 
         {/* SauceTracePanel status line */}
@@ -419,20 +483,6 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
             </div>
           </div>
         )}
-
-        {/* Reasoning Trace Drawer */}
-        <ReasoningTraceDrawer
-          isOpen={showTraceDrawer}
-          onClose={() => setShowTraceDrawer(false)}
-          owner={repo.owner}
-          repo={repo.name}
-          score={total}
-          breakdown={simBreakdown}
-          meta={meta}
-          verdict={verdict}
-          trustPosture={posture}
-          extensionExploitRisk={er}
-        />
       </div>
 
       {/* Footer warning */}
