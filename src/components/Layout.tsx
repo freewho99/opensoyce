@@ -202,15 +202,15 @@ export default function Layout() {
                                   className="lg:hidden flex-shrink-0 p-1.5 -ml-1.5 text-soy-bottle hover:text-soy-red transition-colors"
                                 >
                         {drawerOpen ? <X size={20} strokeWidth={2.5} /> : <Menu size={20} strokeWidth={2.5} />}
-                      </button>button>
+                      </button>
                       <div onClick={handleLogoClick} className="cursor-pointer flex-shrink-0">
                                 <Link to="/" className="flex items-center gap-2 group">
                                             <div className="bg-soy-red p-1 rotate-12 group-hover:rotate-0 transition-transform duration-200 flex-shrink-0">
                                                           <Sauce size={20} className="text-white" />
-                                            </div>div>
-                                            <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>span>
-                                </Link>Link>
-                      </div>div>
+                                            </div>
+                                            <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
+                                </Link>
+                      </div>
               
                       <div className="flex-1 sm:hidden" />
               
@@ -235,7 +235,7 @@ export default function Layout() {
                                   {query && (
                         <button type="submit" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-soy-bottle/60 hover:text-soy-red transition-colors">
                                         <ArrowRight size={13} strokeWidth={2.5} />
-                        </button>button>
+                        </button>
                                             )}
                                 </form>form>
                                 <AnimatePresence>
@@ -249,13 +249,13 @@ export default function Layout() {
                           {suggestionsLoading && (
                                                             <div className="px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-soy-bottle/50">
                                                                                 Searching GitHub...
-                                                            </div>div>
+                                                            </div>
                                         )}
                           {!suggestionsLoading && hasGithubResults && (
                                                             <>
                                                                                 <div className="px-4 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-soy-bottle/40 border-b border-soy-bottle/10">
                                                                                                       GitHub Repos
-                                                                                  </div>div>
+                                                                                  </div>
                                                               {githubSuggestions.map((repo, i) => (
                                                                                     <button
                                                                                                               key={repo.full_name}
@@ -267,21 +267,21 @@ export default function Layout() {
                                                                                                             >
                                                                                                             <Github size={11} strokeWidth={2.5} className="flex-shrink-0 opacity-40 group-hover:opacity-100" />
                                                                                                             <div className="flex-1 min-w-0">
-                                                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest truncate">{repo.full_name}</div>div>
+                                                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest truncate">{repo.full_name}</div>
                                                                                                               {repo.description && (
                                                                                                                                           <div className="text-[9px] opacity-60 normal-case font-normal tracking-normal truncate group-hover:opacity-80">
                                                                                                                                             {repo.description}
-                                                                                                                                            </div>div>
+                                                                                                                                            </div>
                                                                                                                                       )}
-                                                                                                              </div>div>
+                                                                                                              </div>
                                                                                                             <div className="flex items-center gap-1.5 flex-shrink-0 opacity-50 group-hover:opacity-80">
                                                                                                               {repo.language && (
-                                                                                                                                          <span className="text-[8px] font-bold uppercase tracking-wide">{repo.language}</span>span>
+                                                                                                                                          <span className="text-[8px] font-bold uppercase tracking-wide">{repo.language}</span>
                                                                                                                                       )}
                                                                                                                                       <Star size={9} strokeWidth={2.5} />
-                                                                                                                                      <span className="text-[9px] font-bold">{formatStars(repo.stargazers_count)}</span>span>
-                                                                                                              </div>div>
-                                                                                      </button>button>
+                                                                                                                                      <span className="text-[9px] font-bold">{formatStars(repo.stargazers_count)}</span>
+                                                                                                              </div>
+                                                                                      </button>
                                                                                   ))}
                                                                                 <button
                                                                                                         onClick={() => handlePageSelect(`/lookup?q=${encodeURIComponent(query.trim())}`)}
@@ -290,8 +290,8 @@ export default function Layout() {
                                                                                                       <Search size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-30 group-hover:opacity-100 group-hover:text-soy-red" />
                                                                                                       <div className="text-[9px] font-black uppercase tracking-widest opacity-60 group-hover:opacity-100">
                                                                                                                               Search all results for &ldquo;{query}&rdquo;
-                                                                                                        </div>div>
-                                                                                  </button>button>
+                                                                                                        </div>
+                                                                                  </button>
                                                             </>>
                                                           )}
                         
@@ -301,11 +301,11 @@ export default function Layout() {
                                                                                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-soy-red hover:text-white transition-colors group border-b-2 border-soy-bottle/20">
                                                                                 <Search size={11} strokeWidth={2.5} className="flex-shrink-0 text-soy-red group-hover:text-white" />
                                                                                 <div className="text-left">
-                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest">Analyze {query.trim()}</div>div>
-                                                                                                      <div className="text-[9px] opacity-60 normal-case font-normal tracking-normal">Run full OpenSoyce score</div>div>
-                                                                                  </div>div>
+                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest">Analyze {query.trim()}</div>
+                                                                                                      <div className="text-[9px] opacity-60 normal-case font-normal tracking-normal">Run full OpenSoyce score</div>
+                                                                                  </div>
                                                                                 <ArrowRight size={11} strokeWidth={2.5} className="ml-auto opacity-50 group-hover:opacity-100" />
-                                                            </button>button>
+                                                            </button>
                                         )}
                         
                           {/* Page nav matches */}
@@ -314,17 +314,17 @@ export default function Layout() {
                                                               {(hasGithubResults || showAnalyzePrompt) && (
                                                                                     <div className="px-4 py-1.5 text-[8px] font-black uppercase tracking-[0.2em] text-soy-bottle/40 border-t border-soy-bottle/10">
                                                                                                             Pages
-                                                                                      </div>div>
+                                                                                      </div>
                                                                                 )}
                                                               {pageMatches.map((p, i) => (
                                                                                     <button key={p.path} onClick={() => handlePageSelect(p.path)}
                                                                                                               className={['w-full flex items-center gap-3 px-4 py-2.5 hover:bg-soy-bottle/5 hover:text-soy-red transition-colors group', i < pageMatches.length - 1 ? 'border-b border-soy-bottle/10' : ''].join(' ')}>
                                                                                                             <ArrowRight size={10} strokeWidth={2.5} className="flex-shrink-0 opacity-25 group-hover:opacity-100 group-hover:text-soy-red" />
                                                                                                             <div className="text-left">
-                                                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest">{p.label}</div>div>
-                                                                                                                                      <div className="text-[9px] opacity-50 normal-case font-normal tracking-normal">{p.hint}</div>div>
-                                                                                                              </div>div>
-                                                                                      </button>button>
+                                                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest">{p.label}</div>
+                                                                                                                                      <div className="text-[9px] opacity-50 normal-case font-normal tracking-normal">{p.hint}</div>
+                                                                                                              </div>
+                                                                                      </button>
                                                                                   ))}
                                                             </>>
                                                           )}
@@ -335,36 +335,36 @@ export default function Layout() {
                                                                                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-soy-bottle/5 hover:text-soy-red transition-colors group">
                                                                                 <Search size={11} strokeWidth={2.5} className="flex-shrink-0 opacity-40 group-hover:text-soy-red group-hover:opacity-100" />
                                                                                 <div className="text-left">
-                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest">Search &ldquo;{query}&rdquo;</div>div>
-                                                                                                      <div className="text-[9px] opacity-50 normal-case font-normal tracking-normal">Look up on Lookup page</div>div>
-                                                                                  </div>div>
+                                                                                                      <div className="text-[10px] font-black uppercase tracking-widest">Search &ldquo;{query}&rdquo;</div>
+                                                                                                      <div className="text-[9px] opacity-50 normal-case font-normal tracking-normal">Look up on Lookup page</div>
+                                                                                  </div>
                                                                                 <ArrowRight size={11} strokeWidth={2.5} className="ml-auto opacity-40 group-hover:opacity-100" />
-                                                            </button>button>
+                                                            </button>
                                         )}
                         </motion.div>motion.div>
                       )}
                                 </AnimatePresence>AnimatePresence>
-                      </div>div>
+                      </div>
               
                 {/* Auth */}
                       <div className="flex items-center gap-3 flex-shrink-0">
                         {isLoggedIn && user ? (
                       <div className="flex items-center gap-3">
                                     <img src={user.avatar_url} alt={user.login} className="w-7 h-7 rounded-full border-2 border-soy-red" />
-                                    <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">{user.login}</span>span>
-                                    <button onClick={logout} className="text-[9px] text-soy-red hover:underline font-bold uppercase tracking-widest">Sign Out</button>button>
-                      </div>div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">{user.login}</span>
+                                    <button onClick={logout} className="text-[9px] text-soy-red hover:underline font-bold uppercase tracking-widest">Sign Out</button>
+                      </div>
                     ) : (
                       <>
-                                    <Link to="/claim" className="bg-soy-red text-white px-4 py-1.5 font-black uppercase tracking-widest text-[10px] hover:bg-black transition-colors border-2 border-soy-bottle">Claim</Link>Link>
+                                    <Link to="/claim" className="bg-soy-red text-white px-4 py-1.5 font-black uppercase tracking-widest text-[10px] hover:bg-black transition-colors border-2 border-soy-bottle">Claim</Link>
                                     <button onClick={() => login()} disabled={isLoading}
                                                       className="flex items-center gap-1.5 border-2 border-soy-bottle px-3 py-1.5 text-[9px] font-black uppercase tracking-widest hover:bg-soy-bottle hover:text-white transition-colors">
                                                     <Github size={12} />
                                       {isLoading ? '...' : 'Sign In'}
-                                    </button>button>
+                                    </button>
                       </>>
                     )}
-                      </div>div>
+                      </div>
               </header>header>
         
           {/* Mobile backdrop */}
@@ -393,13 +393,13 @@ export default function Layout() {
                                                                                                 onClick={() => setDevExpanded(v => !v)}
                                                                                                 className="flex items-center justify-between px-3 py-[7px] text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 hover:text-soy-bottle/80 transition-colors w-full mt-1 mb-0.5"
                                                                                               >
-                                                                                              <span>{group}</span>span>
+                                                                                              <span>{group}</span>
                                                                                               <ChevronDown
                                                                                                                       size={11}
                                                                                                                       strokeWidth={2.5}
                                                                                                                       className={`transition-transform duration-200 ${devExpanded ? 'rotate-180' : ''}`}
                                                                                                                     />
-                                                                          </button>button>
+                                                                          </button>
                                                                           <AnimatePresence initial={false}>
                                                                             {devExpanded && (
                                                                                 <motion.div
@@ -419,14 +419,14 @@ export default function Layout() {
                                                                                                                                                                                                   className={navLinkClass}
                                                                                                                                                                                                 >
                                                                                                                                                                                                 <Icon size={13} strokeWidth={2.5} />
-                                                                                                                                                                                                <span>{item.label}</span>span>
+                                                                                                                                                                                                <span>{item.label}</span>
                                                                                                                                                                     </NavLink>NavLink>
                                                                                                                                                                 );
                                                                                                           })}
                                                                                   </motion.div>motion.div>
                                                                               )}
                                                                           </AnimatePresence>AnimatePresence>
-                                                        </div>div>
+                                                        </div>
                                                       );
                       }
           
@@ -446,19 +446,19 @@ export default function Layout() {
                                                                                                         className={navLinkClass}
                                                                                                       >
                                                                                                       <Icon size={13} strokeWidth={2.5} />
-                                                                                                      <span>{item.label}</span>span>
+                                                                                                      <span>{item.label}</span>
                                                                                   </NavLink>NavLink>
                                                                               );
                                       })}
-                                      </div>div>
+                                      </div>
                                     );
         })}
                       </nav>nav>
                       <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-2 flex-shrink-0">
                                 <a href="mailto:support@opensoyce.com" className={bottomLinkClass} onClick={() => trackEvent('support_click', { source: 'nav' })}>
-                                            <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>span>
+                                            <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
                                 </a>a>
-                      </div>div>
+                      </div>
               </aside>aside>
         
           {/* Page content */}
@@ -470,7 +470,7 @@ export default function Layout() {
                                     <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="text-8xl mb-12">🧪</motion.div>motion.div>
                                     <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">YOU FOUND THE SECRET SAUCE</h2>h2>
                                     <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY</p>p>
-                                    <button onClick={() => setShowSecretOverlay(false)} className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase tracking-widest hover:bg-white hover:text-soy-red transition-colors">CLOSE</button>button>
+                                    <button onClick={() => setShowSecretOverlay(false)} className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase tracking-widest hover:bg-white hover:text-soy-red transition-colors">CLOSE</button>
                       </motion.div>motion.div>
                     )}
                       </AnimatePresence>AnimatePresence>
@@ -480,53 +480,53 @@ export default function Layout() {
                                             <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
                                                           <div className="col-span-1 md:col-span-2">
                                                                           <div className="flex items-center gap-2 mb-4">
-                                                                                            <div className="bg-soy-bottle p-1"><Sauce size={20} className="text-white" /></div>div>
-                                                                                            <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>span>
-                                                                          </div>div>
+                                                                                            <div className="bg-soy-bottle p-1"><Sauce size={20} className="text-white" /></div>
+                                                                                            <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
+                                                                          </div>
                                                                           <p className="text-sm font-medium opacity-70 max-w-sm mb-6">OpenSoyce is the trust and discovery layer for the open-source ecosystem.</p>p>
                                                                           <div className="flex gap-4">
                                                                                             <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors"><Github size={20} /></a>a>
-                                                                          </div>div>
-                                                          </div>div>
+                                                                          </div>
+                                                          </div>
                                                           <div>
                                                                           <h4 className="font-black uppercase tracking-widest text-xs mb-4">Tools</h4>h4>
                                                                           <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
-                                                                                            <Link to="/scanner" className="hover:text-soy-red hover:opacity-100 transition-colors">Scanner</Link>Link>
-                                                                                            <Link to="/guard" className="hover:text-soy-red hover:opacity-100 transition-colors">Guard</Link>Link>
-                                                                                            <Link to="/compare" className="hover:text-soy-red hover:opacity-100 transition-colors">Compare</Link>Link>
-                                                                                            <Link to="/heat-check" className="hover:text-soy-red hover:opacity-100 transition-colors">Heat Check</Link>Link>
-                                                                                            <Link to="/graveyard" className="hover:text-soy-red hover:opacity-100 transition-colors">Graveyard</Link>Link>
-                                                                                            <Link to="/leaderboards" className="hover:text-soy-red hover:opacity-100 transition-colors">Leaderboards</Link>Link>
-                                                                          </div>div>
-                                                          </div>div>
+                                                                                            <Link to="/scanner" className="hover:text-soy-red hover:opacity-100 transition-colors">Scanner</Link>
+                                                                                            <Link to="/guard" className="hover:text-soy-red hover:opacity-100 transition-colors">Guard</Link>
+                                                                                            <Link to="/compare" className="hover:text-soy-red hover:opacity-100 transition-colors">Compare</Link>
+                                                                                            <Link to="/heat-check" className="hover:text-soy-red hover:opacity-100 transition-colors">Heat Check</Link>
+                                                                                            <Link to="/graveyard" className="hover:text-soy-red hover:opacity-100 transition-colors">Graveyard</Link>
+                                                                                            <Link to="/leaderboards" className="hover:text-soy-red hover:opacity-100 transition-colors">Leaderboards</Link>
+                                                                          </div>
+                                                          </div>
                                                           <div>
                                                                           <h4 className="font-black uppercase tracking-widest text-xs mb-4">Discover</h4>h4>
                                                                           <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
-                                                                                            <Link to="/blog" className="hover:text-soy-red hover:opacity-100 transition-colors">Blog</Link>Link>
-                                                                                            <Link to="/recipes" className="hover:text-soy-red hover:opacity-100 transition-colors">AI Recipes</Link>Link>
-                                                                                            <Link to="/remix" className="hover:text-soy-red hover:opacity-100 transition-colors">Remix</Link>Link>
-                                                                                            <Link to="/lookup" className="hover:text-soy-red hover:opacity-100 transition-colors">Lookup</Link>Link>
-                                                                                            <Link to="/pricing" className="hover:text-soy-red hover:opacity-100 transition-colors">Pricing</Link>Link>
-                                                                          </div>div>
-                                                          </div>div>
+                                                                                            <Link to="/blog" className="hover:text-soy-red hover:opacity-100 transition-colors">Blog</Link>
+                                                                                            <Link to="/recipes" className="hover:text-soy-red hover:opacity-100 transition-colors">AI Recipes</Link>
+                                                                                            <Link to="/remix" className="hover:text-soy-red hover:opacity-100 transition-colors">Remix</Link>
+                                                                                            <Link to="/lookup" className="hover:text-soy-red hover:opacity-100 transition-colors">Lookup</Link>
+                                                                                            <Link to="/pricing" className="hover:text-soy-red hover:opacity-100 transition-colors">Pricing</Link>
+                                                                          </div>
+                                                          </div>
                                                           <div>
                                                                           <h4 className="font-black uppercase tracking-widest text-xs mb-4">Company</h4>h4>
                                                                           <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
-                                                                                            <Link to="/about" className="hover:text-soy-red hover:opacity-100 transition-colors">About</Link>Link>
-                                                                                            <Link to="/faq" className="hover:text-soy-red hover:opacity-100 transition-colors">FAQ</Link>Link>
-                                                                                            <Link to="/methodology" className="hover:text-soy-red hover:opacity-100 transition-colors">Methodology</Link>Link>
-                                                                                            <Link to="/claim" className="hover:text-soy-red hover:opacity-100 transition-colors">Claim a Project</Link>Link>
-                                                                                            <Link to="/cli" className="hover:text-soy-red hover:opacity-100 transition-colors">CLI</Link>Link>
-                                                                          </div>div>
-                                                          </div>div>
-                                            </div>div>
+                                                                                            <Link to="/about" className="hover:text-soy-red hover:opacity-100 transition-colors">About</Link>
+                                                                                            <Link to="/faq" className="hover:text-soy-red hover:opacity-100 transition-colors">FAQ</Link>
+                                                                                            <Link to="/methodology" className="hover:text-soy-red hover:opacity-100 transition-colors">Methodology</Link>
+                                                                                            <Link to="/claim" className="hover:text-soy-red hover:opacity-100 transition-colors">Claim a Project</Link>
+                                                                                            <Link to="/cli" className="hover:text-soy-red hover:opacity-100 transition-colors">CLI</Link>
+                                                                          </div>
+                                                          </div>
+                                            </div>
                                             <div className="mt-12 pt-8 border-t border-soy-bottle flex flex-col md:flex-row justify-between gap-4 text-[10px] font-bold uppercase tracking-widest opacity-40">
-                                                          <span>2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>span>
-                                                          <span>POWERED BY SWARM INTELLIGENCE</span>span>
-                                            </div>div>
-                                </div>div>
+                                                          <span>2026 OPENSOYCE LABS. ALL SAUCE RESERVED.</span>
+                                                          <span>POWERED BY SWARM INTELLIGENCE</span>
+                                            </div>
+                                </div>
                       </footer>footer>
-              </div>div>
-        </div>div>
+              </div>
+        </div>
       );
 }</></></></div>
