@@ -12,7 +12,7 @@ import {
   Terminal,
   Skull,
   Flame,
-  ScanLine,
+  ScanLine,h
   Wand2,
   GitCompare,
   Info,
@@ -30,7 +30,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
-declare function trackEvent(name: string, props?: Record<string, unknown>): void;
+import { trackEvent } from '../utils/analytics';
 
 type NavGroup = 'CORE' | 'DISCOVER' | 'COMMUNITY' | 'TRUST' | 'DEVELOPER';
 
