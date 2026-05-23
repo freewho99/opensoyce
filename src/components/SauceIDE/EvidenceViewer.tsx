@@ -61,9 +61,11 @@ export default function EvidenceViewer({
       };
       resetScroll();
       requestAnimationFrame(resetScroll);
-      setTimeout(resetScroll, 100);
-    }
-  }, [readmeContent]);
+      const t1 = setTimeout(resetScroll, 50);
+      const t2 = setTimeout(resetScroll, 200);
+      const t3 = setTimeout(resetScroll, 500);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    }  }, [readmeContent]);
 
   const decodeBase64 = (str: string) => {
       try {
