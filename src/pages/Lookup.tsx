@@ -60,6 +60,7 @@ export default function Lookup() {
   React.useEffect(() => {
     if (result && viewMode === 'ide') {
       document.body.classList.add('ide-view-active');
+            window.scrollTo(0, 0);
     } else {
       document.body.classList.remove('ide-view-active');
     }
