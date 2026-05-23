@@ -237,7 +237,7 @@ export default function Layout() {
                                         <ArrowRight size={13} strokeWidth={2.5} />
                         </button>
                                             )}
-                                </form>form>
+                                </form>
                                 <AnimatePresence>
                                   {showDropdown && query.trim().length > 0 && (
                         <motion.div
@@ -292,7 +292,7 @@ export default function Layout() {
                                                                                                                               Search all results for &ldquo;{query}&rdquo;
                                                                                                         </div>
                                                                                   </button>
-                                                            </>>
+                                                            </>
                                                           )}
                         
                           {/* Exact owner/repo format — direct analyze */}
@@ -326,7 +326,7 @@ export default function Layout() {
                                                                                                               </div>
                                                                                       </button>
                                                                                   ))}
-                                                            </>>
+                                                            </>
                                                           )}
                         
                           {/* Fallback */}
@@ -341,9 +341,9 @@ export default function Layout() {
                                                                                 <ArrowRight size={11} strokeWidth={2.5} className="ml-auto opacity-40 group-hover:opacity-100" />
                                                             </button>
                                         )}
-                        </motion.div>motion.div>
+                        </motion.div>
                       )}
-                                </AnimatePresence>AnimatePresence>
+                                </AnimatePresence>
                       </div>
               
                 {/* Auth */}
@@ -362,10 +362,10 @@ export default function Layout() {
                                                     <Github size={12} />
                                       {isLoading ? '...' : 'Sign In'}
                                     </button>
-                      </>>
+                      </>
                     )}
                       </div>
-              </header>header>
+              </header>
         
           {/* Mobile backdrop */}
           {drawerOpen && (
@@ -420,12 +420,12 @@ export default function Layout() {
                                                                                                                                                                                                 >
                                                                                                                                                                                                 <Icon size={13} strokeWidth={2.5} />
                                                                                                                                                                                                 <span>{item.label}</span>
-                                                                                                                                                                    </NavLink>NavLink>
+                                                                                                                                                                    </NavLink>
                                                                                                                                                                 );
-                                                                                                          })}
-                                                                                  </motion.div>motion.div>
+                                                                            })}
+                                                                                  </motion.div>
                                                                               )}
-                                                                          </AnimatePresence>AnimatePresence>
+                                                                          </AnimatePresence>
                                                         </div>
                                                       );
                       }
@@ -435,7 +435,7 @@ export default function Layout() {
                                         {idx > 0 && <div className="border-t border-soy-bottle/15 my-2 mx-1" />}
                                                       <p className="text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 px-3 mt-1 mb-1">
                                                         {group}
-                                                      </p>p>
+                                                      </p>
                                         {items.map(item => {
                                                           const Icon = item.icon;
                                                           return (
@@ -447,19 +447,19 @@ export default function Layout() {
                                                                                                       >
                                                                                                       <Icon size={13} strokeWidth={2.5} />
                                                                                                       <span>{item.label}</span>
-                                                                                  </NavLink>NavLink>
+                                                                                  </NavLink>
                                                                               );
                                       })}
                                       </div>
                                     );
         })}
-                      </nav>nav>
+                      </nav>
                       <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-2 flex-shrink-0">
                                 <a href="mailto:support@opensoyce.com" className={bottomLinkClass} onClick={() => trackEvent('support_click', { source: 'nav' })}>
                                             <LifeBuoy size={13} strokeWidth={2.5} /><span>Support</span>
-                                </a>a>
+                                </a>
                       </div>
-              </aside>aside>
+              </aside>
         
           {/* Page content */}
               <div className="ml-0 lg:ml-52 pt-14">
@@ -467,14 +467,14 @@ export default function Layout() {
                         {showSecretOverlay && (
                       <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
                                       className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center text-white text-center p-8">
-                                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="text-8xl mb-12">🧪</motion.div>motion.div>
-                                    <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">YOU FOUND THE SECRET SAUCE</h2>h2>
-                                    <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY</p>p>
+                                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="text-8xl mb-12">🧪</motion.div>
+                                    <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter mb-6">YOU FOUND THE SECRET SAUCE</h2>
+                                    <p className="text-xl md:text-2xl font-bold uppercase tracking-widest mb-12 opacity-60">THE REAL SOYCE WAS THE REPOS WE ANALYZED ALONG THE WAY</p>
                                     <button onClick={() => setShowSecretOverlay(false)} className="bg-soy-red text-white border-2 border-white px-12 py-4 text-xl font-black uppercase tracking-widest hover:bg-white hover:text-soy-red transition-colors">CLOSE</button>
-                      </motion.div>motion.div>
+                      </motion.div>
                     )}
-                      </AnimatePresence>AnimatePresence>
-                      <main><Outlet /></main>main>
+                      </AnimatePresence>
+                      <main><Outlet /></main>
                       <footer className="border-t-4 border-soy-bottle bg-soy-label mt-20">
                                 <div className="max-w-7xl mx-auto px-4 py-12">
                                             <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
@@ -483,13 +483,13 @@ export default function Layout() {
                                                                                             <div className="bg-soy-bottle p-1"><Sauce size={20} className="text-white" /></div>
                                                                                             <span className="text-xl font-bold uppercase tracking-tighter italic">OpenSoyce</span>
                                                                           </div>
-                                                                          <p className="text-sm font-medium opacity-70 max-w-sm mb-6">OpenSoyce is the trust and discovery layer for the open-source ecosystem.</p>p>
+                                                                          <p className="text-sm font-medium opacity-70 max-w-sm mb-6">OpenSoyce is the trust and discovery layer for the open-source ecosystem.</p>
                                                                           <div className="flex gap-4">
-                                                                                            <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors"><Github size={20} /></a>a>
+                                                                                            <a href="https://github.com/freewho99/opensoyce" target="_blank" rel="noopener noreferrer" className="hover:text-soy-red transition-colors"><Github size={20} /></a>
                                                                           </div>
                                                           </div>
                                                           <div>
-                                                                          <h4 className="font-black uppercase tracking-widest text-xs mb-4">Tools</h4>h4>
+                                                                          <h4 className="font-black uppercase tracking-widest text-xs mb-4">Tools</h4>
                                                                           <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
                                                                                             <Link to="/scanner" className="hover:text-soy-red hover:opacity-100 transition-colors">Scanner</Link>
                                                                                             <Link to="/guard" className="hover:text-soy-red hover:opacity-100 transition-colors">Guard</Link>
@@ -500,7 +500,7 @@ export default function Layout() {
                                                                           </div>
                                                           </div>
                                                           <div>
-                                                                          <h4 className="font-black uppercase tracking-widest text-xs mb-4">Discover</h4>h4>
+                                                                          <h4 className="font-black uppercase tracking-widest text-xs mb-4">Discover</h4>
                                                                           <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
                                                                                             <Link to="/blog" className="hover:text-soy-red hover:opacity-100 transition-colors">Blog</Link>
                                                                                             <Link to="/recipes" className="hover:text-soy-red hover:opacity-100 transition-colors">AI Recipes</Link>
@@ -510,7 +510,7 @@ export default function Layout() {
                                                                           </div>
                                                           </div>
                                                           <div>
-                                                                          <h4 className="font-black uppercase tracking-widest text-xs mb-4">Company</h4>h4>
+                                                                          <h4 className="font-black uppercase tracking-widest text-xs mb-4">Company</h4>
                                                                           <div className="flex flex-col gap-2 text-sm font-medium opacity-70">
                                                                                             <Link to="/about" className="hover:text-soy-red hover:opacity-100 transition-colors">About</Link>
                                                                                             <Link to="/faq" className="hover:text-soy-red hover:opacity-100 transition-colors">FAQ</Link>
@@ -525,8 +525,8 @@ export default function Layout() {
                                                           <span>POWERED BY SWARM INTELLIGENCE</span>
                                             </div>
                                 </div>
-                      </footer>footer>
+                      </footer>
               </div>
         </div>
       );
-}</></></></div>
+}

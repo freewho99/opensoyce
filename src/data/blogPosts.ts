@@ -101,7 +101,7 @@ export const blogPosts: BlogPost[] = [
 
         Here's your checklist before tomorrow morning:
 
-        - Check your `router_init.js` and any extension loader files for unsigned eval() calls
+        - Check your \`router_init.js\` and any extension loader files for unsigned eval() calls
         - Run every IDE plugin and CLI tool through [OpenSoyce Scanner](https://opensoyce.com/scanner) — Tier 3 packages especially
         - Look at your Leaderboards: [opensoyce.com/leaderboards](https://opensoyce.com/leaderboards) will show you which of your deps have gone dark in the last 90 days
         - If you're running GitHub Actions, check your reusable workflow dependencies — they're Tier 3 too

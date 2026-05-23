@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useCallback } from 'react';
+import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShieldAlert,
@@ -796,7 +796,7 @@ function ResultsPanel({
 
 // Scanner v3a -- Dependency Inventory section.
 //
-ref={scrollContainerRef} onScroll={onScroll}//   - Subhead must say "Whole-tree inventory is available. Whole-tree Soyce
+//   - Subhead must say "Whole-tree inventory is available. Whole-tree Soyce
 //     scoring is coming later." Both halves are mandatory.
 //   - Identity / repo-health chips only appear if v2.1a already gathered the
 //     data on a vulnerable row. Non-vulnerable rows never trigger a fetch.
@@ -822,7 +822,16 @@ function InventoryPanel({
   const [filter, setFilter] = useState('');
   const [duplicatesFirst, setDuplicatesFirst] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const [scrollTop, setScrollTop] = useState(0);    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    useEffect(() => {      setScrollTop(0);      if (scrollContainerRef.current) {        scrollContainerRef.current.scrollTop = 0;      }    }, [inventory]);    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    useEffect(() => {      setScrollTop(0);      if (scrollContainerRef.current) {        scrollContainerRef.current.scrollTop = 0;    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    useEffect(() => {      setScrollTop(0);    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reset scroll position to top whenever the inventory data changes (new repo loaded)
+  useEffect(() => {
+    setScrollTop(0);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [inventory]);
 
   // Index vulnerabilities by package name so inventory rows can light up the
   // vuln + identity chips. We use the WORST severity if the same package
@@ -1004,6 +1013,7 @@ function InventoryPanel({
 
       {/* Virtualized list -- hand-rolled, no new deps. */}
       <div
+        ref={scrollContainerRef}
         onScroll={onScroll}
         className="border-2 border-soy-bottle/30 overflow-y-auto bg-soy-label/10"
         style={{ height: VIEWPORT_HEIGHT }}
