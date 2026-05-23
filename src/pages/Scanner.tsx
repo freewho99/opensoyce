@@ -796,8 +796,7 @@ function ResultsPanel({
 
 // Scanner v3a -- Dependency Inventory section.
 //
-// Honesty constraints baked into the copy:
-//   - Subhead must say "Whole-tree inventory is available. Whole-tree Soyce
+ref={scrollContainerRef} onScroll={onScroll}//   - Subhead must say "Whole-tree inventory is available. Whole-tree Soyce
 //     scoring is coming later." Both halves are mandatory.
 //   - Identity / repo-health chips only appear if v2.1a already gathered the
 //     data on a vulnerable row. Non-vulnerable rows never trigger a fetch.
@@ -823,7 +822,7 @@ function InventoryPanel({
   const [filter, setFilter] = useState('');
   const [duplicatesFirst, setDuplicatesFirst] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const [scrollTop, setScrollTop] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    useEffect(() => {      setScrollTop(0);      if (scrollContainerRef.current) {        scrollContainerRef.current.scrollTop = 0;      }    }, [inventory]);    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    useEffect(() => {      setScrollTop(0);      if (scrollContainerRef.current) {        scrollContainerRef.current.scrollTop = 0;    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    useEffect(() => {      setScrollTop(0);    const scrollContainerRef = useRef<HTMLDivElement>(null);    // Reset scroll position to top whenever the inventory data changes (new repo loaded)    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Index vulnerabilities by package name so inventory rows can light up the
   // vuln + identity chips. We use the WORST severity if the same package
