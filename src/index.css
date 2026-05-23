@@ -26,9 +26,6 @@
     display: none !important;
   }
 
-  body.ide-view-active {
-    overflow: hidden !important;
-  }
 }
 
 
