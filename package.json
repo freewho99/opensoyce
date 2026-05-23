@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "check:mojibake": "node scripts/check-mojibake.mjs"
+    "check:mojibake": "node scripts/check-mojibake.mjs",
+    "test:swarm": "playwright test e2e/opensoyce-swarm.spec.ts --grep \"4-PERSONA SWARM\"",
+    "test:models": "node test-models.js"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
