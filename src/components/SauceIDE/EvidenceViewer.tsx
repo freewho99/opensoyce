@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2, Sparkles, AlertCircle, CheckCircle, Clock, GitCommit, List, Shield, HelpCircle } from 'lucide-react';
 import { EvidenceFocus, EvidenceTabKey } from './index';
 
@@ -18,11 +18,11 @@ export default function EvidenceViewer({
   onActionTrigger,
 }: EvidenceViewerProps) {
   const [readmeContent, setReadmeContent] = useState('');
-  const [loadingReadme, setLoadingReadme] = useState(false);
+  const [loadingReadme, setLoadingReadme] = useState(false);  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Fetch real README from GitHub API
   useEffect(() => {
-    if (!readmeContent && !loadingReadme) {
+    setReadmeContent('');
       setLoadingReadme(true);
       fetch(`https://api.github.com/repos/${owner}/${repo}/readme`)
         .then((res) => {
@@ -46,11 +46,9 @@ export default function EvidenceViewer({
         .finally(() => {
           setLoadingReadme(false);
         });
-    }
-  }, [owner, repo]);
+  },[owner, repo]);
 
   const decodeBase64 = (str: string) => {
-    try {
       const clean = str.replace(/\s/g, '');
       const binary = atob(clean);
       const bytes = new Uint8Array(binary.length);
