@@ -48,6 +48,12 @@ export default function EvidenceViewer({
         });
   },[owner, repo]);
 
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [readmeContent]);
+
   const decodeBase64 = (str: string) => {
       try {
       const clean = str.replace(/\s/g, '');
@@ -186,7 +192,7 @@ We will investigate immediately and coordinate patches within 48 hours.`;
               <div key={i} className="leading-5 h-5 text-[10px]">{i + 1}</div>
             ))}
           </div>
-          <div className="flex-1 p-4 overflow-y-auto text-[11px] leading-5 text-soy-label/80 font-mono whitespace-pre-wrap select-text custom-scrollbar">
+          <div ref={scrollRef} className="flex-1 p-4 overflow-y-auto text-[11px] leading-5 text-soy-label/80 font-mono whitespace-pre-wrap select-text custom-scrollbar">
             {readmeContent}
           </div>
         </div>
