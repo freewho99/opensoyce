@@ -11,7 +11,7 @@ interface EvidenceViewerProps {
 }
 
 export default function EvidenceViewer({
-  owner,
+  owner,h
   repo,
   activeFocus,
   setFocus,
@@ -49,6 +49,7 @@ export default function EvidenceViewer({
   },[owner, repo]);
 
   const decodeBase64 = (str: string) => {
+      try {
       const clean = str.replace(/\s/g, '');
       const binary = atob(clean);
       const bytes = new Uint8Array(binary.length);
