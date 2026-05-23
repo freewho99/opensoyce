@@ -50,12 +50,18 @@ export default function EvidenceViewer({
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 0;
-      let el: HTMLElement | null = scrollRef.current.parentElement;
-      while (el) {
-        if (el.scrollTop > 0) el.scrollTop = 0;
-        el = el.parentElement;
-      }
+      const resetScroll = () => {
+        if (!scrollRef.current) return;
+        scrollRef.current.scrollTop = 0;
+        let el: HTMLElement | null = scrollRef.current.parentElement;
+        while (el) {
+          if (el.scrollTop > 0) el.scrollTop = 0;
+          el = el.parentElement;
+        }
+      };
+      resetScroll();
+      requestAnimationFrame(resetScroll);
+      setTimeout(resetScroll, 100);
     }
   }, [readmeContent]);
 
