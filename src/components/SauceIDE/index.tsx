@@ -346,7 +346,8 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
         )}
 
         {/* Capped-height Triple-column/Quad-column Layout */}
-        <div className={`grid grid-cols-1 ${showTraceDrawer && isAnchored ? 'lg:grid-cols-[240px_minmax(320px,1fr)_360px_420px]' : 'lg:grid-cols-[240px_minmax(520px,1fr)_360px]'} h-[min(720px,calc(100vh-230px))] min-h-[520px] overflow-hidden`}>
+        <div className={`grid grid-cols-1 ${showTraceDrawer && isAnchored ? 'lg:grid-cols-[240px_minmax(320px,1fr)_360px_420px]' : 'lg:grid-cols-[240px_minmax(520px,1fr)_360px]'} h-[min(720px,calc(100vh-230px))] min-h-[520px] overflow-hidden`}
+          onScroll={(e) => { (e.currentTarget as HTMLElement).scrollTop = 0; }}>
           {/* Left panel: RepoMapPanel */}
           <RepoMapPanel
             meta={meta}
