@@ -128,12 +128,11 @@ export default function Watchlist() {
   if (watchlist.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 flex flex-col items-center justify-center text-center">
-        <h1 className="text-6xl md:text-8xl font-black uppercase italic tracking-tighter mb-8 bg-soy-bottle text-soy-label px-8 py-4 shadow-[12px_12px_0px_#E63322]">
-          YOUR WATCHLIST IS EMPTY
+        <h1 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter mb-8 bg-soy-bottle text-soy-label px-8 py-6 shadow-[12px_12px_0px_#E63322] leading-tight">
+          START TRACKING YOUR CRITICAL DEPENDENCIES TO PREVENT SURPRISES!
         </h1>
-        <p className="text-2xl font-bold uppercase tracking-widest opacity-60 mb-12 max-w-2xl">
-          Track your critical dependencies. Get notified when scores drop. 
-          Don't let your stack rot.
+        <p className="text-xl font-bold uppercase tracking-widest opacity-60 mb-12 max-w-2xl">
+          Your watchlist is empty. Add dependencies to monitor score drops, license changes, and malware. Don't let your stack rot.
         </p>
         <div className="mb-16">
           <Link 

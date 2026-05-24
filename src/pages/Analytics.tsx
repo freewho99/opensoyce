@@ -191,23 +191,23 @@ export default function Analytics() {
       <section className="bg-black border-t-2 border-white/10 text-white">
         <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-white/10 border-b border-white/10">
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">TOTAL</div>
+            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="Cumulative interactions tracked across all active user sessions">TOTAL</div>
             <div className="text-4xl font-black italic">{metrics?.totalEvents || 0}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">SESSIONS</div>
+            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="Distinct browser contexts identified by unique anonymous session IDs">SESSIONS</div>
             <div className="text-4xl font-black italic">{metrics?.uniqueSessions || 0}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">TOP EVENT</div>
+            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="The most frequently dispatched analytics event in this reporting period">TOP EVENT</div>
             <div className="text-xl font-black italic truncate px-4">{metrics?.topEvent || '—'}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">DOMINANT INTENT</div>
+            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="The highest scoring intent category based on weighted user actions">DOMINANT INTENT</div>
             <div className="text-xl font-black italic text-[#E63322]">{productRadar.dominantName}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">LAST EVENT</div>
+            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="The most recent telemetry ping received by the analytics collector">LAST EVENT</div>
             <div className="text-xl font-black italic truncate px-4">{metrics?.lastEvent?.event || '—'}</div>
             {metrics?.lastEvent && (
               <div className="text-[10px] opacity-40 uppercase">{formatRelativeTime(metrics.lastEvent.timestamp)}</div>
@@ -218,41 +218,16 @@ export default function Analytics() {
 
       <div className="max-w-7xl mx-auto px-4 py-20 space-y-24">
         
-        {/* PRODUCT RADAR */}
-        <section>
-          <div className="mb-10">
-            <h2 className="text-4xl font-black uppercase italic tracking-tighter">PRODUCT RADAR</h2>
-            <p className="text-sm font-bold uppercase tracking-widest text-[#E63322]">Intent clusters — not just raw events. This tells you what OpenSoyce actually means to the people using it.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {productRadar.clusters.map(cluster => (
-              <div 
-                key={cluster.name}
-                className="bg-white border-2 border-black p-6 shadow-[6px_6px_0px_#000] flex flex-col h-full"
-                style={{ borderLeftWidth: '4px', borderLeftColor: cluster.color }}
-              >
-                <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{cluster.intent}</div>
-                <h3 className="text-xl font-black uppercase tracking-tight mb-4">{cluster.name}</h3>
-                <div className="text-5xl font-black italic text-[#E63322] mb-6">{cluster.count}</div>
-                <div className="mt-auto space-y-4">
-                  <div className="text-[9px] font-mono opacity-40 leading-tight">
-                    {cluster.events}
-                  </div>
-                  <div className="text-xs italic font-bold opacity-60">
-                    "{cluster.insight}"
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* TOP CONVERSION PATHS */}
         <section>
           <div className="mb-10">
-            <h2 className="text-4xl font-black uppercase italic tracking-tighter">TOP CONVERSION PATHS</h2>
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter cursor-help underline decoration-dotted" title="Calculated by tracking sequences of consecutive events within a single session.">TOP CONVERSION PATHS</h2>
             <p className="text-sm font-bold uppercase tracking-widest text-[#E63322]">What journeys are users actually taking?</p>
+          </div>
+
+          <div className="bg-[#302C26] text-[#F5F0E8] p-5 border-2 border-black mb-6 text-xs font-mono shadow-[4px_4px_0px_#000]">
+            <span className="text-[#E63322] font-black uppercase block mb-1">💡 CTO VALUE PROPOSITION & INSIGHT:</span>
+            How do users discover OpenSoyce and convert? By looking at user paths, we verify if users who start at lookup/search convert to checking methodologies or claiming their repos. Higher transition rates to "TRUST" or "PARTICIPATION" validate product market fit.
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -286,13 +261,78 @@ export default function Analytics() {
           </div>
         </section>
 
-        {/* CORE ALPHA METRICS */}
+        {/* PRODUCT RADAR */}
         <section>
           <div className="mb-10">
-            <h2 className="text-4xl font-black uppercase italic tracking-tighter">RAW EVENT BREAKDOWN</h2>
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter cursor-help underline decoration-dotted" title="Weighted clusters grouping related events into high-level user intents.">PRODUCT RADAR</h2>
+            <p className="text-sm font-bold uppercase tracking-widest text-[#E63322]">Intent clusters — not just raw events. This tells you what OpenSoyce actually means to the people using it.</p>
+          </div>
+
+          <div className="bg-[#302C26] text-[#F5F0E8] p-5 border-2 border-black mb-6 text-xs font-mono shadow-[4px_4px_0px_#000]">
+            <span className="text-[#E63322] font-black uppercase block mb-1">💡 CTO VALUE PROPOSITION & INSIGHT:</span>
+            Understanding product engagement as user intent. If TRUST is high, developers are auditing. If PARTICIPATION is high, maintainers are actively managing scores. If BUILDER is high, they are integrating.
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {productRadar.clusters.map(cluster => (
+              <div 
+                key={cluster.name}
+                className="bg-white border-2 border-black p-6 shadow-[6px_6px_0px_#000] flex flex-col h-full"
+                style={{ borderLeftWidth: '4px', borderLeftColor: cluster.color }}
+              >
+                <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{cluster.intent}</div>
+                <h3 className="text-xl font-black uppercase tracking-tight mb-4">{cluster.name}</h3>
+                <div className="text-5xl font-black italic text-[#E63322] mb-6">{cluster.count}</div>
+                <div className="mt-auto space-y-4">
+                  <div className="text-[9px] font-mono opacity-40 leading-tight">
+                    {cluster.events}
+                  </div>
+                  <div className="text-xs italic font-bold opacity-60">
+                    "{cluster.insight}"
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* USE vs FORK vs GROW */}
+        <section>
+          <div className="mb-10">
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter cursor-help underline decoration-dotted" title="Ratio of developer actions: Direct usage vs Forking/Remixing vs Growing/Contributing.">USE vs FORK vs GROW</h2>
+            <p className="text-sm font-bold uppercase tracking-widest text-[#E63322]">The answer tells you what business OpenSoyce actually wants to become.</p>
+          </div>
+
+          <div className="bg-[#302C26] text-[#F5F0E8] p-5 border-2 border-black mb-6 text-xs font-mono shadow-[4px_4px_0px_#000]">
+            <span className="text-[#E63322] font-black uppercase block mb-1">💡 CTO VALUE PROPOSITION & INSIGHT:</span>
+            Helps determine if developers are treating packages as static assets (USE), dynamic forks for customization (FORK), or building ecosystems (GROW). Critical for portfolio dependency health.
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <StatBox label="USE" count={breakdown.use} color="border-emerald-500" />
+            <StatBox label="FORK" count={breakdown.fork} color="border-blue-500" />
+            <StatBox label="GROW" count={breakdown.grow} color="border-orange-500" />
+          </div>
+
+          <div className="space-y-4 max-w-2xl">
+            <Bar label="USE" count={breakdown.use} max={breakdown.max} color="bg-emerald-500" />
+            <Bar label="FORK" count={breakdown.fork} max={breakdown.max} color="bg-blue-500" />
+            <Bar label="GROW" count={breakdown.grow} max={breakdown.max} color="bg-orange-500" />
+          </div>
+        </section>
+
+        {/* RAW EVENT BREAKDOWN */}
+        <section>
+          <div className="mb-10">
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter cursor-help underline decoration-dotted" title="Raw numbers for every individual analytics event tracked in-app.">RAW EVENT BREAKDOWN</h2>
             <p className="text-sm font-bold uppercase tracking-widest text-[#E63322]">Individual event counts. Use the PRODUCT RADAR above for the real signal.</p>
           </div>
           
+          <div className="bg-[#302C26] text-[#F5F0E8] p-5 border-2 border-black mb-6 text-xs font-mono shadow-[4px_4px_0px_#000]">
+            <span className="text-[#E63322] font-black uppercase block mb-1">💡 CTO VALUE PROPOSITION & INSIGHT:</span>
+            Granular telemetry to verify click-through rates on critical actions like methodology lookups, graveyard visits, and mock submissions.
+          </div>
+
           <div className="bg-white border-2 border-black overflow-hidden shadow-[8px_8px_0px_#000]">
             <table className="w-full text-left">
               <thead>
@@ -321,31 +361,16 @@ export default function Analytics() {
           </div>
         </section>
 
-        {/* USE vs FORK vs GROW */}
-        <section>
-          <div className="mb-10">
-            <h2 className="text-4xl font-black uppercase italic tracking-tighter">USE vs FORK vs GROW</h2>
-            <p className="text-sm font-bold uppercase tracking-widest text-[#E63322]">The answer tells you what business OpenSoyce actually wants to become.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <StatBox label="USE" count={breakdown.use} color="border-emerald-500" />
-            <StatBox label="FORK" count={breakdown.fork} color="border-blue-500" />
-            <StatBox label="GROW" count={breakdown.grow} color="border-orange-500" />
-          </div>
-
-          <div className="space-y-4 max-w-2xl">
-            <Bar label="USE" count={breakdown.use} max={breakdown.max} color="bg-emerald-500" />
-            <Bar label="FORK" count={breakdown.fork} max={breakdown.max} color="bg-blue-500" />
-            <Bar label="GROW" count={breakdown.grow} max={breakdown.max} color="bg-orange-500" />
-          </div>
-        </section>
-
         {/* ALL EVENTS LOG */}
         <section>
           <div className="mb-10">
-            <h2 className="text-4xl font-black uppercase italic tracking-tighter">EVENT LOG</h2>
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter cursor-help underline decoration-dotted" title="Chronological feed of telemetry pings for auditing real-time usage.">EVENT LOG</h2>
             <p className="text-sm font-bold uppercase tracking-widest text-[#E63322]">Every tracked interaction. Most recent first.</p>
+          </div>
+
+          <div className="bg-[#302C26] text-[#F5F0E8] p-5 border-2 border-black mb-6 text-xs font-mono shadow-[4px_4px_0px_#000]">
+            <span className="text-[#E63322] font-black uppercase block mb-1">💡 CTO VALUE PROPOSITION & INSIGHT:</span>
+            Real-time verification log showing the exact raw event payload, timestamps, and session contexts.
           </div>
 
           <div className="bg-white border-2 border-black overflow-hidden shadow-[8px_8px_0px_#000]">

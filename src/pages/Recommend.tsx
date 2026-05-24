@@ -62,8 +62,13 @@ export default function Recommend() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
       <div className="mb-12">
-        <h1 className="text-5xl font-bold uppercase italic tracking-tighter mb-4">AI Ingredient Recommender</h1>
-        <p className="text-xl font-medium opacity-60">Describe your project, and we'll find the highest-quality open-source sauce for your stack.</p>
+        <h1 className="text-5xl font-black uppercase italic tracking-tighter mb-4">AI Ingredient Recommender</h1>
+        <p className="text-xl font-bold uppercase tracking-wide opacity-80 mb-3 text-soy-red italic">
+          OPTIMIZE YOUR DEPENDENCY HEALTH BEFORE YOU IMPORT.
+        </p>
+        <p className="text-sm font-bold uppercase tracking-widest opacity-60 leading-relaxed max-w-3xl">
+          Don't blindly trust random npm, uv, or Poetry packages. Describe your engineering goals below, and our recommendation engine will audit and compose a customized stack of high-Soyce-score, secure, and actively maintained packages.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
@@ -106,7 +111,7 @@ export default function Recommend() {
 
             <button 
               type="submit"
-              className="w-full bg-soy-red text-white py-6 text-xl font-bold uppercase tracking-[0.2em] italic flex items-center justify-center gap-3 hover:bg-soy-bottle transition-all"
+              className="w-full bg-[#22C55E] text-black border-4 border-black py-6 text-2xl font-black uppercase tracking-[0.2em] italic flex items-center justify-center gap-3 hover:bg-black hover:text-white hover:border-black shadow-[6px_6px_0px_#000] active:translate-y-1 transition-all"
             >
               Simulate Recommendation <Sparkles size={24} />
             </button>

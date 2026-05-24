@@ -133,55 +133,121 @@ export default function BlogPost() {
     }
   };
 
-  // Render content: support [img:url:caption] markers for inline images
+  // Render content: support [img:url:caption] markers for inline images and ``` fenced code blocks
   const renderContent = (content: string) => {
-    const paragraphs = content.split('\n\n');
-    return paragraphs.map((para, i) => {
-      // Trim each paragraph so leading newlines / whitespace in the article
-      // template literal don't break heading detection.
-      const trimmed = para.trim();
-      if (!trimmed) return null;
-      const imgMatch = trimmed.match(/^\[img:([^:]+):([^\]]+)\]$/);
-      if (imgMatch) {
-        return (
-          <figure key={i} className="my-10">
-            <img
-              src={imgMatch[1]}
-              alt={imgMatch[2]}
-              className="w-full rounded-lg object-contain max-h-[600px]"
-            />
-            <figcaption className="text-center text-xs font-black uppercase tracking-widest opacity-50 mt-3">
-              {imgMatch[2]}
-            </figcaption>
-          </figure>
-        );
+    const lines = content.split('\n');
+    const blocks: { type: 'paragraph' | 'h1' | 'h2' | 'h3' | 'img' | 'code'; text: string; caption?: string }[] = [];
+    
+    let inCodeBlock = false;
+    let currentCodeLines: string[] = [];
+    let currentParagraphLines: string[] = [];
+    
+    const flushParagraph = () => {
+      if (currentParagraphLines.length > 0) {
+        const text = currentParagraphLines.join('\n').trim();
+        if (text) {
+          blocks.push({ type: 'paragraph', text });
+        }
+        currentParagraphLines = [];
       }
-      if (trimmed.startsWith('### ')) {
-        return (
-          <h3 key={i} className="text-2xl font-black uppercase italic tracking-tight mt-10 mb-4 text-soy-bottle">
-            {trimmed.slice(4)}
-          </h3>
-        );
+    };
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      
+      if (trimmed.startsWith('```')) {
+        if (inCodeBlock) {
+          // End of code block
+          inCodeBlock = false;
+          blocks.push({ type: 'code', text: currentCodeLines.join('\n') });
+          currentCodeLines = [];
+        } else {
+          // Start of code block
+          flushParagraph();
+          inCodeBlock = true;
+        }
+        continue;
       }
-      if (trimmed.startsWith('## ')) {
-        return (
-          <h2 key={i} className="text-3xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle border-b-2 border-soy-red pb-3">
-            {trimmed.slice(3)}
-          </h2>
-        );
+      
+      if (inCodeBlock) {
+        currentCodeLines.push(line);
+        continue;
       }
+      
+      // Outside code block
       if (trimmed.startsWith('# ')) {
-        return (
-          <h1 key={i} className="text-4xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle">
-            {trimmed.slice(2)}
-          </h1>
-        );
+        flushParagraph();
+        blocks.push({ type: 'h1', text: trimmed.slice(2) });
+      } else if (trimmed.startsWith('## ')) {
+        flushParagraph();
+        blocks.push({ type: 'h2', text: trimmed.slice(3) });
+      } else if (trimmed.startsWith('### ')) {
+        flushParagraph();
+        blocks.push({ type: 'h3', text: trimmed.slice(4) });
+      } else if (trimmed.startsWith('[img:')) {
+        flushParagraph();
+        const imgMatch = trimmed.match(/^\[img:([^:]+):([^\]]+)\]$/);
+        if (imgMatch) {
+          blocks.push({ type: 'img', text: imgMatch[1], caption: imgMatch[2] });
+        } else {
+          currentParagraphLines.push(line);
+        }
+      } else if (trimmed === '') {
+        flushParagraph();
+      } else {
+        currentParagraphLines.push(line);
       }
-      return (
-        <p key={i} className="text-lg leading-relaxed mb-6 opacity-90">
-          {renderInline(trimmed, `p-${i}`)}
-        </p>
-      );
+    }
+    flushParagraph();
+    
+    return blocks.map((block, idx) => {
+      switch (block.type) {
+        case 'h1':
+          return (
+            <h1 key={idx} className="text-4xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle">
+              {block.text}
+            </h1>
+          );
+        case 'h2':
+          return (
+            <h2 key={idx} className="text-3xl font-black uppercase italic tracking-tight mt-12 mb-6 text-soy-bottle border-b-2 border-soy-red pb-3">
+              {block.text}
+            </h2>
+          );
+        case 'h3':
+          return (
+            <h3 key={idx} className="text-2xl font-black uppercase italic tracking-tight mt-10 mb-4 text-soy-bottle">
+              {block.text}
+            </h3>
+          );
+        case 'img':
+          return (
+            <figure key={idx} className="my-10">
+              <img
+                src={block.text}
+                alt={block.caption}
+                className="w-full rounded-lg object-contain max-h-[600px]"
+              />
+              <figcaption className="text-center text-xs font-black uppercase tracking-widest opacity-50 mt-3">
+                {block.caption}
+              </figcaption>
+            </figure>
+          );
+        case 'code':
+          return (
+            <pre key={idx} className="font-mono text-xs md:text-sm bg-soy-bottle text-soy-label p-6 border-4 border-black shadow-[8px_8px_0px_#000] overflow-x-auto my-10 whitespace-pre leading-relaxed">
+              <code>{block.text}</code>
+            </pre>
+          );
+        case 'paragraph':
+        default:
+          return (
+            <p key={idx} className="text-lg leading-relaxed mb-6 opacity-90">
+              {renderInline(block.text, `p-${idx}`)}
+            </p>
+          );
+      }
     });
   };
   return (

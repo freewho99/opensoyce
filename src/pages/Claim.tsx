@@ -92,6 +92,13 @@ function ClaimEntry() {
           <h1 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">PUSH BACK ON YOUR SOYCE SCORE</h1>
         </div>
 
+        <div className="bg-[#302C26] text-[#F5F0E8] p-8 border-4 border-black mb-8 shadow-[8px_8px_0px_#E63322]">
+          <h2 className="text-xl font-black uppercase tracking-widest text-[#E63322] mb-3">★ THE CORE VALUE OF CLAIMING:</h2>
+          <p className="text-sm font-bold uppercase tracking-wider leading-relaxed">
+            Secure your package's page, get verified owner badges, and increase downstream consumer trust. OpenSoyce is built to verify ownership and gain visibility in the consolidated ecosystem view, helping CTOs and engineering teams choose your package with confidence.
+          </p>
+        </div>
+
         <p className="text-xl font-bold uppercase tracking-widest opacity-60 mb-8 max-w-2xl">
           Maintain a repo OpenSoyce got wrong? File a rebuttal. It opens a public,
           labeled GitHub issue against <span className="text-soy-bottle">freewho99/opensoyce</span>{' '}

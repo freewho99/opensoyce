@@ -251,7 +251,24 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-10">
+          <div className="w-full overflow-hidden bg-black text-[#F5F0E8] py-3 border-2 border-black my-8">
+            <div className="flex w-[200%] animate-marquee">
+              <div className="flex justify-around w-1/2 uppercase font-black text-xs tracking-widest">
+                <span>★ NOW SCANNING AI DEPENDENCIES ★</span>
+                <span>★ REAL-TIME VERDICT BANDS ★</span>
+                <span>★ LOCKFILE INTELLIGENCE ★</span>
+                <span>★ DETECTING SHIPPED MALWARE ★</span>
+              </div>
+              <div className="flex justify-around w-1/2 uppercase font-black text-xs tracking-widest">
+                <span>★ NOW SCANNING AI DEPENDENCIES ★</span>
+                <span>★ REAL-TIME VERDICT BANDS ★</span>
+                <span>★ LOCKFILE INTELLIGENCE ★</span>
+                <span>★ DETECTING SHIPPED MALWARE ★</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
             {[
               { owner: 'langchain-ai', repo: 'langchain', band: 'WATCHLIST', tagline: 'LLM app framework', note: '⚠ 4 OPEN HIGH/CRIT' },
               { owner: 'huggingface', repo: 'transformers', band: 'USE READY', tagline: 'State-of-the-art ML models', note: 'Reference stack for OSS AI' },

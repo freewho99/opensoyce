@@ -17,7 +17,7 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
-        slug: 'blind-trust-is-a-production-risk',
+        slug: 'automerge-governor',
         primaryProductAction: 'scanner',
         title: "Blind Trust Is a Production Risk.",
         subtitle: "One poisoned extension. 3,800 repos. Yours could be next. Here's the firewall that stops the merge before it lands.",
@@ -58,7 +58,18 @@ export const blogPosts: BlogPost[] = [
 
         The Governor knows the difference.
 
-        ![automerge-governor-3800-repos](/blog/automerge-governor-3800-repos.png)
+\`\`\`text
+[POISONED VS CODE EXTENSION]
+            │
+            ▼
+[ SILENT BACKDOOR RUNNING ]
+            │
+            ▼
+[ AUTOMERGE AUTO-APPROVES ]
+            │
+            ▼
+[ 3,800 REPOSITORIES COMPROMISED ]
+\`\`\`
 
         ---
 
@@ -89,7 +100,18 @@ export const blogPosts: BlogPost[] = [
         - Did the **maintainer identity change**? Flagged.
         - Did it introduce **10+ new transitive deps** overnight? Flagged.
 
-        ![automerge-governor-pr-firewall](/blog/automerge-governor-pr-firewall.png)
+\`\`\`text
+┌─────────────────────────────────────────────────┐
+│            AUTOMERGE GOVERNOR FIREWALL          │
+├─────────────────────────────────────────────────┤
+│ [CHECK] Lifecycle Scripts?     --> BLOCKED      │
+│ [CHECK] Native Binaries?       --> BLOCKED      │
+│ [CHECK] CI Status?             --> FAIL/BLOCKED │
+│ [CHECK] Signature Verified?    --> UNVERIFIED   │
+│ [CHECK] Publish Age < 24h?     --> DELAYED      │
+│ [CHECK] Provenance Missing?    --> FLAGGED      │
+└─────────────────────────────────────────────────┘
+\`\`\`
 
         ---
 
@@ -144,7 +166,17 @@ The maintainer burned out. The repo went quiet. A new owner took over without an
 
 This is silent rot. It's the most underserved problem in open source security today.
 
-[img:/blog/silent-rot-static-checks-miss-drift.png:Static checks miss the drift between scans.]
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│            STATIC SCAN vs CONTINUOUS DRIFT             │
+├────────────────────────────────────────────────────────┤
+│ [T=0] Commit / PR Scan    ---> [PASS] (Score: 9.8)     │
+│ [T=3M] Stale Repo         ---> [DRIFT] No commits      │
+│ [T=6M] Burnout / Takeover ---> [RISK] No CVE yet       │
+│ [T=9M] Production Incident ---> [FAIL] Snyk / Dependa   │
+│                            (missed the 9 months drift) │
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
 ## THE FALSE ASSUMPTION BAKED INTO EVERY SCANNER
 
@@ -160,7 +192,19 @@ Treating the SoyceScore as a time series changes the question from *"is this pac
 
 That's continuous health monitoring. Nothing else in this space does it.
 
-[img:/blog/silent-rot-realtime-health-scores.png:Real-time health scores, not point-in-time snapshots.]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│         REAL-TIME SOYCESCORE HEALTH DRIVERS       │
+├──────────────────────────────────────────────────┤
+│ Maintenance  [████████░░░░░]  60% (Stale commits)│
+│ Community    [████████████░]  90% (Active forks) │
+│ Security     [████░░░░░░░░░]  30% (Unpatched CVE)│
+│ Documentation[██████████░░░]  75% (README okay)  │
+│ Activity     [█░░░░░░░░░░░░]  10% (Inactive 90d) │
+├──────────────────────────────────────────────────┤
+│ OVERALL VERDICT: YELLOW BAND (5.3)               │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 ## WHAT IT LOOKS LIKE IN PRACTICE
 
@@ -188,7 +232,16 @@ The harder problem is the health signals that aren't in any database. Maintainer
 
 Log4Shell shocked the industry. But the signals that log4j was under-resourced for its adoption level had been visible for *years* before the exploit. A small team, chronic under-resourcing, a project of critical scale maintained by people who didn't have enough support. No tool caught those signals because no tool was watching for drift.
 
-[img:/blog/silent-rot-stop-production-rot.png:Stop the silent production rot — watch what you ship, not just what you write.]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│             PRODUCTION DEPLOYMENT ROT            │
+├──────────────────────────────────────────────────┤
+│  [LOCKFILE DEPS] ──► [DRIFT ENGINE] ──► [WARNING]│
+│   (847 packages)      - Inactivity       - Stale  │
+│                       - Burnout          - CVEs   │
+│                       - Owner swap       - Rot    │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 ## THE NUTRITION LABEL YOU CAN CHECK ANY TIME
 
@@ -223,7 +276,21 @@ That gap — between what you chose and what you got — is your attack surface.
 
 ## THE ANATOMY OF A SHADOW DEP ATTACK
 
-[img:/blog/shadow-deps-hero.png:The silent supply chain: your 12 packages become 800]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│         AMPLIFICATION: THE SHADOW GRAPH          │
+├──────────────────────────────────────────────────┤
+│  YOUR DIRECT DEPS (package.json)                 │
+│  [ axios ] ───► [ express ] ───► [ lodash ]      │
+│    │              │                               │
+│    ▼              ▼                               │
+│  TRANSITIVE SHADOW DEPS (node_modules)           │
+│  [ follow-redirects ]  [ body-parser ] ...       │
+│  [ proxy-from-env   ]  [ qs          ] ...       │
+│  [ form-data        ]  [ safe-buffer ] ...       │
+│  (Ratio 1:12 - Your 20 deps become 847 packages) │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 The 2022 \`colors\` / \`faker\` incident is the famous one. Marak, the maintainer of two packages with hundreds of millions of weekly downloads, deliberately broke them. No CVE. No zero-day. Just a human being who got tired.
 
@@ -535,7 +602,17 @@ The most famous ghost in the machine is request.js. Over 26,000 GitHub stars. Mi
 
 Then there's moment.js. Beloved date library. 47,000 stars. Last meaningful commit: eighteen months ago. The maintainers themselves now recommend alternatives. And still, moment shows up in greenfield projects started last quarter, copy-pasted from a Stack Overflow answer from 2019.
 
-[img:/blog/zombie-code-2.png:POPULARITY IS NOT A PULSE - millions of downloads, zero commits since 2021.]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│          POPULARITY vs ACTIVE MAINTENANCE        │
+├──────────────────────────────────────────────────┤
+│  Package: request.js                             │
+│  - Stars: 26,000+       (Lagging Indicator: High)│
+│  - Downloads: Millions  (Lagging Indicator: High)│
+│  - Commit Velocity: 0   (Real-time Metric: DEAD) │
+│  - Verdict: DEPRECATED BY AUTHORS                │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 And of course, left-pad. Eleven lines of code. Pulled from npm in 2016. The entire internet broke. Major companies went down. All because of eleven lines of JavaScript that added spaces to the left side of strings.
 
@@ -581,7 +658,17 @@ request.js: 3.5/10. Deprecated by its own authors. Millions still depend on it.
 
 These aren't obscure packages. They're the ones you've definitely shipped.
 
-[img:/blog/zombie-code-3.png:Meet the Ghost Packages - spot the abandoned repos lurking in your production environment before they break.]
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│                GHOST PACKAGES ANALYSIS                 │
+├────────────────────────────────────────────────────────┤
+│  [request]     ──► Score: 3.5  (Abandoned by Authors)  │
+│  [moment]      ──► Score: 4.2  (Legacy Architecture)   │
+│  [left-pad]    ──► Score: 1.1  (11 Lines of Fragility) │
+├────────────────────────────────────────────────────────┤
+│  Check the label before shipping zombie dependencies   │
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
 The Graveyard isn't a shame list. It's a radar. If a package you depend on shows up there, that's a data point - not a verdict. The Graveyard just makes sure you're making that decision consciously, not by accident.
 
@@ -631,7 +718,16 @@ In 2021, a malicious actor compromised ua-parser-js, a widely-used npm package w
 
 In 2022, the node-ipc package - a transitive dependency used by Vue CLI and dozens of other popular tools - was intentionally modified by its maintainer to include destructive code targeting Russian and Belarusian IP addresses. Developers who ran updates had malicious code execute in their environments without their knowledge.
 
-[img:/blog/trending-safe-2.png:NO BLIND TRUST. JUST SCORES - Every dependency is an ingredient. We provide the score before you take the first bite.]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│             THE HYPE vs HEALTH MATRIX            │
+├──────────────────────────────────────────────────┤
+│  Vite  [9.5]  ──► HIGH ADOPT / HEALTHY MOMENTUM  │
+│  Hono  [9.0]  ──► LOW RISK / SOLID GOVERNANCE    │
+│  Bun   [8.5]  ──► HIGH ADOPT / MATURING CYCLE    │
+│  HypeX [4.2]  ──► 12K STARS / ZERO MAINTAINERS   │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 These aren't edge cases. They're part of a documented, accelerating pattern of supply chain attacks that treat popular open-source packages as attack vectors precisely because developers trust them without verification. The more stars a package has, the more attractive it becomes as a target. Popularity is a liability if it isn't paired with active security governance.
 
@@ -649,7 +745,17 @@ Bun - 8.5/10. Fast Node replacement with real team adoption. MOMENTUM and FRESH 
 
 Then there are projects where the story is more complicated. A 7.2 on the Soyce Score with FORKABLE means you're looking at something growing fast but with real questions around maintenance discipline or security posture. That's not a rejection - it might be perfect for your use case - but it's a flag that deserves a second look before you add it as a core dependency.
 
-[img:/blog/trending-safe-3.png:The OpenSoyce Heat Check leaderboard - trending projects ranked by Soyce Score, not just star count.]
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│              HEAT CHECK LEADERBOARD TRUTH              │
+├────────────────────────────────────────────────────────┤
+│  Rank  Name      Stars   SoyceScore  Verdict           │
+│  1.    vite      63k     9.5         [ADOPT]           │
+│  2.    hono      18k     9.0         [ADOPT]           │
+│  3.    bun       46k     8.5         [ADOPT]           │
+│  4.    hype-lib  12k     4.2         [STALE / WARN]    │
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
 This is the information gap that Heat Check closes. Trending on GitHub tells you what developers are excited about. The Heat Check tells you what's safe to build on - and distinguishes between the two when they're not the same thing.
 
@@ -709,7 +815,15 @@ The OpenSoyce Remix section is a curated list of repos that are specifically goo
 
 Biome -> Ship as a team code-quality CLI. Biome is a unified linting and formatting toolchain - one binary, zero config, runs 100x faster than ESLint. The core project is excellent and growing fast. But the enterprise and team workflow layer doesn't exist yet. A fork that wraps Biome in opinionated team configuration, adds policy enforcement, and ships as a managed CLI for engineering orgs has a real market and a clean foundation. Forkability: high. Architecture is modular, docs are strong, license is MIT.
 
-[img:/blog/forking-shortlist-2.png:Stop Blind Forking - the ultimate vetted shortlist for your next major build.]
+\`\`\`text
+┌──────────────────────────────────────────────────────┐
+│                 VETTED REMIX CANDIDATES              │
+├──────────────────────────────────────────────────────┤
+│  [Biome]  ──► MIT License | Clean Rust Architecture  │
+│  [Archon] ──► MIT License | Early YAML AI Agent Host  │
+│  [Astro]  ──► MIT License | Content Collections Engine│
+└──────────────────────────────────────────────────────┘
+\`\`\`
 
 Archon -> Package as an AI workflow builder. Archon is a YAML-defined AI coding workflow framework - think Docker Compose, but for agent pipelines. The concept is right and the timing is early. A visual layer and managed execution environment forked from Archon could be a serious product. Forkability: high.
 
@@ -721,7 +835,16 @@ Forking something with a license that creates problems. GPL projects require tha
 
 Forking something with an undocumented architecture. If the codebase is a maze and the only documentation is "read the source," you're going to spend the first three months just figuring out what you've inherited. Documentation % is a real forkability signal.
 
-[img:/blog/forking-shortlist-3.png:OpenSoyce Compare - side-by-side Nutrition Labels for smarter fork decisions.]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│             FORKABILITY PILLARS                  │
+├──────────────────────────────────────────────────┤
+│  1. License Compliance (MIT/Apache vs GPL/AGPL)  │
+│  2. Architecture Modularity (Modular vs Monolith)│
+│  3. Upstream Velocity (Stale/Forkable vs Rapid)  │
+│  4. Contributor Diversity (Bus Factor Checker)   │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 Forking something that's already heading toward where you want to go. If you fork a project because it doesn't have Feature X, and Feature X is already on the upstream roadmap, you've just committed to maintaining a divergent codebase. The Activity % signal on the Soyce Label shows you how fast upstream is moving. If it's moving fast toward your destination, contributing upstream is almost always better than forking.
 
@@ -804,9 +927,18 @@ Lock your dependencies. If you are using TanStack, Intercom, or PyTorch Lightnin
 
 Run your full dependency tree through OpenSoyce Scanner. Not just direct dependencies - transitive ones too. The TanStack compromise was especially dangerous because it spreads transitively: you might not depend on @tanstack/react-router directly, but something you depend on might.
 
-Treat this as a pattern, not an isolated incident. Mini Shai-Hulud has already crossed five package ecosystems: npm, PyPI, Go Modules, crates.io, and Packagist. Any account with publish rights to multiple registries using reused credentials is a potential entry point.
+Treat your dependency tree as a pattern, not an isolated incident. Mini Shai-Hulud has already crossed five package ecosystems: npm, PyPI, Go Modules, crates.io, and Packagist. Any account with publish rights to multiple registries using reused credentials is a potential entry point.
 
-[img:/blog/npm-worm-inline.png:The Mini Shai-Hulud attack chain - from credential theft to worm replication across npm and PyPI]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│            MINI SHAI-HULUD ATTACK CHAIN          │
+├──────────────────────────────────────────────────┤
+│  Step 1: Credential theft of trusted developer   │
+│  Step 2: Poisoned publish to @tanstack (npm)     │
+│  Step 3: Self-replication worm triggers in CI    │
+│  Step 4: Crosses to PyTorch Lightning (PyPI)     │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 ## The Transparency Problem
 
@@ -846,6 +978,19 @@ It can handle bug fixes, feature implementation, documentation, test coverage, a
 
 The model can also be guided by AGENTS.md files placed in your repository - essentially a set of instructions the AI reads before acting on your codebase.
 
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│               OPENAI CODEX AGENT WORKFLOW              │
+├────────────────────────────────────────────────────────┤
+│ [Prompt/Task] ──► [Codex Agent] ──► [Isolated Cloud]   │
+│                                            │           │
+│                                            ▼           │
+│ [Verify/Build] ◄── [Commit Code] ◄── [Write Tests/Fix] │
+├────────────────────────────────────────────────────────┤
+│ Accountability Risk: 100 commits/day, 0 human reviews  │
+└────────────────────────────────────────────────────────┘
+\`\`\`
+
 ## The Open Source Trust Problem
 
 Here is the issue that no one in the Codex launch coverage is talking about: every metric we use to evaluate open source health assumes the work was done by humans.
@@ -863,8 +1008,6 @@ OpenSoyce's Nutrition Label tracks maintenance percentage as one of its five cor
 A project maintained entirely by Codex might show 100% maintenance health by traditional metrics. But the underlying accountability structure - the thing that actually protects you when there is a production incident - has changed fundamentally.
 
 This is not an argument against AI-assisted development. OpenAI's Codex is genuinely impressive and will make developers more productive. Cisco, Temporal, and Superhuman are not wrong to use it. The question is what signals you need to evaluate AI-maintained packages differently from human-maintained ones.
-
-[img:/blog/ai-open-source-inline.png:OpenAI Codex dashboard showing parallel task assignment and autonomous commit workflow]
 
 ## What Needs to Change in How We Score Trust
 
@@ -930,7 +1073,18 @@ At 130 CVEs per day, a CVSS-sorted patch queue is a treadmill moving faster than
 
 The problem is not that engineering teams are lazy or incompetent. The problem is that the model of reviewing every CVE individually is structurally broken at this volume.
 
-[img:/blog/cve-math-inline.png:CVE publication count 2020-2025 showing exponential growth curve, with 2025 at 48,185 total]
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│          CVE PUBLICATION EXPONENTIAL CURVE       │
+├──────────────────────────────────────────────────┤
+│  Year   Total CVEs   Avg/Day   Remediation Gap   │
+│  2020   18,351       50        Medium            │
+│  2024   39,962       110       Severe            │
+│  2025   48,185       130       Catastrophic      │
+├──────────────────────────────────────────────────┤
+│  We can no longer patch our way out of CVE lists │
+└──────────────────────────────────────────────────┘
+\`\`\`
 
 ## From Noise to Signal: What Runtime Context Changes
 
@@ -1002,15 +1156,25 @@ If you cannot tell who legitimately controls a package, you cannot evaluate the 
 
 This is exactly the kind of signal that OpenSoyce's community health score tries to surface. Unclear contributor roles, opaque release processes, and sponsorship structures that create conflicts of interest are all governance signals. They do not mean a package is dangerous today. They mean the risk of a future problem is higher than a project with clear, documented governance.
 
-[img:/blog/maintainer-lockout-inline.png:fsnotify GitHub repository showing stars, forks, and contributor activity patterns]
-
 ## The Governance Gap Is Industry-Wide
 
 fsnotify is not exceptional in having governance opacity. Most open source projects of this scale never wrote down their governance model. Who can approve a PR? Who can publish a release? What happens if the primary maintainer becomes unavailable? What is the escalation path if a contributor disagrees with a decision?
 
+\`\`\`text
+┌──────────────────────────────────────────────────┐
+│             GOVERNANCE OPACITY RISK              │
+├──────────────────────────────────────────────────┤
+│  fsnotify: 10k+ stars, 969 forks, core dep.      │
+│  - No written governance policy                  │
+│  - Single point of control                       │
+│  - Maintainer access changes silently            │
+│  - Result: Downstream panic / prompt forks       │
+└──────────────────────────────────────────────────┘
+\`\`\`
+
 For large, well-funded projects - Linux kernel, major Apache projects, CNCF graduated projects - there are answers to these questions. Written governance documents, release management processes, multi-stakeholder review.
 
-For the vast middle tier of open source - packages with 5,000 to 50,000 stars, meaningful download counts, real production usage - governance is usually implicit. It is whatever the maintainer decides. That is fine when the maintainer is present, aligned, and acting in good faith. It becomes a risk when any of those conditions change.
+For the middle tier of open source - packages with 5,000 to 50,000 stars - governance is usually implicit. It is whatever the maintainer decides. That is fine when the maintainer is present, aligned, and acting in good faith. It becomes a risk when any of those conditions change.
 
 ## What Downstream Users Actually Need
 
@@ -1072,7 +1236,16 @@ This is a ghost access problem. If you transferred a package last year, the prev
 
 In a supply chain attack context, ghost access is an attacker's best friend. It is access that does not appear in the current owner's access control list, that does not trigger obvious security alerts, and that might persist indefinitely if no one is auditing stale permissions.
 
-[img:/blog/pypi-audit-inline.png:Trail of Bits audit timeline showing PyPI security assessment findings and remediation status]
+\`\`\`text
+┌──────────────────────────────────────────────────────┐
+│               TRAIL OF BITS PYPI FINDINGS            │
+├──────────────────────────────────────────────────────┤
+│  1. Organization Member Escalation                   │
+│     - Members could invite new Owners                │
+│  2. Project Transfer Ghost Access                    │
+│     - Stale teams retained publisher rights          │
+└──────────────────────────────────────────────────────┘
+\`\`\`
 
 ## The Audit Also Found OIDC Replay Issues and IDOR in Token Deletion
 
@@ -1148,7 +1321,15 @@ The crucial architectural decision: Monaco was designed as a pure editor compone
 
 Monaco Editor is open source today at github.com/microsoft/monaco-editor and is used by hundreds of web applications - including CodeSandbox, GitHub's own file editor, and countless internal tools. If you have ever edited a file on github.com, you have used Monaco.
 
-[img:/blog/vscode-monaco-timeline.png:Monaco Editor's evolution from Azure web editor 2011 to embedded component in hundreds of products by 2020]
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│                 MONACO EDITOR EVOLUTION                │
+├────────────────────────────────────────────────────────┤
+│  2011: Web browser editor component for Azure          │
+│  2015: Base core editor for Visual Studio Code         │
+│  2021: vscode.dev browser-native local file editor     │
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
 ## Branch Two: Visual Studio Code Preview (2015)
 
@@ -1214,7 +1395,16 @@ The implications were large for open source development specifically. Many open-
 
 **GitHub Codespaces** launched in 2020 (limited beta) and 2021 (general availability). Codespaces is VS Code running in the browser backed by a cloud VM - the full remote development story extended to the web. You can open any GitHub repository, click "Open in Codespaces," and have a complete development environment in seconds.
 
-[img:/blog/vscode-remote-architecture.png:VS Code Remote Development architecture showing local UI client and remote VS Code server split across SSH, containers, and WSL]
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│               VS CODE REMOTE ARCHITECTURE              │
+├────────────────────────────────────────────────────────┤
+│ [LOCAL CLIENT (UI)] <─── JSON-RPC ───> [REMOTE SERVER] │
+│  - Electron/Browser                     - Language Host│
+│  - Key/Mouse Input                      - Filesystem   │
+│  - View Rendering                       - Terminal/Exec│
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
 ## Branch Seven: vscode.dev and the Browser-Native Era (2021)
 
@@ -1268,7 +1458,16 @@ The fork wars created a genuine strategic problem for Microsoft. VS Code's MIT l
 
 In response to the AI fork pressure, Microsoft accelerated AI integration in VS Code significantly. The addition of agent mode (March 2025), full model choice (including non-GitHub-Copilot models), and MCP (Model Context Protocol) support in 2025 can all be read as Microsoft's response to the competitive threat from Cursor and Windsurf.
 
-[img:/blog/vscode-fork-family.png:The VS Code fork family tree: Monaco (2011) -> VS Code (2015) -> VSCodium, Codespaces, vscode.dev -> Cursor, Windsurf, Theia, Gitpod (2023-2025)]
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│                  VS CODE FORK SPECTRUM                 │
+├────────────────────────────────────────────────────────┤
+│ [Monaco] ──► [VS Code] ──┬──► [VSCodium] (Telemetry X) │
+│                          ├──► [Theia]    (Modular IDE) │
+│                          ├──► [Cursor]   (AI First)    │
+│                          └──► [Windsurf] (Agent Flow)  │
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
 ## Branch Eleven: Agent Mode and the Agentic Future (2025-2026)
 
@@ -1536,7 +1735,16 @@ Check your stack's license exposure at opensoyce.com/scanner.
 
         That compromised Nx Console extension? Guard checks postinstall scripts. Guard flags maintainer concentration risk. Guard would have put that dependency on the **Watchlist** before it ever hit a machine.
 
-        [img:/blog/stop-supply-chain-gamble.png:OpenSoyce Guard catches postinstall scripts and maintainer concentration risk before they merge.]
+\`\`\`text
+┌──────────────────────────────────────────────────────┐
+│                 OPENSOYCE GUARD PR ENGINE            │
+├──────────────────────────────────────────────────────┤
+│  PR Open ──► Check changes ──► Comment with Alert    │
+│               - Postinstall scripts detected [WARN]  │
+│               - Maintainer concentration [WARN]      │
+│               - Package on watchlist [BLOCKED]       │
+└──────────────────────────────────────────────────────┘
+\`\`\`
 
         ## THE SOYCE SCORE WOULD HAVE FLAGGED IT.
 
@@ -1554,7 +1762,15 @@ Check your stack's license exposure at opensoyce.com/scanner.
 
         OpenSoyce is the trust layer that answers it. Before you build on open source — check the label.
 
-        [img:/blog/vulnerabilities-exposed.png:Move from blind trust to verifiable utility. Real-time scores for engineering leads.]
+\`\`\`text
+┌────────────────────────────────────────────────────────┐
+│             TRANSITION TO VERIFIABLE RUNTIME           │
+├────────────────────────────────────────────────────────┤
+│  From: Blind Trust in Star Count                       │
+│  To:   Verifiable runtime analysis & Continuous Score  │
+│  [STAR COUNT (Vanity)] ──► [REAL-TIME SOYCESCORE (9.2)]│
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
         **Free scan:** Run your lockfile through [opensoyce.com/scanner](https://opensoyce.com/scanner) right now. No account required. See what's hiding in your resolved dependency tree.
 

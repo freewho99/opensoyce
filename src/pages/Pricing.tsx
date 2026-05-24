@@ -35,7 +35,7 @@ const tiers: Tier[] = [
     value: 'One private repo. Guard basics for solo builders.',
     features: [
       'One private repo',
-      'Basic Guard checks',
+      'Basic Guard checks (Standard security scans & CVE vulnerability matching)',
       'Email alerts on score drops',
       'Lockfile scans on demand',
     ],
@@ -49,7 +49,7 @@ const tiers: Tier[] = [
     value: 'Block risky merges. PR comments + policy you control.',
     features: [
       'PR comments on every push',
-      'Policy rules (block, warn, allow)',
+      'Policy rules (Custom block/allow gates for license, activity & CVEs)',
       'Scan history + diffs',
       'Up to 10 private repos',
       'Slack + email alerts',
@@ -196,6 +196,10 @@ export default function Pricing() {
           Frequently Asked Questions
         </h2>
         <div className="border-t-4 border-soy-bottle">
+          <FAQItem
+            question="What is the difference between Basic Guard checks and Policy rules?"
+            answer="Basic Guard checks (Starter tier) scan your PRs for known vulnerabilities (CVEs) and basic score drops. Policy rules (Team tier and above) allow you to define custom gating criteria—such as blocking merges for copyleft licenses (e.g. GPL), low project activity/maintenance scores, or specific CVE severity thresholds."
+          />
           <FAQItem
             question="What's the difference between Scanner and Guard?"
             answer="Scanner is the free public tool — paste a lockfile or repo URL, get a score. Guard runs on every PR in your private repos, posts inline comments, and blocks merges that violate your policy."

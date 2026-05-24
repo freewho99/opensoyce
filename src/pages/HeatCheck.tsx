@@ -41,6 +41,7 @@ export default function HeatCheck() {
       <HeatSection 
         title="USE READY — SHIP THESE TODAY" 
         color="bg-[#E63322]" 
+        status="use-ready"
         projects={[
           {
             name: "next.js",
@@ -70,6 +71,7 @@ export default function HeatCheck() {
       <HeatSection 
         title="FORKABLE — REMIX THE CORE" 
         color="bg-blue-600" 
+        status="forkable"
         projects={[
           {
             name: "ui",
@@ -99,6 +101,7 @@ export default function HeatCheck() {
       <HeatSection 
         title="AI HARNESS WATCHLIST" 
         color="bg-orange-500" 
+        status="watchlist"
         projects={[
           {
             name: "archon",
@@ -123,6 +126,7 @@ export default function HeatCheck() {
         title="POPULAR BUT STALE — USE WITH CAUTION" 
         subtitle="Popular. Influential. No longer fresh."
         color="bg-black" 
+        status="stale"
         projects={[
           {
             name: "moment.js",
@@ -181,7 +185,7 @@ export default function HeatCheck() {
   );
 }
 
-function HeatSection({ title, subtitle, color, projects }: { title: string, subtitle?: string, color: string, projects: any[] }) {
+function HeatSection({ title, subtitle, color, projects, status }: { title: string, subtitle?: string, color: string, projects: any[], status: 'use-ready' | 'forkable' | 'watchlist' | 'stale' }) {
   return (
     <section className="py-20 border-b-4 border-black">
       <div className="max-w-7xl mx-auto px-4">
@@ -206,7 +210,29 @@ function HeatSection({ title, subtitle, color, projects }: { title: string, subt
             >
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-widest opacity-40">{p.owner}</span>
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-40">{p.owner}</span>
+                    {status === 'use-ready' && (
+                      <span className="bg-emerald-500 text-white border border-black px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider shadow-[1px_1px_0px_#000]">
+                        [USE READY]
+                      </span>
+                    )}
+                    {status === 'forkable' && (
+                      <span className="bg-amber-400 text-black border border-black px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider shadow-[1px_1px_0px_#000]">
+                        [FORKABLE]
+                      </span>
+                    )}
+                    {status === 'watchlist' && (
+                      <span className="bg-orange-500 text-white border border-black px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider shadow-[1px_1px_0px_#000]">
+                        [WATCHLIST]
+                      </span>
+                    )}
+                    {status === 'stale' && (
+                      <span className="bg-soy-red text-white border border-black px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider shadow-[1px_1px_0px_#000]">
+                        [STALE]
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-2xl font-black uppercase italic tracking-tight group-hover:text-[#E63322] transition-colors">
                     {p.name}
                   </h3>

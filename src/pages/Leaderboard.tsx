@@ -20,12 +20,45 @@ export default function Leaderboard() {
 
   const categories = ['All', 'INFRASTRUCTURE', 'DEVTOOLS', 'DATA SOVEREIGNTY', 'AGENTIC AI', 'DESIGN TOOLS', 'SKILLS & AGENTS', 'SECURITY'];
 
-  // Map real repos to project type
+  // Map real repos to project type with core value summaries instead of generic description strings
+  const getCoreValueSummary = (owner: string, repo: string, fallback: string) => {
+    const key = `${owner}/${repo}`.toLowerCase();
+    const map: Record<string, string> = {
+      'vercel/next.js': 'Optimizes React rendering, bundling, and routing for server-side performance.',
+      'facebook/react': 'The baseline declarative UI engine for composable user interfaces.',
+      'vitejs/vite': 'An ultra-fast dev server and bundler that replaces slow Webpack setups.',
+      'withastro/astro': 'Generates content-focused websites with zero client-side JavaScript by default.',
+      'biomejs/biome': 'Replaces Prettier and ESLint with a single, lightning-fast Rust-based tool.',
+      'denoland/deno': 'A secure-by-default TypeScript runtime with built-in testing and compiling.',
+      'oven-sh/bun': 'An all-in-one JavaScript runtime, bundler, and package manager built for extreme speed.',
+      'shadcn-ui/ui': 'Provides copy-pasteable, accessible UI components using Radix primitives.',
+      'honojs/hono': 'A tiny, fast router optimized for Cloudflare Workers, Deno, and serverless edges.',
+      'trpc/trpc': 'Enforces end-to-end static types between frontend and backend without schemas.',
+      'prisma/prisma': 'Provides a typesafe database client and automated schema migration tooling.',
+      'supabase/supabase': 'An open-source PostgreSQL database platform with auth, storage, and edge APIs.',
+      'coleam00/archon': 'Executes agentic coding workflows driven by local YAML definitions.',
+      'mezmo/aura': 'A control plane for executing declarative agentic AI harnesses securely.',
+      'nicholasgasior/open-design': 'A local-first, privacy-focused open source clone of Claude Artifacts.',
+      'openpencil-ai/openpencil': 'A web-based Figma alternative that allows local vector editing.',
+      'opendevin/openhands': 'An autonomous agent that writes code, runs terminal commands, and edits workspace files.',
+      'crewaiinc/crewai': 'Orchestrates collaborative groups of specialized AI agents working together.',
+      'microsoft/autogen': 'Enables multi-agent conversational interfaces and task execution patterns.',
+      'langchain-ai/langgraph': 'Builds complex, stateful multi-agent workflows with loops and cycles.',
+      'princeton-nlp/swe-agent': 'Turns language models into software engineering agents that resolve real GitHub issues.',
+      'continuedev/continue': 'An open-source IDE extension to integrate code generation directly in VS Code.',
+      'paul-gauthier/aider': 'A command-line pair programmer that edits local git repositories directly.',
+      'geekan/metagpt': 'Generates full software requirements documents and code structures from prompts.',
+      'superagi/superagi': 'An infrastructure layer for spawning and monitoring autonomous AI agents.',
+      'pythagora-io/gpt-pilot': 'An AI-driven developer that asks clarifying questions to code full apps from scratch.'
+    };
+    return map[key] || fallback;
+  };
+
   const realProjects: Project[] = LEADERBOARD_REPOS.map(r => ({
     id: `${r.owner}-${r.repo}`,
     name: r.name,
     owner: r.owner,
-    description: r.description,
+    description: getCoreValueSummary(r.owner, r.repo, r.description),
     stars: r.stars,
     forks: Math.floor(r.stars / 10), // mock forks if not in data
     lastScanned: r.lastCommit || 'Today',
@@ -120,8 +153,17 @@ export default function Leaderboard() {
     <div className="max-w-7xl mx-auto px-4 py-12 relative">
       <div className="flex justify-between items-end mb-12">
         <div>
-          <h1 className="text-5xl font-bold uppercase italic tracking-tighter mb-4">Leaderboards</h1>
-          <p className="text-xl font-medium opacity-60">Ranked by Soyce Score. High maintenance, higher trust.</p>
+          <h1 className="text-5xl font-black uppercase italic tracking-tighter mb-4">Leaderboards</h1>
+          <p className="text-xl font-medium opacity-60">
+            Ranked by{' '}
+            <span 
+              className="underline decoration-dotted cursor-help hover:text-soy-red transition-colors" 
+              title="Soyce Score: A 0-10 composite rating of repository maintenance (30%), community (25%), security (20%), documentation (15%), and activity (10%)."
+            >
+              Soyce Score
+            </span>
+            . High maintenance, higher trust.
+          </p>
         </div>
         <button 
           onClick={() => setIsCompareMode(!isCompareMode)}
@@ -172,7 +214,7 @@ export default function Leaderboard() {
       <div className="space-y-6">
         <div className="hidden lg:grid grid-cols-12 px-6 text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mb-2">
           <div className="col-span-6">PROJECT IDENTITY</div>
-          <div className="col-span-3 text-center">SOYCE SCORE</div>
+          <div className="col-span-3 text-center cursor-help underline decoration-dotted font-black" title="Soyce Score: A 0-10 composite rating of repository maintenance (30%), community (25%), security (20%), documentation (15%), and activity (10%).">SOYCE SCORE</div>
           <div className="col-span-3 text-right">OPERATIONS</div>
         </div>
         

@@ -48,10 +48,8 @@ export default function Proof() {
             <ProofCard
               icon={<Gauge size={36} strokeWidth={2.5} />}
               tag="SCORING ENGINE"
-              title="Five pillars, thirteen signals, six bands."
+              title="Multi-Pillar Security & Health Analysis"
               items={[
-                '5 pillars: maintenance, community, security, documentation, activity',
-                '13 signals across 8 GitHub endpoints',
                 'Verdict bands: USE READY · STABLE · WATCHLIST · RISKY · GRAVEYARD',
                 'Advisory caps on hidden CVEs (band-cap on score, not silent)',
                 'Maintainer concentration analysis with vendor-SDK allowlist',

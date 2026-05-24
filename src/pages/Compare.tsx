@@ -111,6 +111,11 @@ function CustomCompareSection() {
         </div>
       </form>
 
+      <div className="bg-[#302C26] text-[#F5F0E8] p-5 border-2 border-black mb-6 text-xs font-mono shadow-[4px_4px_0px_#000]">
+        <span className="text-[#E63322] font-black uppercase block mb-1">📊 COMPARISON ENGINE VALUE:</span>
+        This utility evaluates packages side-by-side across our five key dimensions (Maintenance, Community, Security, Documentation, and Activity). Running this comparison lets you instantly audit which dependency has healthier resolution rates, lower bottleneck risk, and active security scanning before you merge.
+      </div>
+
       {error && (
         <div className="p-4 bg-soy-red/10 border-2 border-soy-red text-soy-red font-bold mb-6">
           {error}
@@ -135,60 +140,127 @@ function CustomCompareSection() {
               </tr>
             </thead>
             <tbody className="divide-y-2 divide-black/10 font-bold text-sm">
-              <tr>
-                <td className="p-4 bg-soy-label/10">OVERALL SOYCE SCORE</td>
-                <td className="p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5">{dataA.total.toFixed(1)} / 10.0</td>
-                <td className="p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5">{dataB.total.toFixed(1)} / 10.0</td>
-              </tr>
-              <tr>
-                <td className="p-4">MAINTENANCE (Max 3.0)</td>
-                <td className="p-4 text-center">
-                  <div>{dataA.breakdown?.maintenance?.toFixed(1) ?? '0.0'} / 3.0</div>
-                  <div className="text-[10px] opacity-60">Resolution Time: {typeof dataA.meta?.avgResolutionDays === 'number' ? `${dataA.meta.avgResolutionDays.toFixed(1)}d` : 'N/A'}</div>
-                </td>
-                <td className="p-4 text-center">
-                  <div>{dataB.breakdown?.maintenance?.toFixed(1) ?? '0.0'} / 3.0</div>
-                  <div className="text-[10px] opacity-60">Resolution Time: {typeof dataB.meta?.avgResolutionDays === 'number' ? `${dataB.meta.avgResolutionDays.toFixed(1)}d` : 'N/A'}</div>
-                </td>
-              </tr>
-              <tr>
-                <td className="p-4">COMMUNITY (Max 2.5)</td>
-                <td className="p-4 text-center">
-                  <div>{dataA.breakdown?.community?.toFixed(1) ?? '0.0'} / 2.5</div>
-                  <div className="text-[10px] opacity-60">Stars: {typeof dataA.meta?.totalStars === 'number' ? `${(dataA.meta.totalStars / 1000).toFixed(1)}k` : '0.0k'}</div>
-                  {dataA.meta?.busFactorHealthy === false && (
-                    <div className="text-[9px] text-soy-red font-black">⚠️ HIGH BOTTLENECK RISK</div>
-                  )}
-                </td>
-                <td className="p-4 text-center">
-                  <div>{dataB.breakdown?.community?.toFixed(1) ?? '0.0'} / 2.5</div>
-                  <div className="text-[10px] opacity-60">Stars: {typeof dataB.meta?.totalStars === 'number' ? `${(dataB.meta.totalStars / 1000).toFixed(1)}k` : '0.0k'}</div>
-                  {dataB.meta?.busFactorHealthy === false && (
-                    <div className="text-[9px] text-soy-red font-black">⚠️ HIGH BOTTLENECK RISK</div>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="p-4">SECURITY (Max 2.0)</td>
-                <td className="p-4 text-center">
-                  <div>{dataA.breakdown?.security?.toFixed(1) ?? '0.0'} / 2.0</div>
-                  <div className="text-[10px] opacity-60">Dependabot: {dataA.meta?.hasDependabot ? '✓' : '✗'} | SAST/CI: {dataA.meta?.hasSast ? '✓' : '✗'}</div>
-                </td>
-                <td className="p-4 text-center">
-                  <div>{dataB.breakdown?.security?.toFixed(1) ?? '0.0'} / 2.0</div>
-                  <div className="text-[10px] opacity-60">Dependabot: {dataB.meta?.hasDependabot ? '✓' : '✗'} | SAST/CI: {dataB.meta?.hasSast ? '✓' : '✗'}</div>
-                </td>
-              </tr>
-              <tr>
-                <td className="p-4">DOCUMENTATION (Max 1.5)</td>
-                <td className="p-4 text-center">{dataA.breakdown.documentation.toFixed(1)} / 1.5</td>
-                <td className="p-4 text-center">{dataB.breakdown.documentation.toFixed(1)} / 1.5</td>
-              </tr>
-              <tr>
-                <td className="p-4">ACTIVITY (Max 1.0)</td>
-                <td className="p-4 text-center">{dataA.breakdown.activity.toFixed(1)} / 1.0</td>
-                <td className="p-4 text-center">{dataB.breakdown.activity.toFixed(1)} / 1.0</td>
-              </tr>
+              {(() => {
+                const totalA = dataA.total ?? 0;
+                const totalB = dataB.total ?? 0;
+                const mtnA = dataA.breakdown?.maintenance ?? 0;
+                const mtnB = dataB.breakdown?.maintenance ?? 0;
+                const comA = dataA.breakdown?.community ?? 0;
+                const comB = dataB.breakdown?.community ?? 0;
+                const secA = dataA.breakdown?.security ?? 0;
+                const secB = dataB.breakdown?.security ?? 0;
+                const docA = dataA.breakdown?.documentation ?? 0;
+                const docB = dataB.breakdown?.documentation ?? 0;
+                const actA = dataA.breakdown?.activity ?? 0;
+                const actB = dataB.breakdown?.activity ?? 0;
+
+                return (
+                  <>
+                    <tr className="border-b border-black/10">
+                      <td className="p-4 bg-soy-label/10">OVERALL SOYCE SCORE</td>
+                      <td className={`p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5`}>
+                        <div className="flex flex-col items-center gap-1">
+                          <span>{totalA.toFixed(1)} / 10.0</span>
+                          {totalA > totalB && <span className="bg-emerald-500 text-white text-[9px] px-2 py-0.5 tracking-widest uppercase border border-black shadow-[2px_2px_0px_#000]">WINNER ★</span>}
+                        </div>
+                      </td>
+                      <td className={`p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5`}>
+                        <div className="flex flex-col items-center gap-1">
+                          <span>{totalB.toFixed(1)} / 10.0</span>
+                          {totalB > totalA && <span className="bg-emerald-500 text-white text-[9px] px-2 py-0.5 tracking-widest uppercase border border-black shadow-[2px_2px_0px_#000]">WINNER ★</span>}
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-4">MAINTENANCE (Max 3.0)</td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{mtnA.toFixed(1)} / 3.0</div>
+                          <div className="text-[10px] opacity-60">Resolution Time: {typeof dataA.meta?.avgResolutionDays === 'number' ? `${dataA.meta.avgResolutionDays.toFixed(1)}d` : 'N/A'}</div>
+                          {mtnA > mtnB && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{mtnB.toFixed(1)} / 3.0</div>
+                          <div className="text-[10px] opacity-60">Resolution Time: {typeof dataB.meta?.avgResolutionDays === 'number' ? `${dataB.meta.avgResolutionDays.toFixed(1)}d` : 'N/A'}</div>
+                          {mtnB > mtnA && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-4">COMMUNITY (Max 2.5)</td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{comA.toFixed(1)} / 2.5</div>
+                          <div className="text-[10px] opacity-60">Stars: {typeof dataA.meta?.totalStars === 'number' ? `${(dataA.meta.totalStars / 1000).toFixed(1)}k` : '0.0k'}</div>
+                          {dataA.meta?.busFactorHealthy === false && (
+                            <div className="text-[9px] text-soy-red font-black">⚠️ HIGH BOTTLENECK RISK</div>
+                          )}
+                          {comA > comB && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{comB.toFixed(1)} / 2.5</div>
+                          <div className="text-[10px] opacity-60">Stars: {typeof dataB.meta?.totalStars === 'number' ? `${(dataB.meta.totalStars / 1000).toFixed(1)}k` : '0.0k'}</div>
+                          {dataB.meta?.busFactorHealthy === false && (
+                            <div className="text-[9px] text-soy-red font-black">⚠️ HIGH BOTTLENECK RISK</div>
+                          )}
+                          {comB > comA && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-4">SECURITY (Max 2.0)</td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{secA.toFixed(1)} / 2.0</div>
+                          <div className="text-[10px] opacity-60">Dependabot: {dataA.meta?.hasDependabot ? '✓' : '✗'} | SAST/CI: {dataA.meta?.hasSast ? '✓' : '✗'}</div>
+                          {secA > secB && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{secB.toFixed(1)} / 2.0</div>
+                          <div className="text-[10px] opacity-60">Dependabot: {dataB.meta?.hasDependabot ? '✓' : '✗'} | SAST/CI: {dataB.meta?.hasSast ? '✓' : '✗'}</div>
+                          {secB > secA && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-4">DOCUMENTATION (Max 1.5)</td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{docA.toFixed(1)} / 1.5</div>
+                          {docA > docB && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{docB.toFixed(1)} / 1.5</div>
+                          {docB > docA && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-4">ACTIVITY (Max 1.0)</td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{actA.toFixed(1)} / 1.0</div>
+                          {actA > actB && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>{actB.toFixed(1)} / 1.0</div>
+                          {actB > actA && <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 tracking-wider uppercase border border-black">HIGHER</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </div>

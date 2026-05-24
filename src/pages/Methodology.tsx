@@ -59,22 +59,27 @@ export default function Methodology() {
                 The Soyce Score is a weighted composite computed from thirteen GitHub repository signals: last commit date, star count, contributor count, fork count, license, open issue count, description / topics / homepage presence, 30-day commit volume, README content, SECURITY.md presence, release recency, recent-issue triage rate, and published security advisories (CVEs the maintainers disclosed in this repo's own code).
               </p>
 
-              <div className="space-y-6">
-                {[
-                  { label: 'MAINTENANCE', weight: 30, desc: 'Three sub-signals so finished/stable libraries are not punished for being done. Commit recency: bucketed days since the latest commit (up to 1.5). Release recency: latest tagged release within 1 year scores full credit, within 2 years scores half (up to 1.0). Issue triage: percentage of issues opened in the last 90 days that received a comment or were closed (up to 0.5). PRs are filtered out; quiet repos with no recent issues score 0 on triage.' },
-                  { label: 'COMMUNITY', weight: 25, desc: 'Log-scaled star count, contributor count, fork milestone (1k+).' },
-                  { label: 'SECURITY', weight: 20, desc: 'Published security advisories (real CVEs the maintainers disclosed in this repo, weighted by severity and recency; withdrawn advisories ignored), license presence + permissiveness (MIT / Apache / BSD), low issues-per-star ratio on actively-maintained projects, and SECURITY.md policy. Release recency moved to MAINTENANCE — releases measure "still shipping?", not "secure?". Does NOT score vulnerabilities in this repo\'s dependencies.' },
-                  { label: 'DOCUMENTATION', weight: 15, desc: 'Description, ≥3 topics, homepage URL — and README content: length, heading count, code examples, install instructions.' },
-                  { label: 'ACTIVITY', weight: 10, desc: 'Number of commits in the last 30 days (sampled from the most recent 30 commits).' },
-                ].map(item => (
-                  <div key={item.label} className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000]">
-                    <div className="flex justify-between items-center mb-2">
-                       <span className="text-lg font-black uppercase italic">{item.label}</span>
-                       <span className="text-soy-red font-black text-2xl">{item.weight}%</span>
-                    </div>
-                    <p className="text-xs font-bold uppercase tracking-widest opacity-60">{item.desc}</p>
-                  </div>
-                ))}
+              <div className="bg-[#302C26] text-[#F5F0E8] p-6 border-4 border-black shadow-[8px_8px_0px_#000] font-mono text-xs overflow-x-auto leading-relaxed mb-8">
+                <span className="text-[#E63322] font-black uppercase block mb-3 text-sm">┌── COMPOSITE WEIGHTS TABLE ─────────────────────────────┐</span>
+                <pre className="whitespace-pre overflow-x-auto">
+{`+----------------+--------+-------------------------------------------------------------+
+| PILLAR         | WEIGHT | KEY SIGNALS & CRITERIA COVERED                              |
++----------------+--------+-------------------------------------------------------------+
+| MAINTENANCE    |   30%  | Commit recency, latest tagged release within 1-2 years,     |
+|                |        | issue triage rate (recent comments & closed issues)         |
++----------------+--------+-------------------------------------------------------------+
+| COMMUNITY      |   25%  | Log-scaled star count, contributor count, fork milestones   |
++----------------+--------+-------------------------------------------------------------+
+| SECURITY       |   20%  | CVE advisories (weighted), license permissiveness (MIT etc) |
+|                |        | issues-per-star ratio, and SECURITY.md presence             |
++----------------+--------+-------------------------------------------------------------+
+| DOCUMENTATION  |   15%  | Repo topics & homepage, README length, installation guides, |
+|                |        | heading structure, and code example codeblocks              |
++----------------+--------+-------------------------------------------------------------+
+| ACTIVITY       |   10%  | Last 30 days commit volume (frequency & velocity)           |
++----------------+--------+-------------------------------------------------------------+`}
+                </pre>
+                <span className="text-[#E63322] font-black uppercase block mt-3 text-sm">└────────────────────────────────────────────────────────┘</span>
               </div>
             </div>
 

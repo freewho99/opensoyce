@@ -684,11 +684,55 @@ export default function Lookup() {
                   </div>
                 )}
               </motion.div>
-            ) : !loading && (
-              <div className="h-full flex flex-col items-center justify-center p-20 border-4 border-dashed border-soy-bottle/10 rounded-xl text-center opacity-20">
-                 <Github size={64} className="mb-4" />
-                 <p className="text-xl font-bold uppercase italic tracking-widest">Awaiting Sauce data</p>
-                 <p className="text-sm font-medium mt-2">Enter a GitHub repository to verify its nutritional profile.</p>
+            ) : loading ? (
+              <motion.div
+                key="loading-terminal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="bg-black text-[#F5F0E8] border-4 border-black p-8 font-mono text-xs shadow-[8px_8px_0px_#E63322] space-y-4 max-w-2xl mx-auto my-12"
+              >
+                <div className="flex justify-between items-center border-b border-white/20 pb-2">
+                  <span className="text-soy-red font-black">SYSTEM LOGGER v2.1b</span>
+                  <span className="opacity-50">STATUS: ACTIVE</span>
+                </div>
+                <div className="space-y-1">
+                  <p>&gt; CONNECTING TO GITHUB GRAPHQL API v4...</p>
+                  <p className="text-emerald-400">&gt; SUCCESS: ESTABLISHED HTTPS SESSION</p>
+                  <p>&gt; STREAMING METADATA: maintenance, community, commits</p>
+                </div>
+                <div className="space-y-1 pt-2">
+                  <p className="font-black text-soy-red">RETRIEVING GITHUB METRICS [======================          ] 68%</p>
+                  <p className="opacity-50 text-[10px]">Estimated time remaining: 0.8s</p>
+                </div>
+                <div className="w-full bg-white/10 h-3 border border-white/20 overflow-hidden relative">
+                  <style>{`
+                    @keyframes progressPulse {
+                      0% { width: 10%; }
+                      50% { width: 75%; }
+                      100% { width: 95%; }
+                    }
+                  `}</style>
+                  <div 
+                    className="h-full bg-soy-red" 
+                    style={{
+                      animation: 'progressPulse 4s cubic-bezier(0.1, 0.8, 0.1, 1) forwards'
+                    }}
+                  />
+                </div>
+              </motion.div>
+            ) : (
+              <div className="bg-white border-4 border-black p-8 md:p-12 shadow-[8px_8px_0px_#000] text-center max-w-2xl mx-auto my-12">
+                 <Github size={48} className="text-soy-red mx-auto mb-6" />
+                 <h2 className="text-2xl font-black uppercase italic tracking-tight mb-4">Awaiting Sauce data</h2>
+                 <p className="text-sm font-bold uppercase tracking-wider opacity-60 leading-relaxed max-w-md mx-auto mb-6">
+                   No repository is loaded. Enter a valid GitHub owner/repo path in the lookup panel above to calculate a live Soyce Score.
+                 </p>
+                 <div className="border-t border-black/10 pt-4 flex justify-around text-[10px] font-black uppercase tracking-widest opacity-40">
+                   <span>★ 13 Signals</span>
+                   <span>★ 5 Pillars</span>
+                   <span>★ Real-time GraphQL Scans</span>
+                 </div>
               </div>
             )}
           </AnimatePresence>

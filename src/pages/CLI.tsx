@@ -64,11 +64,18 @@ const CodeBlock = ({ code, label, highlight = true }: { code: string; label?: st
 export default function CLI() {
   const [activeTab, setActiveTab] = useState('github');
   const [heroCopied, setHeroCopied] = useState(false);
+  const [npmCopied, setNpmCopied] = useState(false);
 
   const handleHeroCopy = () => {
     navigator.clipboard.writeText('npx soyce check');
     setHeroCopied(true);
     setTimeout(() => setHeroCopied(false), 2000);
+  };
+
+  const handleNpmCopy = () => {
+    navigator.clipboard.writeText('npm install -g @opensoyce/cli');
+    setNpmCopied(true);
+    setTimeout(() => setNpmCopied(false), 2000);
   };
 
   return (
@@ -108,10 +115,19 @@ export default function CLI() {
 
       {/* Install & Usage */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-24">
-        <div className="bg-white border-4 border-soy-bottle p-6 space-y-4 shadow-[8px_8px_0px_#000]">
-          <h3 className="text-xl font-black uppercase italic">01. QUICK START</h3>
-          <CodeBlock code="npx soyce check" label="CLI" highlight={false} />
-          <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic">
+        <div className="bg-white border-4 border-soy-bottle p-6 space-y-4 shadow-[8px_8px_0px_#000] flex flex-col justify-between">
+          <div>
+            <h3 className="text-xl font-black uppercase italic">01. QUICK START</h3>
+            <button
+              onClick={handleNpmCopy}
+              className="w-full my-3 bg-[#00D2FF] text-black font-black uppercase tracking-wider text-xs py-3 px-4 border-2 border-black shadow-[3px_3px_0px_#000] hover:translate-x-0.5 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer font-mono"
+            >
+              <Terminal size={14} />
+              {npmCopied ? 'COPIED INSTALL CMD!' : 'INSTALL CLI FROM NPM'}
+            </button>
+            <CodeBlock code="npx soyce check" label="CLI" highlight={false} />
+          </div>
+          <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 italic mt-2">
             No install needed. Runs anywhere Node.js environment exists.
           </p>
         </div>

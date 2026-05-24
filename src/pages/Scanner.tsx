@@ -572,15 +572,36 @@ export default function Scanner() {
 
           {/* Loading state */}
           {scanning && !errorState && (
-            <div className="mt-6 bg-soy-bottle text-white p-6 border-4 border-black flex items-center gap-4 shadow-[6px_6px_0px_#E63322]">
-              <Loader2 className="animate-spin shrink-0" size={28} />
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.4em] opacity-60 mb-1">
-                  WORKING
+            <div className="mt-6 bg-soy-bottle text-white p-6 border-4 border-black flex flex-col gap-4 shadow-[6px_6px_0px_#E63322]">
+              <div className="flex items-center gap-4">
+                <Loader2 className="animate-spin shrink-0 text-soy-red" size={28} />
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.4em] opacity-60 mb-1">
+                    WORKING
+                  </div>
+                  <div className="text-lg md:text-xl font-black uppercase italic tracking-tight">
+                    Scanning dependencies against OSV…
+                  </div>
                 </div>
-                <div className="text-lg md:text-xl font-black uppercase italic tracking-tight">
-                  Scanning dependencies against OSV…
-                </div>
+              </div>
+              <div className="w-full bg-black/50 h-4 border-2 border-black overflow-hidden relative">
+                <style>{`
+                  @keyframes scanMove {
+                    0% { left: -30%; }
+                    50% { left: 100%; }
+                    100% { left: -30%; }
+                  }
+                `}</style>
+                <div 
+                  className="h-full bg-soy-red absolute shadow-[0_0_8px_#E63322]" 
+                  style={{
+                    width: '30%',
+                    animation: 'scanMove 2s infinite ease-in-out'
+                  }}
+                />
+              </div>
+              <div className="text-[9px] font-mono opacity-50 uppercase tracking-widest text-center animate-pulse">
+                [PARSING LOCKFILE STRUCTURES & CROSS-REFERENCING CVE REGISTRIES]
               </div>
             </div>
           )}

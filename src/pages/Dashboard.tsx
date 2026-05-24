@@ -752,7 +752,7 @@ export default function Dashboard() {
           <div className="lg:col-span-5 flex justify-center">
             <div className="bg-white border-4 border-soy-bottle p-10 shadow-[12px_12px_0px_#E63322] text-center w-full max-w-md">
               <Shield size={64} className="text-soy-red mx-auto mb-6" />
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-4">EXCEPTIONS DASHBOARD</h2>
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-4">OpenSoyce Exceptions Management Dashboard</h2>
               <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-6 leading-relaxed">
                 SIGN IN WITH GITHUB TO MANAGE EXCEPTIONS FOR REPOS WHERE GUARD IS INSTALLED.
               </p>
@@ -761,15 +761,35 @@ export default function Dashboard() {
                   {errorMessage}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={handleSignIn}
-                disabled={!oauthClientId}
-                className="w-full bg-soy-bottle text-soy-label py-4 text-lg font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                <Github size={20} />
-                {oauthClientId === null ? 'LOADING…' : oauthClientId === '' ? 'OAUTH NOT CONFIGURED' : 'SIGN IN WITH GITHUB'}
-              </button>
+              {oauthClientId === '' ? (
+                <div className="bg-soy-red text-white border-4 border-black p-6 shadow-[6px_6px_0px_#000] text-left">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle size={24} className="shrink-0" />
+                    <span className="font-black uppercase tracking-widest text-sm">OAUTH NOT CONFIGURED</span>
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-4 leading-normal">
+                    This instance of OpenSoyce requires GitHub OAuth client credentials. Please set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in your .env file and restart the server.
+                  </p>
+                  <a
+                    href="https://github.com/settings/developers"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block w-full bg-black text-[#F5F0E8] py-3 text-center text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black border-2 border-black transition-colors"
+                  >
+                    CONFIGURE GITHUB OAUTH →
+                  </a>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSignIn}
+                  disabled={oauthClientId === null}
+                  className="w-full bg-soy-bottle text-soy-label py-4 text-lg font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                >
+                  <Github size={20} />
+                  {oauthClientId === null ? 'LOADING…' : 'SIGN IN WITH GITHUB'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -861,7 +881,9 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto px-4 py-12 font-mono">
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 border-b-4 border-soy-bottle pb-6">
         <div>
-          <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-2">EXCEPTIONS DASHBOARD</h1>
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-2">
+            {selectedRepo ? `OpenSoyce Exceptions Management for ${selectedRepo.owner}/${selectedRepo.repo}` : 'OpenSoyce Exceptions Management Dashboard'}
+          </h1>
           <div className="text-[10px] font-black uppercase tracking-widest opacity-60">
             SIGNED IN AS <span className="text-soy-red">@{login}</span>
           </div>

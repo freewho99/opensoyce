@@ -198,8 +198,98 @@ export default function GuardInstall() {
               />
             </div>
 
-            <div className="border-2 border-soy-label/20 aspect-video flex items-center justify-center text-soy-label/40 text-sm font-black uppercase tracking-widest">
-              PR comment screenshot
+            <div className="border-4 border-black bg-white shadow-[8px_8px_0px_#000] overflow-hidden">
+              {/* GitHub Comment Header */}
+              <div className="bg-[#F6F8FA] border-b-4 border-black p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-soy-red text-white border-2 border-black flex items-center justify-center font-black text-xs shadow-[2px_2px_0px_#000]">
+                    OS
+                  </div>
+                  <div>
+                    <span className="font-black text-xs md:text-sm uppercase tracking-tight text-black">opensoyce-guard</span>
+                    <span className="ml-2 bg-soy-bottle text-white text-[9px] font-black uppercase px-1.5 py-0.5 border border-black shadow-[1px_1px_0px_#000]">
+                      BOT
+                    </span>
+                    <span className="ml-2 text-[10px] font-bold opacity-60 uppercase text-black">commented 2 minutes ago</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-soy-red text-white text-[10px] font-black uppercase px-2 py-1 border-2 border-black shadow-[2px_2px_0px_#000]">
+                  <span>Verdict: BLOCK</span>
+                </div>
+              </div>
+
+              {/* GitHub Comment Body */}
+              <div className="p-6 md:p-8 text-black">
+                <div className="border-4 border-soy-red bg-rose-50 p-4 mb-6 flex items-start gap-3 shadow-[4px_4px_0px_#E63322]">
+                  <span className="text-xl shrink-0">🚨</span>
+                  <div>
+                    <h4 className="font-black text-base uppercase text-soy-red tracking-tight">
+                      MERGE BLOCKED: 2 VULNERABLE / ROTING DEPENDENCIES FOUND
+                    </h4>
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-75 mt-1">
+                      This repository's policy blocks merges when dependencies score below 6.0.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Lodash */}
+                  <div className="border-2 border-black bg-[#FFFBEB] p-4 flex flex-col md:flex-row justify-between gap-4 shadow-[4px_4px_0px_#000] text-left">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono font-black text-sm uppercase text-soy-bottle">lodash</span>
+                        <span className="text-[9px] font-black uppercase tracking-wider bg-soy-red text-white px-1.5 py-0.5">
+                          BLOCK
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-soy-bottle opacity-70">
+                        Score: 3.4 / 10 (Critical drop from 8.0)
+                      </p>
+                      <p className="text-[10px] font-mono opacity-80 mt-2 leading-relaxed text-red-700 bg-red-50 p-2 border border-red-200">
+                        Signal: Unclaimed package hijack suspected. Publisher account changed, publish token leaked on public git history.
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest opacity-40">POLICIES TRIGGERED</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-soy-red mt-1">graveyard-entry</p>
+                    </div>
+                  </div>
+
+                  {/* Moment */}
+                  <div className="border-2 border-black bg-slate-50 p-4 flex flex-col md:flex-row justify-between gap-4 shadow-[4px_4px_0px_#000] text-left">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono font-black text-sm uppercase text-soy-bottle">moment</span>
+                        <span className="text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white px-1.5 py-0.5">
+                          WARN
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-soy-bottle opacity-70">
+                        Score: 4.2 / 10 (Stale deprecation warning)
+                      </p>
+                      <p className="text-[10px] font-mono opacity-80 mt-2 leading-relaxed text-amber-800 bg-amber-50 p-2 border border-amber-200">
+                        Signal: Package deprecated. Maintainers recommend migrating to dayjs or date-fns.
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest opacity-40">POLICIES TRIGGERED</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mt-1">deprecation-notice</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t-2 border-dashed border-black/20 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-left">
+                    To authorize exceptions, update <code className="font-mono bg-soy-label px-1 py-0.5 text-black">.opensoyce.yml</code>
+                  </span>
+                  <Link
+                    to="/lookup"
+                    className="bg-soy-bottle text-soy-label text-xs font-black uppercase tracking-wider px-4 py-2 hover:bg-soy-red hover:text-white border-2 border-black shadow-[2px_2px_0px_#000] hover:translate-x-0.5 hover:-translate-y-0.5 transition-all cursor-pointer font-mono"
+                  >
+                    View Full Security Report →
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         )}

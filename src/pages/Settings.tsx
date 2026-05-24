@@ -25,10 +25,57 @@ export default function Settings() {
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-        <div className="bg-white border-2 border-soy-bottle/40 p-6 shadow-[4px_4px_0px_#000]">
-          <div className="flex items-center gap-3 mb-3">
-            <Bell size={20} strokeWidth={2.5} className="text-soy-red" />
-            <h2 className="text-lg font-black uppercase tracking-widest">Notifications</h2>
+        {/* 1. Account profile - Coming Soon */}
+        <div className="bg-white border-2 border-soy-bottle/40 p-6 shadow-[4px_4px_0px_#000] opacity-75">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <SettingsIcon size={20} strokeWidth={2.5} className="text-gray-500" />
+              <h2 className="text-lg font-black uppercase tracking-widest text-gray-700">Account profile</h2>
+            </div>
+            <span className="bg-amber-400 text-black px-2.5 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000]">
+              [COMING SOON]
+            </span>
+          </div>
+          <p className="text-sm opacity-70 mb-2">
+            GitHub sign-in is supported today through the Sign In button in the header,
+            but persistent account state isn't wired up yet.
+          </p>
+        </div>
+
+        {/* 2. Watchlist - Current */}
+        <div className="bg-white border-4 border-soy-bottle p-6 shadow-[4px_4px_0px_#000]">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <Star size={20} strokeWidth={2.5} className="text-soy-red" />
+              <h2 className="text-lg font-black uppercase tracking-widest">Watchlist</h2>
+            </div>
+            <span className="bg-green-600 text-white px-2.5 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000]">
+              [CURRENT]
+            </span>
+          </div>
+          <p className="text-sm opacity-70 mb-4">
+            The watchlist is stored locally in your browser, no account required.
+            Add or remove repos from the watch button on any repo's nutrition label.
+          </p>
+          <Link
+            to="/watchlist"
+            className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-soy-red hover:underline"
+          >
+            View watchlist
+            <ArrowUpRight size={14} strokeWidth={3} />
+          </Link>
+        </div>
+
+        {/* 3. Notifications - Current */}
+        <div className="bg-white border-4 border-soy-bottle p-6 shadow-[4px_4px_0px_#000]">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <Bell size={20} strokeWidth={2.5} className="text-soy-red" />
+              <h2 className="text-lg font-black uppercase tracking-widest">Notifications</h2>
+            </div>
+            <span className="bg-green-600 text-white px-2.5 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000]">
+              [CURRENT]
+            </span>
           </div>
           <p className="text-sm opacity-70 mb-4">
             Band-drop notifications are managed per-repo through the /claim flow.
@@ -44,49 +91,20 @@ export default function Settings() {
           </Link>
         </div>
 
-        <div className="bg-white border-2 border-soy-bottle/40 p-6 shadow-[4px_4px_0px_#000]">
-          <div className="flex items-center gap-3 mb-3">
-            <Star size={20} strokeWidth={2.5} className="text-soy-red" />
-            <h2 className="text-lg font-black uppercase tracking-widest">Watchlist</h2>
-          </div>
-          <p className="text-sm opacity-70 mb-4">
-            The watchlist is stored locally in your browser, no account required.
-            Add or remove repos from the watch button on any repo's nutrition label.
-          </p>
-          <Link
-            to="/watchlist"
-            className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-soy-red hover:underline"
-          >
-            View watchlist
-            <ArrowUpRight size={14} strokeWidth={3} />
-          </Link>
-        </div>
-
-        <div className="bg-white border-2 border-soy-bottle/40 p-6 shadow-[4px_4px_0px_#000] opacity-50">
-          <div className="flex items-center gap-3 mb-3">
-            <KeyRound size={20} strokeWidth={2.5} />
-            <h2 className="text-lg font-black uppercase tracking-widest">Personal API token</h2>
+        {/* 4. Personal API token - Coming Soon */}
+        <div className="bg-white border-2 border-soy-bottle/40 p-6 shadow-[4px_4px_0px_#000] opacity-75">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <KeyRound size={20} strokeWidth={2.5} className="text-gray-500" />
+              <h2 className="text-lg font-black uppercase tracking-widest text-gray-700">Personal API token</h2>
+            </div>
+            <span className="bg-amber-400 text-black px-2.5 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000]">
+              [COMING SOON]
+            </span>
           </div>
           <p className="text-sm opacity-70 mb-2">
             For developer use: a personal token for the OpenSoyce API to raise
             per-IP rate limits.
-          </p>
-          <p className="text-[10px] font-black uppercase tracking-widest opacity-60">
-            Coming soon
-          </p>
-        </div>
-
-        <div className="bg-white border-2 border-soy-bottle/40 p-6 shadow-[4px_4px_0px_#000] opacity-50">
-          <div className="flex items-center gap-3 mb-3">
-            <SettingsIcon size={20} strokeWidth={2.5} />
-            <h2 className="text-lg font-black uppercase tracking-widest">Account profile</h2>
-          </div>
-          <p className="text-sm opacity-70 mb-2">
-            GitHub sign-in is supported today through the Sign In button in the header,
-            but persistent account state isn't wired up yet.
-          </p>
-          <p className="text-[10px] font-black uppercase tracking-widest opacity-60">
-            Coming soon
           </p>
         </div>
       </section>
