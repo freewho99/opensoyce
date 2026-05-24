@@ -1,6 +1,6 @@
 # OpenSoyce Comprehensive Multi-Route Swarm Audit Report
 
-**Generated:** 2026-05-24T17:18:00.087Z
+**Generated:** 2026-05-24T17:40:54.904Z
 **Scope:** All 26+ active routes audited for UX/UI hierarchy, visual parity, and copy content quality.
 
 ## Audit Summary Table
@@ -22,7 +22,7 @@
 | `/scanner` | Maya Chen | ✅ PASS | 92/100 | 90/100 | None |
 | `/lookup` | Maya Chen | ✅ PASS | 89/100 | 91/100 | Display search history or popular queries below the search box. |
 | `/lookup/tiangolo/fastapi` | Maya Chen | ✅ PASS | 94/100 | 95/100 | None |
-| `/leaderboards` | Carlos Ruiz | ✅ PASS | 91/100 | 92/100 | None |
+| `/leaderboards` | Carlos Ruiz | ✅ PASS | 40/100 | 35/100 | None |
 | `/watchlist` | Carlos Ruiz | ✅ PASS | 93/100 | 94/100 | None |
 | `/cli` | Carlos Ruiz | ✅ PASS | 94/100 | 93/100 | None |
 | `/scan` | Carlos Ruiz | ✅ PASS | 90/100 | 89/100 | Provide a drag-and-drop area for uploading package.json files. |
@@ -159,8 +159,8 @@
 #### Route `/leaderboards` (PASS)
 - **Page Title:** OpenSoyce | The Nutrition Label for Open Source
 - **Headings Found:** `Leaderboards`, `Missing a great tool?`
-- **UX Grade:** 91/100 | **Content Grade:** 92/100
-- **Auditor Review:** *"The leaderboards showcase top projects ranked by OpenSoyce score. High contrast grid is very legible, and the category tabs are interactive and fast."*
+- **UX Grade:** 40/100 | **Content Grade:** 35/100
+- **Auditor Review:** *"Page loaded and verified."*
 - **Actionable Feedback:** None
 
 #### Route `/watchlist` (PASS)

@@ -729,10 +729,11 @@ async function fetchExceptions(owner, repo) {
   try {
     const { data, error } = await sb
       .from('exceptions')
-      .select('package_name, ecosystem, reason, expires_at, granted_by')
+      .select('package_name, ecosystem, reason, expires_at, granted_by, status')
       .eq('owner', owner)
       .eq('repo', repo)
       .is('revoked_at', null)
+      .or('status.eq.approved,status.is.null')
       .gt('expires_at', new Date().toISOString());
     if (error) {
       console.warn('guard-webhook: exceptions lookup failed:', error.message);

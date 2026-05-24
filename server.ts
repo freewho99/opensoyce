@@ -19,6 +19,8 @@ import { verdictFor, detectExtensionExploitRisk, trustPostureFor } from "./src/s
 import earlyAccessHandler from "./api/early-access.js";
 // @ts-ignore — plain JS handler, no .d.ts
 import exceptionsHandler from "./api/exceptions.js";
+// @ts-ignore — plain JS handler, no .d.ts
+import slackWebhookHandler from "./api/integrations/slack/webhook.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -407,6 +409,16 @@ async function startServer() {
   app.get("/api/exceptions", exceptionsAdapter);
   app.post("/api/exceptions", exceptionsAdapter);
   app.delete("/api/exceptions", exceptionsAdapter);
+
+  const slackWebhookAdapter = async (req: express.Request, res: express.Response) => {
+    try {
+      await slackWebhookHandler(req, res);
+    } catch (err: any) {
+      console.error('slack webhook handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ error: 'INTERNAL_ERROR', message: 'unexpected server error' });
+    }
+  };
+  app.post("/api/integrations/slack/webhook", slackWebhookAdapter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

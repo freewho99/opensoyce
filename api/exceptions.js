@@ -354,7 +354,7 @@ async function handleList(req, res, session) {
 
   const { data, error } = await sb
     .from('exceptions')
-    .select('id, owner, repo, package_name, ecosystem, reason, expires_at, granted_by, created_at, revoked_at')
+    .select('id, owner, repo, package_name, ecosystem, reason, expires_at, granted_by, created_at, revoked_at, status, revoked_by')
     .eq('owner', owner)
     .eq('repo', repo)
     .order('created_at', { ascending: false });
@@ -417,6 +417,22 @@ async function handleGrant(req, res, session) {
     return err(res, 500, 'DB_ERROR', 'database not configured');
   }
 
+  // Check if Slack notifications are configured for this repo
+  let notif = null;
+  try {
+    const { data: notifData } = await sb
+      .from('notifications')
+      .select('slack_webhook_url')
+      .eq('owner', owner)
+      .eq('repo', repo)
+      .maybeSingle();
+    notif = notifData;
+  } catch (err) {
+    console.warn('exceptions POST: notifications lookup failed', err && err.message);
+  }
+
+  const status = (notif && notif.slack_webhook_url) ? 'pending' : 'approved';
+
   const { data, error } = await sb
     .from('exceptions')
     .insert({
@@ -427,14 +443,96 @@ async function handleGrant(req, res, session) {
       reason,
       expires_at: expiresAt,
       granted_by: session.login,
+      status: status,
     })
-    .select('id, owner, repo, package_name, ecosystem, reason, expires_at, granted_by, created_at, revoked_at')
+    .select('id, owner, repo, package_name, ecosystem, reason, expires_at, granted_by, created_at, revoked_at, status')
     .single();
 
   if (error) {
     console.error('exceptions POST: supabase insert failed', error.message);
     return err(res, 500, 'DB_ERROR', 'database write failed');
   }
+
+  // Dispatch Slack notification if Slack is configured
+  if (notif && notif.slack_webhook_url && data) {
+    const slackPayload = {
+      text: `New exception request for package *${packageName}* in *${owner}/${repo}*`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*New OpenSoyce Exception Request*`
+          }
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*Repository:*\n${owner}/${repo}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Package:*\n${ecosystem}:${packageName}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Requested By:*\n@${session.login}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Expires At:*\n${new Date(expiresAt).toLocaleDateString()}`
+            }
+          ]
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Reason:*\n${reason}`
+          }
+        },
+        {
+          type: 'actions',
+          block_id: 'exception_approval',
+          elements: [
+            {
+              type: 'button',
+              action_id: 'approve',
+              text: {
+                type: 'plain_text',
+                text: 'Approve'
+              },
+              style: 'primary',
+              value: data.id
+            },
+            {
+              type: 'button',
+              action_id: 'deny',
+              text: {
+                type: 'plain_text',
+                text: 'Deny'
+              },
+              style: 'danger',
+              value: data.id
+            }
+          ]
+        }
+      ]
+    };
+
+    try {
+      await fetch(notif.slack_webhook_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(slackPayload)
+      });
+    } catch (slackErr) {
+      console.error('exceptions POST: slack notification dispatch failed', slackErr && slackErr.message);
+    }
+  }
+
   return sendJson(res, 201, { exception: data });
 }
 
@@ -477,7 +575,11 @@ async function handleRevoke(req, res, session) {
   // Race-safe: the WHERE clause requires revoked_at to still be null.
   const { data: updated, error: upErr } = await sb
     .from('exceptions')
-    .update({ revoked_at: new Date().toISOString() })
+    .update({ 
+      revoked_at: new Date().toISOString(),
+      revoked_by: session.login,
+      status: 'revoked'
+    })
     .eq('id', id)
     .is('revoked_at', null)
     .select('id')
