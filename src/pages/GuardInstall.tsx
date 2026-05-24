@@ -24,12 +24,32 @@ jobs:
         run: npx opensoyce scan --ci --report
 `;
 
-const POLICY_YAML = `policy:
+const POLICY_PRESETS = {
+  standard: `policy:
   block:
     - graveyard
     - risky
   warn:
     - watchlist
+  allow:
+    - use-ready
+    - stable
+    - forkable
+
+exceptions:
+  require_reason: true
+  expire_after_days: 90
+
+reports:
+  signed: true
+  sarif: true
+`,
+  soc2: `policy:
+  block:
+    - graveyard
+    - risky
+    - watchlist
+  warn:
     - stable
   allow:
     - use-ready
@@ -42,7 +62,27 @@ exceptions:
 reports:
   signed: true
   sarif: true
-`;
+`,
+  strict: `policy:
+  block:
+    - graveyard
+    - risky
+    - watchlist
+    - stable
+    - forkable
+  warn: []
+  allow:
+    - use-ready
+
+exceptions:
+  require_reason: true
+  expire_after_days: 14
+
+reports:
+  signed: true
+  sarif: true
+`
+};
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -114,6 +154,7 @@ function StepRow({ n, title, body }: { n: number; title: string; body: React.Rea
 
 export default function GuardInstall() {
   const [tab, setTab] = useState<TabKey>('app');
+  const [selectedPreset, setSelectedPreset] = useState<'standard' | 'soc2' | 'strict'>('standard');
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-20">
@@ -341,18 +382,40 @@ export default function GuardInstall() {
               Policy File
             </h2>
             <p className="text-sm font-bold uppercase tracking-widest opacity-60 mb-8">
-              Drop <code className="font-mono">.opensoyce.yml</code> at the repo root. Guard reads it on every scan.
+              Drop <code className="font-mono">.opensoyce.yml</code> at the repo root. Guard reads it on every PR check run.
             </p>
+
+            {/* Preset Selector */}
+            <div className="mb-6 bg-soy-label/20 p-4 border-2 border-soy-bottle shadow-[4px_4px_0px_#000] text-left">
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-60 block mb-3 font-mono">
+                Select Compliance Preset:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {(['standard', 'soc2', 'strict'] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => setSelectedPreset(preset)}
+                    className={`px-4 py-2 text-xs font-black uppercase border-2 border-black tracking-wider transition-all shadow-[2px_2px_0px_#000] cursor-pointer ${
+                      selectedPreset === preset
+                        ? 'bg-[#00D2FF] text-black -translate-y-0.5 shadow-[3px_3px_0px_#000]'
+                        : 'bg-white text-black hover:bg-soy-label'
+                    }`}
+                  >
+                    {preset === 'standard' ? 'Standard Guard' : preset === 'soc2' ? 'SOC 2 Compliance' : 'Strict Zero-Trust'}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
               <code className="text-xs font-mono font-bold uppercase tracking-widest opacity-70">
                 .opensoyce.yml
               </code>
-              <CopyButton text={POLICY_YAML} label="Copy Policy" />
+              <CopyButton text={POLICY_PRESETS[selectedPreset]} label="Copy Policy" />
             </div>
 
             <pre className="bg-black text-white border-4 border-black p-6 overflow-x-auto text-sm leading-relaxed shadow-[6px_6px_0px_#E63322]">
-              <code className="font-mono">{POLICY_YAML}</code>
+              <code className="font-mono">{POLICY_PRESETS[selectedPreset]}</code>
             </pre>
 
             <div className="mt-8 space-y-4">

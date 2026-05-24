@@ -456,6 +456,41 @@ export default function Dashboard() {
     }
   }, [selectedRepo, refreshExceptions]);
 
+  const exportToCSV = useCallback(() => {
+    if (exceptions.length === 0) return;
+    const headers = ['ID', 'Package Name', 'Ecosystem', 'Status', 'Granted By', 'Expires At', 'Reason', 'Revoked At'];
+    const rows = exceptions.map(row => [
+      row.id,
+      row.package_name,
+      row.ecosystem,
+      classifyStatus(row),
+      row.granted_by,
+      row.expires_at,
+      row.reason.replace(/"/g, '""'),
+      row.revoked_at || ''
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(r => r.map(val => `"${val}"`).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `opensoyce-compliance-log-${selectedRepo?.owner}-${selectedRepo?.repo}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [exceptions, selectedRepo]);
+
+  const exportToJSON = useCallback(() => {
+    if (exceptions.length === 0) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exceptions, null, 2));
+    const link = document.createElement("a");
+    link.setAttribute("href", dataStr);
+    link.setAttribute("download", `opensoyce-compliance-log-${selectedRepo?.owner}-${selectedRepo?.repo}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [exceptions, selectedRepo]);
+
   // --------------------------------------------------------- notifications
 
   // Fetch the per-repo Slack config. The API never returns the URL itself —
@@ -1017,15 +1052,50 @@ export default function Dashboard() {
 
             {/* List */}
             <section className="lg:col-span-3 bg-white border-4 border-soy-bottle p-6 shadow-[8px_8px_0px_#000]">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-black uppercase italic tracking-tighter">Active exceptions</h2>
-                <button
-                  type="button"
-                  onClick={() => selectedRepo && refreshExceptions(selectedRepo)}
-                  className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest hover:text-soy-red"
-                >
-                  <RefreshCw size={12} /> Refresh
-                </button>
+              {/* Compliance Banner */}
+              <div className="bg-emerald-50 border-4 border-emerald-600 p-4 mb-6 flex items-start gap-3 shadow-[4px_4px_0px_#10B981] text-left">
+                <span className="text-xl shrink-0">🛡️</span>
+                <div>
+                  <h4 className="font-black text-xs uppercase text-emerald-800 tracking-tight">
+                    SOC 2 / ISO 27001 AUDIT READY COMPLIANCE LOG
+                  </h4>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mt-1 leading-relaxed">
+                    All exception actions are logged immutably. Expirations and revocations are preserved to satisfy change control audit requirements.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 border-b-2 border-soy-bottle/20 pb-4">
+                <h2 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2">
+                  <Shield size={20} /> Active & Historical Exceptions
+                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  {exceptions.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={exportToCSV}
+                        className="bg-[#00D2FF] text-black border-2 border-black text-[9px] font-black uppercase tracking-widest px-3 py-1.5 shadow-[2px_2px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000] transition-all cursor-pointer font-mono"
+                      >
+                        Export CSV
+                      </button>
+                      <button
+                        type="button"
+                        onClick={exportToJSON}
+                        className="bg-soy-bottle text-soy-label border-2 border-black text-[9px] font-black uppercase tracking-widest px-3 py-1.5 shadow-[2px_2px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000] transition-all cursor-pointer font-mono"
+                      >
+                        Export JSON
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => selectedRepo && refreshExceptions(selectedRepo)}
+                    className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest hover:text-soy-red border-2 border-soy-bottle px-2.5 py-1"
+                  >
+                    <RefreshCw size={12} /> Refresh
+                  </button>
+                </div>
               </div>
               {listError && (
                 <div className="bg-soy-red text-white border-2 border-soy-bottle p-3 mb-4 text-[10px] font-black uppercase tracking-widest">
