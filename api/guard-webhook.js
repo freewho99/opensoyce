@@ -52,6 +52,7 @@ import { getSupabase } from './_supabase.js';
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
 import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
 import { runScan, mapWithConcurrency } from '../src/shared/runScan.js';
+import { resolvePolicy, extractPolicyMetadata, parseYamlPolicy } from '../src/shared/policyInheritance.js';
 
 // Vercel: 60s function timeout (matches github-webhook.js).
 export const maxDuration = 60;
@@ -592,10 +593,11 @@ function normalizeBucket(raw, bucketName) {
 }
 
 /**
- * Fetch .opensoyce.yml from the repo's default branch. Returns
- * `{ source: 'custom' | 'default', policy }`. Any failure mode (404, network,
- * non-200, YAML parse error, missing/malformed `policy` key) falls back to
- * the safe default — we never break the PR check on policy-fetch problems.
+ * Fetch .opensoyce.yml from the repo's default branch.
+ * Returns `{ raw, source: 'custom' | 'default', policy }` where `raw` is the
+ * decoded YAML text (needed for org/preset metadata extraction).
+ * Any failure mode falls back to the safe default — we never break the PR
+ * check on policy-fetch problems.
  */
 async function fetchPolicy(token, owner, repo) {
   let raw;
@@ -605,43 +607,29 @@ async function fetchPolicy(token, owner, repo) {
     // same PR they want to merge.
     const res = await githubFetch(token, `/repos/${owner}/${repo}/contents/.opensoyce.yml`);
     if (res.status === 404) {
-      return { source: 'default', policy: DEFAULT_POLICY };
+      return { raw: null, source: 'default', policy: DEFAULT_POLICY };
     }
     if (!res.ok) {
       const text = await res.text().catch(() => '(no body)');
       console.error('guard-webhook: fetchPolicy non-OK', res.status, text.slice(0, 200));
-      return { source: 'default', policy: DEFAULT_POLICY };
+      return { raw: null, source: 'default', policy: DEFAULT_POLICY };
     }
     const json = await res.json();
     if (!json || typeof json.content !== 'string') {
       console.error('guard-webhook: fetchPolicy missing content field');
-      return { source: 'default', policy: DEFAULT_POLICY };
+      return { raw: null, source: 'default', policy: DEFAULT_POLICY };
     }
     raw = Buffer.from(json.content, 'base64').toString('utf8');
   } catch (err) {
     console.error('guard-webhook: fetchPolicy threw', err?.message || err);
-    return { source: 'default', policy: DEFAULT_POLICY };
+    return { raw: null, source: 'default', policy: DEFAULT_POLICY };
   }
 
-  let parsed;
-  try {
-    parsed = yaml.load(raw);
-  } catch (err) {
-    console.error('guard-webhook: .opensoyce.yml YAML parse error', err?.message || err);
-    return { source: 'default', policy: DEFAULT_POLICY };
+  const policy = parseYamlPolicy(raw);
+  if (!policy) {
+    return { raw, source: 'default', policy: DEFAULT_POLICY };
   }
-
-  if (!parsed || typeof parsed !== 'object' || !parsed.policy || typeof parsed.policy !== 'object') {
-    // Missing or non-object `policy` key → fall back.
-    return { source: 'default', policy: DEFAULT_POLICY };
-  }
-
-  const policy = {
-    block: normalizeBucket(parsed.policy.block, 'block'),
-    warn: normalizeBucket(parsed.policy.warn, 'warn'),
-    allow: normalizeBucket(parsed.policy.allow, 'allow'),
-  };
-  return { source: 'custom', policy };
+  return { raw, source: 'custom', policy };
 }
 
 /**
@@ -1279,10 +1267,11 @@ function buildPrComment(headSha, perFile, agg, decision, policySource) {
   const exceptionSuffix = exceptionsApplied > 0
     ? ` — ${exceptionsApplied} active exception${exceptionsApplied === 1 ? '' : 's'}.`
     : '';
-  const policyBase = policySource === 'custom'
-    ? 'Policy: custom. v0.2'
-    : 'Policy: default warn-only. v0.2';
-  const policyFooter = `<sub>${policyBase}${exceptionSuffix}</sub>`;
+  // Phase 3: richer policy source labels (preset/org/repo/default).
+  const policyBase = policySource && policySource !== 'default'
+    ? `Policy: ${policySource}.`
+    : 'Policy: default warn-only.';
+  const policyFooter = `<sub>${policyBase} v0.2${exceptionSuffix}</sub>`;
   if (agg.totalChanged === 0) {
     return [
       GUARD_COMMENT_MARKER,
@@ -1512,10 +1501,20 @@ async function runPullRequestScan({ token, owner, repo, prNumber, headSha, exist
   const agg = aggregateScans(perFile);
   const allFailed = perFile.every((f) => !f.scan || !f.scan.ok);
 
-  // Fetch policy from default branch (NOT the PR head — a PR author can't
-  // weaken policy in the same PR they're trying to merge). Any failure mode
-  // falls back to safe warn-only defaults inside fetchPolicy().
-  const { source: policySource, policy } = await fetchPolicy(token, owner, repo);
+  // Phase 3: Full policy resolution pipeline (preset → org → repo merge).
+  // fetchPolicy gives us the raw YAML + local repo policy. We then extract
+  // org:/preset: metadata and run the security-conservative merge.
+  const { raw: rawYaml, policy: repoPolicy } = await fetchPolicy(token, owner, repo);
+  const { orgPolicyRepo, preset } = rawYaml
+    ? extractPolicyMetadata(rawYaml)
+    : { orgPolicyRepo: null, preset: null };
+  const boundGithubFetch = (path) => githubFetch(token, path);
+  const { policy, policySource } = await resolvePolicy({
+    githubFetch: boundGithubFetch,
+    orgPolicyRepo,
+    preset,
+    repoPolicy: repoPolicy && repoPolicy !== DEFAULT_POLICY ? repoPolicy : null,
+  });
 
   // Sprint+3: consult the exceptions table. Failure modes (Supabase down,
   // env unset, table not migrated, query error) all degrade to an empty

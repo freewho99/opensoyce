@@ -57,6 +57,25 @@ interface CrossEcosystemBridge {
   reason: string;
 }
 
+// Phase 3 — Blast Radius metadata attached to each inventory and scan row.
+// Computed from the lockfile's reverse-dependency graph. Informational only;
+// never affects Risk Profile, score, or verdict band.
+type BlastRadiusTier = 'critical' | 'high' | 'medium' | 'low';
+interface BlastRadius {
+  depth: number;                   // 1 = direct dep, 2+ = transitive
+  reverseDependencyCount: number;  // # of other packages in the tree that depend on this one
+  tier: BlastRadiusTier;           // derived tier label
+}
+
+// Phase 3 — Install-script capability profile attached to inventory and scan
+// rows for packages with hasInstallScript===true. Fetched from the npm
+// registry and analyzed statically (no code execution).
+type CapabilityRiskLevel = 'none' | 'low' | 'medium' | 'high';
+interface CapabilityProfile {
+  capabilities: string[];           // e.g. ['network-fetch', 'child-process']
+  riskLevel: CapabilityRiskLevel;   // derived risk label
+}
+
 type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown';
 // Resolver v1 only emits HIGH/MEDIUM/NONE; LOW stays in the type for
 // forward-compat with future inference logic in v2.1+.
@@ -147,6 +166,10 @@ interface Vulnerability {
   // inventory record. Posture recommendation only; does not affect scoring,
   // band, or Risk Profile.
   modelWeightLoader?: ModelWeightLoader | null;
+  // Phase 3 — blast radius metadata (from the lockfile dep graph).
+  blastRadius?: BlastRadius | null;
+  // Phase 3 — install-script static analysis result from the npm registry.
+  capabilityProfile?: CapabilityProfile | null;
 }
 
 // Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
@@ -179,6 +202,12 @@ interface InventoryPackage {
   // Model-weight loader posture v0 — set when the package name appears in
   // the curated MODEL_WEIGHT_LOADERS list AND the ecosystem matches.
   modelWeightLoader?: ModelWeightLoader | null;
+  // Phase 3 — blast radius metadata (reverse-dep count, depth, tier).
+  // Absent on older server responses; render defensively.
+  blastRadius?: BlastRadius | null;
+  // Phase 3 — install-script capability profile (fetched from npm registry).
+  // Absent when hasInstallScript is false or server is older.
+  capabilityProfile?: CapabilityProfile | null;
 }
 
 interface InventoryTotals {
@@ -216,6 +245,9 @@ interface InventoryTotals {
   // Model-weight loader posture v0 — count of packages with a non-null
   // modelWeightLoader entry. Absent on older server responses.
   modelWeightLoaderCount?: number;
+  // Phase 3 — blast radius summary counts.
+  blastRadiusCriticalCount?: number;
+  blastRadiusHighCount?: number;
 }
 
 interface Inventory {
@@ -261,6 +293,9 @@ interface SelectedHealthRow {
   modelWeightLoader?: ModelWeightLoader | null;
   // Fork-velocity-of-namesake v0 — copied from the analysis result.
   migration?: RepoMigration | null;
+  // Phase 3 — blast radius and capability profile.
+  blastRadius?: BlastRadius | null;
+  capabilityProfile?: CapabilityProfile | null;
 }
 
 interface SelectedHealth {
@@ -1176,7 +1211,8 @@ function SelectedHealthRowView({ row }: { row: SelectedHealthRow }) {
           </span>
         )}
         {/* Postinstall analysis v0 — same suppression rules as elsewhere. */}
-        <InstallScriptChip name={row.package} hasInstallScript={row.hasInstallScript} />
+        <InstallScriptChip name={row.package} hasInstallScript={row.hasInstallScript} capabilityProfile={row.capabilityProfile} />
+        <BlastRadiusChip blastRadius={row.blastRadius} />
         {/* Typo-squat homoglyph v0 — same suppression rules as elsewhere. */}
         <TypoSquatChip typoSquat={row.possibleTypoSquat} />
         {/* Dependency-confusion v0 — fires only for names in the user's
@@ -1266,15 +1302,65 @@ function severityRank(s: Severity): number {
 const INSTALL_SCRIPT_TOOLTIP =
   'This package runs install scripts on `npm install` — install scripts can execute arbitrary code. Verify the package is trustworthy.';
 
-function InstallScriptChip({ name, hasInstallScript }: { name: string; hasInstallScript: boolean | undefined }) {
+function InstallScriptChip({
+  name,
+  hasInstallScript,
+  capabilityProfile,
+}: {
+  name: string;
+  hasInstallScript: boolean | undefined;
+  capabilityProfile?: CapabilityProfile | null;
+}) {
   if (!hasInstallScript) return null;
   if (isTrustedInstallScript(name)) return null;
+
+  const riskColor = capabilityProfile
+    ? {
+        none: 'bg-emerald-500 text-black',
+        low: 'bg-emerald-500 text-black',
+        medium: 'bg-amber-400 text-black',
+        high: 'bg-red-500 text-white',
+      }[capabilityProfile.riskLevel]
+    : 'bg-amber-300 text-black';
+
+  const riskLabel = capabilityProfile
+    ? `⚠ INSTALL SCRIPT (${capabilityProfile.riskLevel.toUpperCase()})`
+    : '⚠ INSTALL SCRIPT';
+
+  const capsText = capabilityProfile?.capabilities.length
+    ? `\nCapabilities: ${capabilityProfile.capabilities.join(', ')}`
+    : '';
+
+  const tooltip = `${INSTALL_SCRIPT_TOOLTIP}${capsText}`;
+
   return (
     <span
-      title={INSTALL_SCRIPT_TOOLTIP}
-      className="px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black bg-amber-300 text-black"
+      title={tooltip}
+      className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 border-black ${riskColor}`}
     >
-      ⚠ INSTALL SCRIPT
+      {riskLabel}
+    </span>
+  );
+}
+
+function BlastRadiusChip({ blastRadius }: { blastRadius: BlastRadius | null | undefined }) {
+  if (!blastRadius) return null;
+
+  const tierColor = {
+    critical: 'bg-red-600 text-white border-black',
+    high: 'bg-red-400 text-black border-black',
+    medium: 'bg-amber-300 text-black border-black',
+    low: 'bg-soy-label/40 text-soy-bottle border-soy-bottle/40',
+  }[blastRadius.tier];
+
+  const tooltip = `Blast Radius Tier: ${blastRadius.tier.toUpperCase()}.\nDepth in graph: ${blastRadius.depth} (1=direct, 2+=transitive).\n${blastRadius.reverseDependencyCount} other package(s) in this scan depend on this package.`;
+
+  return (
+    <span
+      title={tooltip}
+      className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border-2 ${tierColor}`}
+    >
+      BLAST RADIUS: {blastRadius.tier.toUpperCase()} ({blastRadius.reverseDependencyCount})
     </span>
   );
 }
@@ -1443,7 +1529,8 @@ function InventoryRow({ pkg, vulnInfo, expanded, onToggle }: InventoryRowProps) 
         )}
         {/* Postinstall analysis v0 — informational only; suppressed for
             curated trusted packages (TypeScript, esbuild, sharp, etc.). */}
-        <InstallScriptChip name={pkg.name} hasInstallScript={pkg.hasInstallScript} />
+        <InstallScriptChip name={pkg.name} hasInstallScript={pkg.hasInstallScript} capabilityProfile={pkg.capabilityProfile} />
+        <BlastRadiusChip blastRadius={pkg.blastRadius} />
         {/* Typo-squat homoglyph v0 — informational only; never affects
             score or band. Suppressed for the legitimate-install self-match
             inside detectTypoSquat() so this only fires on attacks. */}
@@ -1538,7 +1625,7 @@ function VulnRow({ v }: { v: Vulnerability }) {
       {/* CVE / GHSA IDs + postinstall chip. The chip lives next to the IDs
           so the "vulnerable AND runs install scripts" combo is unmistakable.
           Suppressed for curated trusted packages (TypeScript, sharp, …). */}
-      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat || v.dependencyConfusion || v.crossEcosystemBridge || v.modelWeightLoader) && (
+      {(v.ids?.length > 0 || (v.hasInstallScript && !isTrustedInstallScript(v.package)) || v.possibleTypoSquat || v.dependencyConfusion || v.crossEcosystemBridge || v.modelWeightLoader || v.blastRadius) && (
         <div className="flex flex-wrap gap-1.5 mb-3 items-center">
           {(v.ids || []).map((id) => (
             <span
@@ -1548,7 +1635,8 @@ function VulnRow({ v }: { v: Vulnerability }) {
               {id}
             </span>
           ))}
-          <InstallScriptChip name={v.package} hasInstallScript={v.hasInstallScript} />
+          <InstallScriptChip name={v.package} hasInstallScript={v.hasInstallScript} capabilityProfile={v.capabilityProfile} />
+          <BlastRadiusChip blastRadius={v.blastRadius} />
           {/* Typo-squat homoglyph v0 — the "vulnerable AND homoglyph"
               combo is the most-dangerous case, so the chip lives next to
               the IDs alongside the install-script chip. */}

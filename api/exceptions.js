@@ -38,6 +38,8 @@ import crypto from 'node:crypto';
 import { isValidGithubName } from '../src/shared/validateRepo.js';
 import { generateAppJwt, getInstallationToken, githubFetch } from './_guard-app.js';
 import { getSupabase } from './_supabase.js';
+import { signReport } from '../src/shared/reportSigning.js';
+import { resolvePolicy, extractPolicyMetadata, parseYamlPolicy, DEFAULT_POLICY } from '../src/shared/policyInheritance.js';
 
 // ---------------------------------------------------------------------------
 // Constants + validation
@@ -607,6 +609,145 @@ function setSessionCookie(res, token, maxAgeSec) {
 
 function clearSessionCookie(res) {
   res.setHeader('Set-Cookie', `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+}
+
+async function handleComplianceReport(req, res, session) {
+  const q = getQuery(req);
+  const owner = typeof q.owner === 'string' ? q.owner.trim() : '';
+  const repo = typeof q.repo === 'string' ? q.repo.trim() : '';
+  if (!owner || !isValidGithubName(owner)) return err(res, 400, 'BAD_REQUEST', 'owner is missing or invalid');
+  if (!repo || !isValidGithubName(repo)) return err(res, 400, 'BAD_REQUEST', 'repo is missing or invalid');
+
+  const perm = await getRepoPermissionForUser(owner, repo, session.login);
+  if (perm === 'none') {
+    return err(res, 404, 'NOT_FOUND', 'Guard is not installed on this repo, or you have no access');
+  }
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions compliance-report: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const { data: exceptions, error } = await sb
+    .from('exceptions')
+    .select('id, owner, repo, package_name, ecosystem, reason, expires_at, granted_by, created_at, revoked_at, status, revoked_by')
+    .eq('owner', owner)
+    .eq('repo', repo)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('exceptions compliance-report: supabase query failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+
+  const list = exceptions || [];
+
+  let resolvedPolicy = DEFAULT_POLICY;
+  let policySource = 'default';
+  let orgPolicyRepo = null;
+  let preset = null;
+  let rawYaml = null;
+
+  try {
+    const installationId = await findInstallationIdForRepo(owner, repo);
+    if (installationId) {
+      const tokenResp = await getInstallationToken(installationId);
+      const token = tokenResp && tokenResp.token;
+      if (token) {
+        try {
+          const policyRes = await githubFetch(token, `/repos/${owner}/${repo}/contents/.opensoyce.yml`);
+          if (policyRes.ok) {
+            const json = await policyRes.json();
+            if (json && typeof json.content === 'string') {
+              rawYaml = Buffer.from(json.content, 'base64').toString('utf8');
+            }
+          }
+        } catch (e) {
+          console.warn('exceptions compliance-report: fetch repo policy failed', e.message);
+        }
+
+        const repoPolicyObj = rawYaml ? parseYamlPolicy(rawYaml) : null;
+        const meta = rawYaml ? extractPolicyMetadata(rawYaml) : { orgPolicyRepo: null, preset: null };
+        orgPolicyRepo = meta.orgPolicyRepo;
+        preset = meta.preset;
+
+        const resolved = await resolvePolicy({
+          githubFetch: (p) => githubFetch(token, p),
+          orgPolicyRepo,
+          preset,
+          repoPolicy: repoPolicyObj,
+        });
+        resolvedPolicy = resolved.policy;
+        policySource = resolved.policySource;
+      }
+    }
+  } catch (e) {
+    console.warn('exceptions compliance-report: policy resolution threw error', e.message);
+  }
+
+  const now = Date.now();
+  let active = 0;
+  let expired = 0;
+  let revoked = 0;
+  let pending = 0;
+
+  for (const row of list) {
+    if (row.status === 'pending') {
+      pending++;
+    } else if (row.status === 'revoked' || row.revoked_at) {
+      revoked++;
+    } else {
+      const expiresMs = Date.parse(row.expires_at);
+      if (Number.isFinite(expiresMs) && expiresMs <= now) {
+        expired++;
+      } else {
+        active++;
+      }
+    }
+  }
+
+  const report = {
+    reportType: 'SOC2_COMPLIANCE_AUDIT',
+    owner,
+    repo,
+    generatedAt: new Date().toISOString(),
+    generatedBy: session.login,
+    summary: {
+      total: list.length,
+      active,
+      expired,
+      revoked,
+      pending,
+    },
+    policy: {
+      source: policySource,
+      preset,
+      orgPolicyRepo,
+      resolved: resolvedPolicy,
+    },
+    exceptions: list,
+  };
+
+  const signingKey = process.env.OPENSOYCE_SIGNING_PRIVATE_KEY;
+  if (signingKey && signingKey.trim()) {
+    try {
+      const signed = signReport(report, {
+        privateKeyPem: signingKey,
+        publicKeyPem: process.env.OPENSOYCE_SIGNING_PUBLIC_KEY,
+        location: 'top-level',
+      });
+      return sendJson(res, 200, signed);
+    } catch (e) {
+      console.error('exceptions compliance-report: signing failed', e.message);
+      res.setHeader('X-OpenSoyce-Signing-Error', String(e.message || e).slice(0, 200));
+      return sendJson(res, 200, report);
+    }
+  }
+
+  return sendJson(res, 200, report);
 }
 
 async function handleWhoami(req, res, session) {
@@ -1392,6 +1533,7 @@ export default async function handler(req, res) {
     const session = verifyDashboardSession(req);
     if (!session) return err(res, 401, 'AUTH_REQUIRED', 'a valid dashboard session is required');
 
+    if (method === 'GET' && action === 'compliance-report') return await handleComplianceReport(req, res, session);
     if (method === 'GET' && action === 'whoami') return await handleWhoami(req, res, session);
     if (method === 'GET' && action === 'my-repos') return await handleMyRepos(req, res, session);
     if (method === 'GET' && action === 'watchlist-list') return await handleWatchlistList(req, res, session);

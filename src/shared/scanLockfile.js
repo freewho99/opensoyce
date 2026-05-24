@@ -1598,3 +1598,209 @@ function buildYarnV1Inventory(text, opts = {}) {
   inv.totals.modelWeightLoaderCount = modelWeightLoaderCount;
   return inv;
 }
+
+// ---------------------------------------------------------------------------
+// Blast Radius Engine (Phase 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Blast radius tier thresholds.
+ *
+ *   critical — direct dep (depth=1) with ≥10 reverse-dependents
+ *   high     — depth ≤2 with ≥5 reverse-dependents
+ *   medium   — any transitive dep with ≥2 reverse-dependents
+ *   low      — everything else
+ */
+const BLAST_RADIUS_TIERS = Object.freeze({
+  critical: { maxDepth: 1, minReverseDeps: 10 },
+  high: { maxDepth: 2, minReverseDeps: 5 },
+  medium: { maxDepth: Infinity, minReverseDeps: 2 },
+  low: { maxDepth: Infinity, minReverseDeps: 0 },
+});
+
+/**
+ * @param {number} depth
+ * @param {number} reverseDependencyCount
+ * @returns {'critical' | 'high' | 'medium' | 'low'}
+ */
+function blastRadiusTier(depth, reverseDependencyCount) {
+  if (depth <= 1 && reverseDependencyCount >= 10) return 'critical';
+  if (depth <= 2 && reverseDependencyCount >= 5) return 'high';
+  if (reverseDependencyCount >= 2) return 'medium';
+  return 'low';
+}
+
+/**
+ * Build a reverse-dependency map from a parsed npm v2/v3 lockfile.
+ * Returns a Map<packageName, Set<dependentPackageName>>.
+ *
+ * npm v2/v3 stores the dep graph in `packages[node_modules/<name>].dependencies`
+ * (a semver range map of the package's own dependencies). We invert this
+ * to get reverse-dependency counts.
+ *
+ * @param {object} obj  Parsed package-lock.json object.
+ * @returns {Map<string, Set<string>>}
+ */
+function buildReverseDependencyIndex(obj) {
+  const reverseMap = /** @type {Map<string, Set<string>>} */ (new Map());
+
+  const packages = obj && typeof obj === 'object' ? (obj.packages || {}) : {};
+
+  for (const [key, meta] of Object.entries(packages)) {
+    if (key === '' || !meta || typeof meta !== 'object') continue;
+    if (meta.link === true) continue;
+
+    const owner = key.includes('node_modules/')
+      ? key.replace(/^.*node_modules\//, '')
+      : null;
+    if (!owner) continue;
+
+    // meta.dependencies: { "<depName>": "<semver-range>" }
+    const deps = meta.dependencies || {};
+    for (const depName of Object.keys(deps)) {
+      if (!depName) continue;
+      if (!reverseMap.has(depName)) reverseMap.set(depName, new Set());
+      reverseMap.get(depName).add(owner);
+    }
+
+    // meta.requires (npm v1 compat section sometimes present in v2): same shape.
+    const requires = meta.requires || {};
+    for (const depName of Object.keys(requires)) {
+      if (!depName) continue;
+      if (!reverseMap.has(depName)) reverseMap.set(depName, new Set());
+      reverseMap.get(depName).add(owner);
+    }
+  }
+
+  return reverseMap;
+}
+
+/**
+ * Build a reverse-dependency map from a pnpm lockfile YAML text.
+ *
+ * pnpm-lock.yaml `importers` section lists direct deps; `packages` section
+ * lists resolutions with `dependencies` sub-maps. We invert the `packages`
+ * dependency map for reverse-dep counting.
+ *
+ * @param {string} lockfileText
+ * @returns {Map<string, Set<string>>}
+ */
+function buildPnpmReverseDependencyIndex(lockfileText) {
+  const reverseMap = /** @type {Map<string, Set<string>>} */ (new Map());
+  // Regex-based extraction to avoid importing a full YAML parser here.
+  // Pattern: look for "  /pkgName@version:\n    dependencies:\n      depName: version"
+  const pkgBlockRe = /^  ([^:\s][^:\n]+):\s*\n((?:  {4}[^\n]*\n?)*)/gm;
+  const depLineRe = /^    dependencies:\s*\n((?:      [^\n]+\n?)*)/m;
+  const depEntryRe = /^      ([^:]+):/gm;
+
+  let pkgMatch;
+  while ((pkgMatch = pkgBlockRe.exec(lockfileText)) !== null) {
+    const owner = pkgMatch[1].split('@')[0].replace(/^\//, '').trim();
+    const block = pkgMatch[2];
+    const depSection = depLineRe.exec(block);
+    if (!depSection) continue;
+    let depMatch;
+    while ((depMatch = depEntryRe.exec(depSection[1])) !== null) {
+      const depName = depMatch[1].trim();
+      if (!depName) continue;
+      if (!reverseMap.has(depName)) reverseMap.set(depName, new Set());
+      reverseMap.get(depName).add(owner);
+    }
+  }
+  return reverseMap;
+}
+
+/**
+ * Attach blast radius metadata to each package row in an inventory.
+ *
+ * This is a pure, additive, failure-isolated function. If the lockfile text
+ * is unavailable or unparseable, every package gets `blastRadius: null`
+ * (the UI shows nothing, which is the correct degraded behavior).
+ *
+ * The blast radius is computed from:
+ *   - `reverseDependencyCount` — how many OTHER packages in the tree depend on
+ *     this package (higher = more blast radius).
+ *   - `depth` — minimum dependency depth from a direct project dep (1 = direct).
+ *   - `tier` — derived tier label used by the UI chip.
+ *
+ * @param {{
+ *   packages: Array<{ name: string, direct: boolean, blastRadius?: any }>,
+ *   format: string,
+ * }} inventory  The result of buildInventory()
+ * @param {string} lockfileText  The raw lockfile text (for graph extraction)
+ * @returns {{
+ *   packages: Array<{ name: string, direct: boolean, blastRadius: {
+ *     depth: number,
+ *     reverseDependencyCount: number,
+ *     tier: 'critical' | 'high' | 'medium' | 'low',
+ *   } | null }>,
+ *   format: string,
+ *   ecosystem: string,
+ *   totals: any,
+ * }}
+ */
+export function attachBlastRadius(inventory, lockfileText) {
+  if (!inventory || !Array.isArray(inventory.packages)) return inventory;
+  if (typeof lockfileText !== 'string') {
+    return {
+      ...inventory,
+      packages: inventory.packages.map((p) => ({ ...p, blastRadius: null })),
+    };
+  }
+
+  let reverseMap = /** @type {Map<string, Set<string>>} */ (new Map());
+
+  try {
+    const fmt = inventory.format;
+    if (fmt === 'npm-v2' || fmt === 'npm-v3') {
+      let obj;
+      try { obj = JSON.parse(lockfileText); } catch { /* fall through */ }
+      if (obj) reverseMap = buildReverseDependencyIndex(obj);
+    } else if (fmt === 'pnpm-lock') {
+      reverseMap = buildPnpmReverseDependencyIndex(lockfileText);
+    }
+    // yarn-v1 and Python lockfiles: blast radius left as null (format doesn't
+    // expose a granular dep-graph in a parseable way without a full resolver).
+  } catch {
+    // Any failure → all packages get blastRadius: null.
+    return {
+      ...inventory,
+      packages: inventory.packages.map((p) => ({ ...p, blastRadius: null })),
+    };
+  }
+
+  const packages = inventory.packages.map((p) => {
+    const reverseDeps = reverseMap.get(p.name);
+    const reverseDependencyCount = reverseDeps ? reverseDeps.size : 0;
+    // depth: 1 if direct, 2+ if transitive. For now we set transitive to 2
+    // (a conservative estimate — actual depth requires full BFS which is
+    // expensive for large trees; depth matters mainly for the critical tier
+    // which requires depth=1, i.e., direct deps only).
+    const depth = p.direct ? 1 : 2;
+    const tier = blastRadiusTier(depth, reverseDependencyCount);
+    return {
+      ...p,
+      blastRadius: { depth, reverseDependencyCount, tier },
+    };
+  });
+
+  // Attach summary counts to totals.
+  const criticalCount = packages.filter((p) => p.blastRadius && p.blastRadius.tier === 'critical').length;
+  const highCount = packages.filter((p) => p.blastRadius && p.blastRadius.tier === 'high').length;
+
+  return {
+    ...inventory,
+    packages,
+    totals: {
+      ...inventory.totals,
+      blastRadiusCriticalCount: criticalCount,
+      blastRadiusHighCount: highCount,
+    },
+  };
+}
+
+export const __blastRadiusInternal = {
+  blastRadiusTier,
+  buildReverseDependencyIndex,
+  BLAST_RADIUS_TIERS,
+};

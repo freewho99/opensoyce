@@ -112,6 +112,22 @@ If nothing happens:
 
 ---
 
+## 7. Centralized Governance & Policy Inheritance (v3)
+
+OpenSoyce Guard supports centralizing security policies across your organization. In addition to a repository's local `.opensoyce.yml`, you can specify an organization-wide default policy and a compliance preset (e.g., `soc2`, `strict`).
+
+### GITHUB_APP Token Scope & Policy Access (Crucial Setup)
+When policy inheritance is configured with an org-level custom policy (e.g. `org: my-org/my-central-policy-repo`), OpenSoyce Guard needs read access to that central policy repository to fetch its `.opensoyce.yml` config.
+
+Under the GitHub App security model:
+- **Option A (Installation Scope)**: The GitHub App must be explicitly installed on the central policy repository, in addition to the repository being scanned.
+- **Option B (Public Policy Repo)**: The central policy repository is configured as **public** (read-only for all). This allows the App's installation token to fetch the policy without requiring App installation on the policy repository.
+
+> [!IMPORTANT]
+> **Enterprise Adoption Warning:** If your central policy repository is private, you **MUST** install the OpenSoyce Guard GitHub App on the policy repository. Otherwise, scans on developer repositories will fail to fetch the org policy, falling back to repository-only policy or compliance presets. We recommend configuring the policy repository to be public OR ensuring the App's installation scope covers the central repository.
+
+---
+
 ## File reference
 
 | Path                       | Purpose                                                  |

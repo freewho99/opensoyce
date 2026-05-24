@@ -40,10 +40,13 @@ import {
   detectLockfileFormat,
   ecosystemForFormat,
   buildInventory,
+  attachBlastRadius,
 } from './scanLockfile.js';
 import { selectHealthCandidates } from './selectHealthCandidates.js';
 import { verdictFor } from './verdict.js';
 import { checkPublicRegistry as defaultCheckPublicRegistry } from './checkPublicRegistry.js';
+import { batchFetchCapabilityProfiles } from './installScriptAnalyzer.js';
+import { checkThreats as defaultCheckThreats } from './threatDb.js';
 
 // Severity tiering for response sort. Lower index = higher severity.
 // Duplicated only as a tiny lookup constant (intentional — it's 6 tokens,
@@ -321,6 +324,7 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     // injection seam for tests; default falls through to the shared module.
     privateList,
     checkPublicRegistry,
+    checkThreats,
   } = deps;
   const depConfusionCheck = typeof checkPublicRegistry === 'function'
     ? checkPublicRegistry
@@ -366,6 +370,37 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     vulnerabilities = [];
   }
 
+  // Phase 4: Zero-day threat feed check (Supabase)
+  const threatCheck = typeof checkThreats === 'function'
+    ? checkThreats
+    : defaultCheckThreats;
+
+  try {
+    const threatMap = await threatCheck(parsed.all, ecosystem);
+    if (threatMap && threatMap.size > 0) {
+      for (const p of parsed.all) {
+        const key = `${p.name}@${p.version}`;
+        const threat = threatMap.get(key);
+        if (threat && (threat.verdict === 'blocked' || threat.verdict === 'flagged')) {
+          vulnerabilities.push({
+            package: p.name,
+            version: p.version,
+            severity: 'critical',
+            ids: ['SOYCE-ZERO-DAY'],
+            summary: `Zero-day threat flagged by OpenSoyce Sandbox: [${threat.threat_type.toUpperCase()}] ${threat.evidence.reason || 'Suspicious activity detected.'}`,
+            fixedIn: null,
+            resolvedRepo: null,
+            confidence: 'NONE',
+            source: null,
+            verified: 'unverified'
+          });
+        }
+      }
+    }
+  } catch {
+    // Degrade gracefully
+  }
+
   // Identity resolver: failure-isolated per-batch.
   try {
     vulnerabilities = await attachIdentitiesToVulnerabilities(vulnerabilities || [], resolveIdentity, ecosystem);
@@ -393,7 +428,15 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
   let inventory = null;
   let inventoryError = null;
   try {
-    inventory = buildInventory(lockfileText, { privateList: privateList || null });
+    const rawInventory = buildInventory(lockfileText, { privateList: privateList || null });
+    // Phase 3: attach blast radius metadata (depth + reverse-dep count + tier).
+    // Failure-isolated: attachBlastRadius returns the original inventory with
+    // blastRadius: null on all rows if the lockfile graph can't be parsed.
+    try {
+      inventory = attachBlastRadius(rawInventory, lockfileText);
+    } catch {
+      inventory = rawInventory;
+    }
   } catch {
     inventory = null;
     inventoryError = 'INVENTORY_FAILED';
@@ -444,6 +487,27 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     }
   }
 
+  // Phase 3: install-script capability profiling (batch fetch from npm registry).
+  // Only runs for packages with hasInstallScript: true in npm ecosystem.
+  // Failure-isolated: on any error, capabilityProfile stays null on all rows.
+  let capabilityProfileIndex = new Map(); // keyed by "name@version"
+  if (inventory && Array.isArray(inventory.packages) && ecosystem === 'npm') {
+    try {
+      const installScriptPkgs = inventory.packages
+        .filter((p) => p && p.hasInstallScript === true && p.name && p.versions && p.versions.length > 0)
+        .map((p) => ({ name: p.name, version: p.versions[0] }));
+      if (installScriptPkgs.length > 0) {
+        const fetchFn = typeof deps.fetchImpl === 'function' ? deps.fetchImpl : undefined;
+        capabilityProfileIndex = await batchFetchCapabilityProfiles(
+          installScriptPkgs,
+          { fetchImpl: fetchFn, concurrency: 3 },
+        );
+      }
+    } catch {
+      capabilityProfileIndex = new Map();
+    }
+  }
+
   // Postinstall analysis v0 — informational `hasInstallScript` flag flows
   // from the inventory through to each vuln row so the UI can render the
   // INSTALL SCRIPT chip without re-parsing the lockfile. Lookup by package
@@ -467,6 +531,9 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     // above. Inventory is the source of truth; vuln rows look up by name so
     // the UI never has to re-walk the lockfile.
     const modelWeightLoaderIndex = new Map();
+    // Phase 3 — blast radius and capability profile index maps.
+    const blastRadiusIndex = new Map();
+    const capProfileIndex = new Map();
     for (const p of inventory.packages) {
       if (p && p.name) {
         installScriptIndex.set(p.name, p.hasInstallScript === true);
@@ -474,6 +541,11 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
         depConfusionIndex.set(p.name, p.dependencyConfusion || null);
         crossEcosystemBridgeIndex.set(p.name, p.crossEcosystemBridge || null);
         modelWeightLoaderIndex.set(p.name, p.modelWeightLoader || null);
+        blastRadiusIndex.set(p.name, p.blastRadius || null);
+        // Capability profile is indexed by "name@version"; pick first version.
+        const ver = p.versions && p.versions.length > 0 ? p.versions[0] : '';
+        const cpKey = `${p.name}@${ver}`;
+        capProfileIndex.set(p.name, capabilityProfileIndex.get(cpKey) || null);
       }
     }
     vulnerabilities = vulnerabilities.map(v => ({
@@ -483,6 +555,8 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
       dependencyConfusion: depConfusionIndex.get(v.package) || null,
       crossEcosystemBridge: crossEcosystemBridgeIndex.get(v.package) || null,
       modelWeightLoader: modelWeightLoaderIndex.get(v.package) || null,
+      blastRadius: blastRadiusIndex.get(v.package) || null,
+      capabilityProfile: capProfileIndex.get(v.package) || null,
     }));
   }
 
@@ -517,6 +591,8 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     const depConfusionIndex = new Map();
     const crossEcosystemBridgeIndex = new Map();
     const modelWeightLoaderIndex = new Map();
+    const blastRadiusIndex = new Map();
+    const capProfileIndex = new Map();
     for (const p of inventory.packages) {
       if (p && p.name) {
         installScriptIndex.set(p.name, p.hasInstallScript === true);
@@ -524,6 +600,9 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
         depConfusionIndex.set(p.name, p.dependencyConfusion || null);
         crossEcosystemBridgeIndex.set(p.name, p.crossEcosystemBridge || null);
         modelWeightLoaderIndex.set(p.name, p.modelWeightLoader || null);
+        blastRadiusIndex.set(p.name, p.blastRadius || null);
+        const ver = p.versions && p.versions.length > 0 ? p.versions[0] : '';
+        capProfileIndex.set(p.name, capabilityProfileIndex.get(`${p.name}@${ver}`) || null);
       }
     }
     selectedHealth = {
@@ -535,6 +614,8 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
         dependencyConfusion: depConfusionIndex.get(r.package) || null,
         crossEcosystemBridge: crossEcosystemBridgeIndex.get(r.package) || null,
         modelWeightLoader: modelWeightLoaderIndex.get(r.package) || null,
+        blastRadius: blastRadiusIndex.get(r.package) || null,
+        capabilityProfile: capProfileIndex.get(r.package) || null,
       })),
     };
   }

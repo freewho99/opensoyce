@@ -71,8 +71,15 @@ const TEAM_FEATURES = [
   'Slack alerts',
 ];
 
+function classifyCompStatus(row: any): 'active' | 'expired' | 'revoked' {
+  if (row.revoked_at) return 'revoked';
+  const expiresMs = Date.parse(row.expires_at);
+  if (Number.isFinite(expiresMs) && expiresMs <= Date.now()) return 'expired';
+  return 'active';
+}
+
 export default function Guard() {
-  const [activeTab, setActiveTab] = useState<'sandbox' | 'app'>(() => {
+  const [activeTab, setActiveTab] = useState<'sandbox' | 'app' | 'compliance'>(() => {
     const saved = localStorage.getItem('soyce_guarded_repos');
     if (saved && JSON.parse(saved).length > 0) {
       return 'sandbox';
@@ -94,6 +101,16 @@ export default function Guard() {
   });
 
   const [toast, setToast] = useState<{message: string, show: boolean}>({message: '', show: false});
+
+  // Compliance tab state
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
+  const [sessionUser, setSessionUser] = useState<string | null>(null);
+  const [complianceRepos, setComplianceRepos] = useState<Array<{ owner: string; repo: string }>>([]);
+  const [selectedCompRepo, setSelectedCompRepo] = useState<{ owner: string; repo: string } | null>(null);
+  const [compReport, setCompReport] = useState<any>(null);
+  const [compLoading, setCompLoading] = useState(false);
+  const [compError, setCompError] = useState<string | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   const showToast = (message: string) => {
     setToast({ message, show: true });
@@ -209,6 +226,93 @@ export default function Guard() {
     }
   };
 
+  // Compliance tab: Auth check & repo list loading
+  useEffect(() => {
+    if (activeTab !== 'compliance') return;
+
+    let cancelled = false;
+    const checkAuth = async () => {
+      try {
+        setAuthStatus('checking');
+        const resp = await fetch('/api/exceptions?action=whoami');
+        if (resp.ok) {
+          const body = await resp.json();
+          if (cancelled) return;
+          setSessionUser(body.login || null);
+          setAuthStatus('authenticated');
+
+          const reposResp = await fetch('/api/exceptions?action=my-repos');
+          if (reposResp.ok) {
+            const reposBody = await reposResp.json();
+            if (!cancelled) {
+              setComplianceRepos(reposBody.repos || []);
+              if (reposBody.repos && reposBody.repos.length > 0) {
+                setSelectedCompRepo(reposBody.repos[0]);
+              }
+            }
+          }
+        } else {
+          if (!cancelled) setAuthStatus('unauthenticated');
+        }
+      } catch (err) {
+        if (!cancelled) setAuthStatus('unauthenticated');
+      }
+    };
+    checkAuth();
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
+  // Compliance tab: Fetch report data
+  useEffect(() => {
+    if (activeTab !== 'compliance' || !selectedCompRepo) return;
+
+    let cancelled = false;
+    const fetchReport = async () => {
+      try {
+        setCompLoading(true);
+        setCompError(null);
+        const url = `/api/exceptions?action=compliance-report&owner=${encodeURIComponent(selectedCompRepo.owner)}&repo=${encodeURIComponent(selectedCompRepo.repo)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => null);
+          throw new Error((body && body.message) || `Failed to fetch compliance report (${resp.status})`);
+        }
+        const body = await resp.json();
+        if (!cancelled) {
+          setCompReport(body);
+        }
+      } catch (err: any) {
+        if (!cancelled) setCompError(err.message || 'Error loading report');
+      } finally {
+        if (!cancelled) setCompLoading(false);
+      }
+    };
+    fetchReport();
+    return () => { cancelled = true; };
+  }, [activeTab, selectedCompRepo]);
+
+  const handleDownloadReport = async () => {
+    if (!selectedCompRepo) return;
+    try {
+      setDownloadingReport(true);
+      const url = `/api/exceptions?action=compliance-report&owner=${encodeURIComponent(selectedCompRepo.owner)}&repo=${encodeURIComponent(selectedCompRepo.repo)}`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Download failed');
+      const blob = await resp.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `opensoyce-soc2-compliance-${selectedCompRepo.owner}-${selectedCompRepo.repo}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('SOC 2 Compliance Report downloaded!');
+    } catch (err) {
+      showToast('Failed to download compliance report');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-12 relative">
       <AnimatePresence>
@@ -238,7 +342,7 @@ export default function Guard() {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex bg-soy-label border-4 border-soy-bottle p-1 font-black uppercase italic tracking-wider text-xs">
+        <div className="flex flex-wrap bg-soy-label border-4 border-soy-bottle p-1 font-black uppercase italic tracking-wider text-xs gap-1">
           <button
             onClick={() => setActiveTab('sandbox')}
             className={`px-4 py-2 transition-all ${
@@ -248,6 +352,16 @@ export default function Guard() {
             }`}
           >
             🛡️ Sandbox Guard
+          </button>
+          <button
+            onClick={() => setActiveTab('compliance')}
+            className={`px-4 py-2 transition-all ${
+              activeTab === 'compliance'
+                ? 'bg-soy-red text-white shadow-[2px_2px_0px_#000]'
+                : 'text-soy-bottle hover:text-soy-red'
+            }`}
+          >
+            🛡️ SOC 2 Compliance
           </button>
           <button
             onClick={() => setActiveTab('app')}
@@ -262,7 +376,7 @@ export default function Guard() {
         </div>
       </div>
 
-      {activeTab === 'sandbox' ? (
+      {activeTab === 'sandbox' && (
         <div className="space-y-12">
           {/* SANDBOX GUARD VIEW */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
@@ -398,7 +512,251 @@ export default function Guard() {
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'compliance' && (
+        <div className="space-y-8 font-mono">
+          {authStatus === 'checking' && (
+            <div className="flex flex-col items-center justify-center p-12 bg-white border-4 border-soy-bottle shadow-[6px_6px_0px_#000]">
+              <Loader2 className="animate-spin text-soy-red mb-4" size={32} />
+              <p className="text-xs font-black uppercase tracking-widest opacity-60">Verifying your dashboard session...</p>
+            </div>
+          )}
+
+          {authStatus === 'unauthenticated' && (
+            <div className="flex flex-col items-center justify-center p-12 bg-white border-4 border-soy-bottle shadow-[6px_6px_0px_#000] text-center">
+              <Lock className="text-soy-red mb-4" size={48} />
+              <h3 className="text-2xl font-black uppercase italic tracking-tight mb-2">SOC 2 Compliance Log Access Gated</h3>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-60 max-w-md mb-6 leading-relaxed">
+                Authentication is required to retrieve compliance audit trails and cryptographically signed reports. Please sign in to the dashboard first.
+              </p>
+              <Link to="/dashboard" className="bg-soy-bottle text-white py-3 px-8 text-sm font-black uppercase tracking-widest hover:bg-soy-red transition-all border-4 border-black shadow-[4px_4px_0px_#000]">
+                Go to Dashboard to Sign In
+              </Link>
+            </div>
+          )}
+
+          {authStatus === 'authenticated' && complianceRepos.length === 0 && (
+            <div className="flex flex-col items-center justify-center p-12 bg-white border-4 border-soy-bottle shadow-[6px_6px_0px_#000] text-center">
+              <ShieldAlert className="text-soy-red mb-4" size={48} />
+              <h3 className="text-2xl font-black uppercase italic tracking-tight mb-2">No Eligible Repositories Found</h3>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-60 max-w-md leading-relaxed">
+                OpenSoyce Guard must be installed on at least one GitHub repository where you have write or admin permissions to view compliance reports.
+              </p>
+            </div>
+          )}
+
+          {authStatus === 'authenticated' && complianceRepos.length > 0 && (
+            <div className="space-y-8">
+              {/* Selector */}
+              <div className="bg-white border-4 border-soy-bottle p-6 shadow-[6px_6px_0px_#000] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="text-soy-red" size={28} />
+                  <div>
+                    <h3 className="text-lg font-black uppercase italic">Compliance Audit Trail</h3>
+                    <p className="text-[10px] opacity-60 font-bold uppercase tracking-wider">Select repository to view SOC 2 change control logs</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <select
+                    value={selectedCompRepo ? `${selectedCompRepo.owner}/${selectedCompRepo.repo}` : ''}
+                    onChange={(e) => {
+                      const parts = e.target.value.split('/');
+                      setSelectedCompRepo({ owner: parts[0], repo: parts[1] });
+                    }}
+                    className="bg-soy-label border-4 border-soy-bottle px-4 py-2 font-mono text-xs font-black uppercase tracking-widest outline-none focus:bg-white"
+                  >
+                    {complianceRepos.map((r: any) => (
+                      <option key={`${r.owner}/${r.repo}`} value={`${r.owner}/${r.repo}`}>
+                        {r.owner}/{r.repo}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {compLoading && !compReport ? (
+                <div className="flex justify-center p-12 bg-white border-4 border-soy-bottle shadow-[6px_6px_0px_#000]">
+                  <Loader2 className="animate-spin text-soy-red" size={32} />
+                </div>
+              ) : compError ? (
+                <div className="p-6 bg-soy-red/10 border-4 border-soy-red text-soy-red font-bold flex items-center gap-3 shadow-[6px_6px_0px_#000]">
+                  <AlertCircle size={24} />
+                  <div>
+                    <h4 className="font-black uppercase tracking-tight">Failed to Load Compliance Data</h4>
+                    <p className="text-xs opacity-80 mt-1">{compError}</p>
+                  </div>
+                </div>
+              ) : compReport ? (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  {/* Summary Stats Column */}
+                  <div className="lg:col-span-4 space-y-6">
+                    <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000]">
+                      <h4 className="text-lg font-black uppercase italic mb-4 border-b-2 border-black/10 pb-2">Audit Statistics</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-soy-label/20 p-4 border-2 border-soy-bottle">
+                          <span className="block text-[10px] font-bold opacity-60 uppercase">Total Logged</span>
+                          <span className="text-3xl font-black">{compReport.summary.total}</span>
+                        </div>
+                        <div className="bg-emerald-50 p-4 border-2 border-emerald-600">
+                          <span className="block text-[10px] font-bold text-emerald-700 uppercase">Active</span>
+                          <span className="text-3xl font-black text-emerald-800">{compReport.summary.active}</span>
+                        </div>
+                        <div className="bg-amber-50 p-4 border-2 border-amber-500">
+                          <span className="block text-[10px] font-bold text-amber-700 uppercase">Expired</span>
+                          <span className="text-3xl font-black text-amber-800">{compReport.summary.expired}</span>
+                        </div>
+                        <div className="bg-soy-label/10 p-4 border-2 border-soy-bottle opacity-60">
+                          <span className="block text-[10px] font-bold opacity-60 uppercase">Revoked</span>
+                          <span className="text-3xl font-black">{compReport.summary.revoked}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Policy Summary */}
+                    <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000]">
+                      <h4 className="text-lg font-black uppercase italic mb-4 border-b-2 border-black/10 pb-2">Policy Settings</h4>
+                      <div className="space-y-3 font-mono text-[11px]">
+                        <div className="flex justify-between border-b border-black/5 pb-1">
+                          <span className="opacity-60">RESOLVED VIA</span>
+                          <span className="font-bold uppercase">{compReport.policy.source}</span>
+                        </div>
+                        {compReport.policy.preset && (
+                          <div className="flex justify-between border-b border-black/5 pb-1">
+                            <span className="opacity-60">PRESET MODE</span>
+                            <span className="font-bold uppercase text-soy-red">{compReport.policy.preset}</span>
+                          </div>
+                        )}
+                        {compReport.policy.orgPolicyRepo && (
+                          <div className="flex justify-between border-b border-black/5 pb-1">
+                            <span className="opacity-60">ORG REPO</span>
+                            <span className="font-bold truncate max-w-[150px]">{compReport.policy.orgPolicyRepo}</span>
+                          </div>
+                        )}
+                        <div className="pt-2">
+                          <span className="block text-[10px] font-black opacity-60 uppercase mb-2">BLOCKED RISK LABELS</span>
+                          <div className="flex flex-wrap gap-1">
+                            {compReport.policy.resolved.block.length > 0 ? (
+                              compReport.policy.resolved.block.map((lbl: string) => (
+                                <span key={lbl} className="bg-soy-red text-white text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 border border-black">{lbl}</span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400 italic">None</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="pt-2">
+                          <span className="block text-[10px] font-black opacity-60 uppercase mb-2">WARNED RISK LABELS</span>
+                          <div className="flex flex-wrap gap-1">
+                            {compReport.policy.resolved.warn && compReport.policy.resolved.warn.length > 0 ? (
+                              compReport.policy.resolved.warn.map((lbl: string) => (
+                                <span key={lbl} className="bg-amber-400 text-black text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 border border-black">{lbl}</span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400 italic">None</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      onClick={handleDownloadReport}
+                      disabled={downloadingReport}
+                      className="w-full bg-soy-bottle text-white py-4 text-sm font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-2 border-4 border-black shadow-[6px_6px_0px_#000] disabled:opacity-50"
+                    >
+                      {downloadingReport ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
+                      {downloadingReport ? 'Generating Report...' : 'Download Signed Audit Log'}
+                    </button>
+                  </div>
+
+                  {/* Exceptions List Column */}
+                  <div className="lg:col-span-8 space-y-6">
+                    {/* Signing verification banner */}
+                    {compReport.signature ? (
+                      <div className="bg-emerald-50 border-4 border-emerald-600 p-4 flex items-start gap-3 shadow-[4px_4px_0px_#10B981]">
+                        <Check size={20} className="text-emerald-700 shrink-0 mt-0.5" />
+                        <div className="font-mono text-xs">
+                          <h4 className="font-black text-[11px] uppercase text-emerald-800 tracking-tight">
+                            Cryptographically Signed Report
+                          </h4>
+                          <p className="text-[10px] opacity-80 mt-1 leading-relaxed">
+                            Algorithm: {compReport.signature.algorithm} <br />
+                            Key ID / Fingerprint: <span className="break-all font-bold">{compReport.signature.keyFingerprint}</span> <br />
+                            Signed At: {new Date(compReport.signature.signedAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 border-4 border-amber-600 p-4 flex items-start gap-3 shadow-[4px_4px_0px_#F59E0B]">
+                        <AlertTriangle size={20} className="text-amber-700 shrink-0 mt-0.5" />
+                        <div className="font-mono text-xs">
+                          <h4 className="font-black text-[11px] uppercase text-amber-800 tracking-tight">
+                            Unsigned Report Payload
+                          </h4>
+                          <p className="text-[10px] opacity-80 mt-1 leading-relaxed">
+                            Crypto signing key not configured on server. Report content is valid but lacks cryptographic verification signature.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Table of Exceptions */}
+                    <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_#000] overflow-hidden">
+                      <h4 className="text-lg font-black uppercase italic mb-4">Logged Exceptions</h4>
+                      {compReport.exceptions.length === 0 ? (
+                        <div className="p-8 border-2 border-dashed border-soy-bottle/20 text-center">
+                          <p className="text-sm font-bold uppercase tracking-widest opacity-40">No exceptions logged for this repository</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse font-mono text-[11px]">
+                            <thead>
+                              <tr className="border-b-2 border-soy-bottle text-left opacity-60 uppercase font-black">
+                                <th className="pb-2">Package</th>
+                                <th className="pb-2">Ecosystem</th>
+                                <th className="pb-2">Granted By</th>
+                                <th className="pb-2">Expires At</th>
+                                <th className="pb-2 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-soy-bottle/10">
+                              {compReport.exceptions.map((row: any) => {
+                                const status = classifyCompStatus(row);
+                                const statusCls = 
+                                  status === 'active' ? 'bg-emerald-500 text-white border-black' :
+                                  status === 'expired' ? 'bg-amber-400 text-black border-black' :
+                                  'bg-black text-white border-black';
+                                return (
+                                  <tr key={row.id} className="hover:bg-soy-label/10">
+                                    <td className="py-3 font-bold">{row.package_name}</td>
+                                    <td className="py-3"><span className="border border-soy-bottle/40 px-1 py-0.5 text-[9px] font-black">{row.ecosystem}</span></td>
+                                    <td className="py-3">@{row.granted_by}</td>
+                                    <td className="py-3">{new Date(row.expires_at).toLocaleDateString()}</td>
+                                    <td className="py-3 text-right">
+                                      <span className={`inline-block px-1.5 py-0.5 text-[9px] font-black uppercase border ${statusCls}`}>
+                                        {status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'app' && (
         <div className="space-y-24">
           {/* MARKETING / INFO GITHUB APP VIEW */}
           <section className="text-center">
@@ -517,7 +875,7 @@ export default function Guard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* FREE */}
-              <div className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#302C26]">
+              <div className="bg-white border-4 border-soy-bottle p-8 shadow-[302C26]">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-2xl font-black uppercase italic tracking-tight text-soy-bottle">FREE</h3>
                   <span className="text-[10px] font-black uppercase tracking-widest bg-soy-label px-2 py-1 italic">Public repos</span>

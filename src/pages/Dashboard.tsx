@@ -169,6 +169,245 @@ export default function Dashboard() {
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
 
+  const [isSandbox, setIsSandbox] = useState<boolean>(() => {
+    return localStorage.getItem('soyce_dashboard_sandbox') === 'true';
+  });
+
+  const initSandboxMockData = (forceReset = false) => {
+    const getOrSet = (key: string, defaultVal: any) => {
+      const existing = localStorage.getItem(key);
+      if (existing && !forceReset) return JSON.parse(existing);
+      localStorage.setItem(key, JSON.stringify(defaultVal));
+      return defaultVal;
+    };
+
+    const defaultExceptions = [
+      {
+        id: 'mock-uuid-1',
+        owner: 'acme-corp',
+        repo: 'web-app',
+        package_name: 'lodash',
+        ecosystem: 'npm',
+        reason: 'Prototype pollution vulnerability mitigated via local custom input checks.',
+        expires_at: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+        granted_by: 'sarah-cto',
+        created_at: new Date(Date.now() - 2 * 86400 * 1000).toISOString(),
+        revoked_at: null,
+      },
+      {
+        id: 'mock-uuid-2',
+        owner: 'acme-corp',
+        repo: 'web-app',
+        package_name: 'axios',
+        ecosystem: 'npm',
+        reason: 'SSRF mitigation handled at network load balancer gateway layer.',
+        expires_at: new Date(Date.now() + 60 * 86400 * 1000).toISOString(),
+        granted_by: 'maya-sec',
+        created_at: new Date(Date.now() - 5 * 86400 * 1000).toISOString(),
+        revoked_at: null,
+      },
+      {
+        id: 'mock-uuid-3',
+        owner: 'acme-corp',
+        repo: 'web-app',
+        package_name: 'minimist',
+        ecosystem: 'npm',
+        reason: 'Benign prototype pollution. Expired check.',
+        expires_at: new Date(Date.now() - 5 * 86400 * 1000).toISOString(),
+        granted_by: 'lead-dev',
+        created_at: new Date(Date.now() - 40 * 86400 * 1000).toISOString(),
+        revoked_at: null,
+      },
+      {
+        id: 'mock-uuid-4',
+        owner: 'acme-corp',
+        repo: 'web-app',
+        package_name: 'nanoid',
+        ecosystem: 'npm',
+        reason: 'Random generator seeding fallback review. Revoked override.',
+        expires_at: new Date(Date.now() + 10 * 86400 * 1000).toISOString(),
+        granted_by: 'sarah-cto',
+        created_at: new Date(Date.now() - 12 * 86400 * 1000).toISOString(),
+        revoked_at: new Date(Date.now() - 1 * 86400 * 1000).toISOString(),
+      }
+    ];
+
+    const defaultWatchlist = [
+      {
+        id: 'mock-watch-1',
+        owner_org: 'acme-corp',
+        package_name: 'express',
+        ecosystem: 'npm',
+        created_at: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),
+        verdicts: [
+          { owner: 'acme-corp', repo: 'web-app', label: 'STABLE', scanned_at: new Date().toISOString() }
+        ]
+      },
+      {
+        id: 'mock-watch-2',
+        owner_org: 'acme-corp',
+        package_name: 'lodash',
+        ecosystem: 'npm',
+        created_at: new Date(Date.now() - 12 * 86400 * 1000).toISOString(),
+        verdicts: [
+          { owner: 'acme-corp', repo: 'web-app', label: 'RISKY', scanned_at: new Date().toISOString() }
+        ]
+      }
+    ];
+
+    const defaultNotifications = {
+      'acme-corp/web-app': {
+        configured: true,
+        updated_by: 'sarah-cto',
+        updated_at: new Date(Date.now() - 2 * 86400 * 1000).toISOString(),
+      }
+    };
+
+    const defaultRepos = [
+      { owner: 'acme-corp', repo: 'web-app' },
+      { owner: 'acme-corp', repo: 'payment-service' }
+    ];
+
+    return {
+      exceptions: getOrSet('soyce_sb_exceptions', defaultExceptions),
+      watchlist: getOrSet('soyce_sb_watchlist', defaultWatchlist),
+      notifications: getOrSet('soyce_sb_notifications', defaultNotifications),
+      repos: getOrSet('soyce_sb_repos', defaultRepos)
+    };
+  };
+
+  const clearSandboxMockData = () => {
+    localStorage.removeItem('soyce_dashboard_sandbox');
+    localStorage.removeItem('soyce_sb_exceptions');
+    localStorage.removeItem('soyce_sb_watchlist');
+    localStorage.removeItem('soyce_sb_notifications');
+    localStorage.removeItem('soyce_sb_repos');
+  };
+
+  const apiFetch = async (url: string, init?: RequestInit): Promise<Response> => {
+    if (!isSandbox) {
+      return window.fetch(url, init);
+    }
+
+    const parsedUrl = new URL(url, window.location.origin);
+    const path = parsedUrl.pathname;
+    const action = parsedUrl.searchParams.get('action');
+    const method = init?.method?.toUpperCase() || 'GET';
+
+    const jsonResponse = (data: any, status = 200) => {
+      return new Response(JSON.stringify(data), {
+        status,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+
+    const store = initSandboxMockData();
+
+    if (path === '/api/exceptions') {
+      if (method === 'GET') {
+        if (action === 'whoami') {
+          return jsonResponse({ login: 'sarah-cto', orgs: ['acme-corp'] });
+        }
+        if (action === 'my-repos') {
+          return jsonResponse({ repos: store.repos });
+        }
+        if (action === 'watchlist-list') {
+          return jsonResponse({ watched: store.watchlist });
+        }
+        if (action === 'watchlist-changes') {
+          return jsonResponse({ changes: [] });
+        }
+        if (action === 'notifications-get') {
+          const owner = parsedUrl.searchParams.get('owner') || '';
+          const repo = parsedUrl.searchParams.get('repo') || '';
+          const key = `${owner}/${repo}`;
+          const notif = store.notifications[key] || { configured: false };
+          return jsonResponse(notif);
+        }
+        const owner = parsedUrl.searchParams.get('owner') || '';
+        const repo = parsedUrl.searchParams.get('repo') || '';
+        const list = store.exceptions.filter((x: any) => x.owner === owner && x.repo === repo);
+        return jsonResponse({ exceptions: list });
+      }
+
+      if (method === 'POST') {
+        if (action === 'logout') {
+          clearSandboxMockData();
+          setIsSandbox(false);
+          setPhase('unauth');
+          return jsonResponse({ ok: true });
+        }
+        if (action === 'watchlist-add') {
+          const body = JSON.parse(init?.body as string);
+          const newWatch = {
+            id: 'mock-watch-' + Math.random().toString(36).slice(2),
+            owner_org: body.owner_org,
+            package_name: body.package_name,
+            ecosystem: body.ecosystem,
+            created_at: new Date().toISOString(),
+            verdicts: [
+              { owner: body.owner_org, repo: 'web-app', label: 'STABLE', scanned_at: new Date().toISOString() }
+            ]
+          };
+          store.watchlist.unshift(newWatch);
+          localStorage.setItem('soyce_sb_watchlist', JSON.stringify(store.watchlist));
+          return jsonResponse({ ok: true, watched: newWatch }, 201);
+        }
+        if (action === 'watchlist-remove') {
+          const body = JSON.parse(init?.body as string);
+          store.watchlist = store.watchlist.filter((w: any) => w.id !== body.id);
+          localStorage.setItem('soyce_sb_watchlist', JSON.stringify(store.watchlist));
+          return jsonResponse({ ok: true });
+        }
+        if (action === 'notifications-set') {
+          const body = JSON.parse(init?.body as string);
+          const key = `${body.owner}/${body.repo}`;
+          if (body.slack_webhook_url === null) {
+            store.notifications[key] = { configured: false, updated_by: 'sarah-cto', updated_at: new Date().toISOString() };
+          } else {
+            store.notifications[key] = { configured: true, updated_by: 'sarah-cto', updated_at: new Date().toISOString() };
+          }
+          localStorage.setItem('soyce_sb_notifications', JSON.stringify(store.notifications));
+          return jsonResponse({ ok: true });
+        }
+
+        const body = JSON.parse(init?.body as string);
+        const newException = {
+          id: 'mock-uuid-' + Math.random().toString(36).slice(2),
+          owner: body.owner,
+          repo: body.repo,
+          package_name: body.package_name,
+          ecosystem: body.ecosystem,
+          reason: body.reason,
+          expires_at: new Date(Date.now() + body.expires_in_days * 86400 * 1000).toISOString(),
+          granted_by: 'sarah-cto',
+          created_at: new Date().toISOString(),
+          revoked_at: null,
+          status: 'approved'
+        };
+        store.exceptions.unshift(newException);
+        localStorage.setItem('soyce_sb_exceptions', JSON.stringify(store.exceptions));
+        return jsonResponse({ exception: newException }, 201);
+      }
+
+      if (method === 'DELETE') {
+        const id = parsedUrl.searchParams.get('id');
+        store.exceptions = store.exceptions.map((x: any) => {
+          if (x.id === id) {
+            return { ...x, revoked_at: new Date().toISOString(), status: 'revoked' };
+          }
+          return x;
+        });
+        localStorage.setItem('soyce_sb_exceptions', JSON.stringify(store.exceptions));
+        return jsonResponse({ ok: true, id });
+      }
+    }
+
+    return window.fetch(url, init);
+  };
+
+  const fetch = apiFetch;
+
   // Grant form state.
   const [pkgName, setPkgName] = useState('');
   const [ecosystem, setEcosystem] = useState<typeof ECOSYSTEMS[number]>('npm');
@@ -201,6 +440,13 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (isSandbox) {
+        setLogin('sarah-cto');
+        setOrgs(['acme-corp']);
+        setPhase('auth');
+        return;
+      }
+
       // 1. Detect an OAuth callback (?code= & ?state= in URL).
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
@@ -797,22 +1043,48 @@ export default function Dashboard() {
                 </div>
               )}
               {oauthClientId === '' ? (
-                <div className="bg-soy-red text-white border-4 border-black p-6 shadow-[6px_6px_0px_#000] text-left">
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle size={24} className="shrink-0" />
-                    <span className="font-black uppercase tracking-widest text-sm">OAUTH NOT CONFIGURED</span>
+                <div className="space-y-4">
+                  <div className="bg-soy-red text-white border-4 border-black p-6 shadow-[6px_6px_0px_#000] text-left">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle size={24} className="shrink-0" />
+                      <span className="font-black uppercase tracking-widest text-sm">OAUTH NOT CONFIGURED</span>
+                    </div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider mb-4 leading-normal">
+                      This instance of OpenSoyce requires GitHub OAuth client credentials. Please set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in your .env file and restart the server.
+                    </p>
+                    <a
+                      href="https://github.com/settings/developers"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block w-full bg-black text-[#F5F0E8] py-3 text-center text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black border-2 border-black transition-colors"
+                    >
+                      CONFIGURE GITHUB OAUTH →
+                    </a>
                   </div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-4 leading-normal">
-                    This instance of OpenSoyce requires GitHub OAuth client credentials. Please set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET in your .env file and restart the server.
-                  </p>
-                  <a
-                    href="https://github.com/settings/developers"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-block w-full bg-black text-[#F5F0E8] py-3 text-center text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black border-2 border-black transition-colors"
-                  >
-                    CONFIGURE GITHUB OAUTH →
-                  </a>
+
+                  <div className="bg-white border-4 border-soy-bottle p-6 shadow-[6px_6px_0px_#302C26] text-left text-soy-bottle">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Shield size={20} className="text-soy-red shrink-0" />
+                      <span className="font-black uppercase tracking-widest text-xs">interactive sandbox mode</span>
+                    </div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider mb-4 leading-normal">
+                      Explore all exceptions, watchlists, and alert features right now with client-side simulated data.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem('soyce_dashboard_sandbox', 'true');
+                        setIsSandbox(true);
+                        initSandboxMockData(true);
+                        setLogin('sarah-cto');
+                        setOrgs(['acme-corp']);
+                        setPhase('auth');
+                      }}
+                      className="w-full bg-soy-red text-white py-3 text-center text-xs font-black uppercase tracking-widest hover:bg-soy-bottle border-2 border-black transition-colors shadow-[2px_2px_0px_#000] cursor-pointer"
+                    >
+                      ACTIVATE LOCAL SANDBOX MODE →
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <button
@@ -914,6 +1186,33 @@ export default function Dashboard() {
   // phase === 'auth'
   return (
     <div className="max-w-7xl mx-auto px-4 py-12 font-mono">
+      {isSandbox && (
+        <div className="bg-emerald-50 border-4 border-emerald-600 p-4 mb-6 shadow-[4px_4px_0px_#10B981] flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-left text-soy-bottle">
+          <div>
+            <h4 className="font-black text-xs uppercase text-emerald-800 tracking-tight">
+              ⚙️ LOCAL SANDBOX PLAYGROUND ACTIVE
+            </h4>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mt-1 leading-relaxed">
+              Exceptions and compliance CRUD features are simulated in local storage. Exit sandbox mode to restore backend routing.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              clearSandboxMockData();
+              setIsSandbox(false);
+              setPhase('unauth');
+              setLogin(null);
+              setOrgs([]);
+              setSelectedRepo(null);
+            }}
+            className="bg-soy-bottle text-soy-label border-2 border-black text-[9px] font-black uppercase tracking-widest px-3 py-1.5 shadow-[2px_2px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000] transition-all cursor-pointer flex-shrink-0"
+          >
+            Reset & Exit Sandbox
+          </button>
+        </div>
+      )}
+
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 border-b-4 border-soy-bottle pb-6">
         <div>
           <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-2">
