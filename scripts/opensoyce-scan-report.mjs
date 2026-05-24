@@ -31,6 +31,8 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve as pathResolve, dirname as pathDirname, join as pathJoin } from 'node:path';
 import process from 'node:process';
+import { execSync } from 'node:child_process';
+import readline from 'node:readline';
 
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
 import { resolveDepIdentity, resolvePypiIdentity } from '../src/shared/resolveDepIdentity.js';
@@ -63,8 +65,11 @@ Options:
   --github-token <tok>  Token for higher rate limits; otherwise reads GITHUB_TOKEN env
   --verify <path>       Verify a previously emitted JSON or SARIF report. Reads
                         OPENSOYCE_SIGNING_PUBLIC_KEY env var; if unset, fetches
-                        ${PUBLIC_KEY_URL}.
+                        \${PUBLIC_KEY_URL}.
                         Exits 0 on OK, 1 on INVALID.
+  --remediate           Launch interactive wizard to auto-upgrade vulnerable packages
+  --test-cmd <cmd>      Custom verification command to run after upgrade (default: npm test)
+  --yes, -y             Auto-approve all recommended upgrades (non-interactive)
   --quiet               Suppress progress lines on stderr
   --help                Print this message and exit
 
@@ -81,7 +86,7 @@ Signing:
  * @param {string[]} argv  process.argv.slice(2)
  */
 export function parseArgs(argv) {
-  /** @type {{ positionals: string[], out: string|null, json: string|null, sarif: string|null, ignore: string|null, private: string|null, failOn: string, token: string|null, verify: string|null, quiet: boolean, help: boolean, _error: string|null }} */
+  /** @type {{ positionals: string[], out: string|null, json: string|null, sarif: string|null, ignore: string|null, private: string|null, failOn: string, token: string|null, verify: string|null, quiet: boolean, help: boolean, remediate: boolean, testCmd: string|null, yes: boolean, _error: string|null }} */
   const out = {
     positionals: [],
     out: null,
@@ -94,6 +99,9 @@ export function parseArgs(argv) {
     verify: null,
     quiet: false,
     help: false,
+    remediate: false,
+    testCmd: null,
+    yes: false,
     _error: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -156,6 +164,20 @@ export function parseArgs(argv) {
       const v = argv[++i];
       if (!v) { out._error = 'missing value for --verify'; break; }
       out.verify = v;
+      continue;
+    }
+    if (a === '--remediate') {
+      out.remediate = true;
+      continue;
+    }
+    if (a === '--test-cmd') {
+      const v = argv[++i];
+      if (!v) { out._error = 'missing value for --test-cmd'; break; }
+      out.testCmd = v;
+      continue;
+    }
+    if (a === '--yes' || a === '-y') {
+      out.yes = true;
       continue;
     }
     if (a.startsWith('--')) {
@@ -386,6 +408,141 @@ async function runVerify(verifyPath) {
   return 1;
 }
 
+function compareSemverLoose(a, b) {
+  const pa = a.split('.').map(n => parseInt(n, 10) || 0);
+  const pb = b.split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+function askQuestion(query) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise(resolve => {
+    rl.question(query, answer => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+function getUpgradeCommand(lockfileFormat, pkgName, targetVersion) {
+  if (lockfileFormat === 'pnpm-lock') {
+    return `pnpm add --lockfile-only ${pkgName}@${targetVersion}`;
+  }
+  if (lockfileFormat === 'yarn-v1' || lockfileFormat === 'yarn-v2') {
+    return `yarn add ${pkgName}@${targetVersion}`;
+  }
+  if (lockfileFormat === 'uv-lock') {
+    return `uv add ${pkgName}==${targetVersion}`;
+  }
+  if (lockfileFormat === 'poetry-lock') {
+    return `poetry add ${pkgName}==${targetVersion}`;
+  }
+  return `npm install --package-lock-only ${pkgName}@${targetVersion}`;
+}
+
+function runShellCommand(cmd, quiet) {
+  if (!quiet) {
+    process.stderr.write(`Running: ${cmd}\n`);
+  }
+  try {
+    const stdout = execSync(cmd, { stdio: quiet ? 'ignore' : 'inherit', encoding: 'utf8' });
+    return { ok: true, stdout };
+  } catch (err) {
+    return { ok: false, error: err };
+  }
+}
+
+async function runRemediationWizard(scanResult, lockfilePath, lockfileFormat, testCmd, autoApprove, quiet) {
+  const vulns = scanResult.vulnerabilities || [];
+  const fixable = vulns.filter(v => v.package && v.version && v.fixedIn);
+
+  if (fixable.length === 0) {
+    progress(quiet, 'No fixable vulnerabilities found (no packages with fixedIn metadata).');
+    return 0;
+  }
+
+  const packageJsonPath = pathJoin(pathDirname(lockfilePath), 'package.json');
+  progress(quiet, `Found ${fixable.length} fixable vulnerability record(s).`);
+
+  // Group by package and find the highest fixedIn version suggested
+  const upgrades = new Map();
+  for (const v of fixable) {
+    const existing = upgrades.get(v.package);
+    if (!existing || compareSemverLoose(v.fixedIn, existing.fixedIn) > 0) {
+      upgrades.set(v.package, { current: v.version, fixedIn: v.fixedIn });
+    }
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const [pkgName, details] of upgrades.entries()) {
+    const { current, fixedIn } = details;
+
+    let approve = autoApprove;
+    if (!approve) {
+      const answer = await askQuestion(`Upgrade package "${pkgName}" from ${current} to ${fixedIn}? [y/N]: `);
+      approve = answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
+    }
+
+    if (!approve) {
+      progress(quiet, `Skipping upgrade of ${pkgName}.`);
+      continue;
+    }
+
+    progress(quiet, `Upgrading ${pkgName} to ${fixedIn}...`);
+    const installCmd = getUpgradeCommand(lockfileFormat, pkgName, fixedIn);
+
+    const installResult = runShellCommand(installCmd, quiet);
+    if (!installResult.ok) {
+      process.stderr.write(`Error: Failed to run upgrade command: ${installCmd}\n`);
+      failCount += 1;
+      continue;
+    }
+
+    // Run verification
+    const verifyCmd = testCmd || 'npm test';
+    progress(quiet, `Running verification command: ${verifyCmd}...`);
+    const verifyResult = runShellCommand(verifyCmd, quiet);
+
+    if (verifyResult.ok) {
+      progress(quiet, `Verification PASSED for ${pkgName} upgrade.`);
+      // Auto-commit
+      const addCmd = `git add "${lockfilePath}" "${packageJsonPath}"`;
+      const commitCmd = `git commit -m "security(deps): upgrade ${pkgName} to ${fixedIn} to fix vulnerabilities"`;
+
+      runShellCommand(addCmd, true);
+      const commitResult = runShellCommand(commitCmd, true);
+      if (commitResult.ok) {
+        progress(quiet, `Auto-committed upgrade of ${pkgName} successfully.`);
+      } else {
+        progress(quiet, `Upgrade successful but auto-commit was skipped (non-git repo or git not configured).`);
+      }
+      successCount += 1;
+    } else {
+      process.stderr.write(`Verification FAILED for ${pkgName} upgrade. Reverting changes...\n`);
+      // Revert files
+      const revertCmd = `git checkout -- "${lockfilePath}" "${packageJsonPath}"`;
+      const revertResult = runShellCommand(revertCmd, true);
+      if (!revertResult.ok) {
+        runShellCommand(`git restore "${lockfilePath}" "${packageJsonPath}"`, true);
+      }
+      progress(quiet, `Reverted changes for ${pkgName}.`);
+      failCount += 1;
+    }
+  }
+
+  progress(quiet, `Remediation completed: ${successCount} package(s) upgraded successfully, failed: ${failCount} package(s) failed.`);
+  return failCount > 0 ? 1 : 0;
+}
+
 async function main(argv) {
   const args = parseArgs(argv);
   if (args.help) {
@@ -582,6 +739,18 @@ async function main(argv) {
       process.stderr.write(`failed to write SARIF: ${e.message}\n`);
       return 1;
     }
+  }
+
+  if (args.remediate) {
+    const format = detectLockfileFormat(lockfileText);
+    return await runRemediationWizard(
+      scanResult,
+      lockfilePath,
+      format,
+      args.testCmd,
+      args.yes,
+      args.quiet
+    );
   }
 
   progress(args.quiet, 'Done.');

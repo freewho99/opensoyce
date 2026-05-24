@@ -6,6 +6,7 @@
 import { buildMarkdownReport, buildJsonReport } from '../src/shared/buildScanReport.js';
 import { summarizeScan } from '../src/shared/scanSummary.js';
 import { computeRiskProfile } from '../src/shared/riskProfile.js';
+import { parseArgs } from './opensoyce-scan-report.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -348,6 +349,24 @@ test('OSV error: JSON has osvError=true and uncertainty bullet', () => {
   // And the negative: when osvError is omitted, flag is false.
   const j2 = buildJsonReport({ summary, profile, vulnerabilities: [], inventory, selectedHealth: null });
   eq(j2.osvError, false, 'osvError false when not set');
+});
+
+// ---------------------------------------------------------------------------
+// 12. CLI Arg Parser: Remediate flags
+test('CLI Arg Parser: parses --remediate, --test-cmd, and --yes options', () => {
+  const args = parseArgs(['pkg-lock.json', '--remediate', '--test-cmd', 'npm run test:prod', '--yes']);
+  eq(args.remediate, true, 'remediate flag');
+  eq(args.testCmd, 'npm run test:prod', 'testCmd option');
+  eq(args.yes, true, 'yes flag');
+  eq(args.positionals[0], 'pkg-lock.json', 'positional lockfile');
+});
+
+test('CLI Arg Parser: handles -y shorthand and errors on missing --test-cmd value', () => {
+  const args1 = parseArgs(['pkg-lock.json', '-y']);
+  eq(args1.yes, true, 'yes shorthand');
+
+  const args2 = parseArgs(['pkg-lock.json', '--test-cmd']);
+  eq(args2._error, 'missing value for --test-cmd', 'missing value error');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
