@@ -31,15 +31,15 @@ const CodeBlock = ({ code, label, highlight = true }: { code: string; label?: st
 
   return (
     <div className="group relative bg-black border-2 border-soy-bottle p-4 overflow-hidden">
-      <div className="flex justify-between items-start mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500 opacity-60 font-mono">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#00FF41] opacity-60 font-mono">
           {label || 'Terminal'}
         </span>
         <button 
           onClick={handleCopy}
-          className="text-white hover:text-soy-red transition-colors p-1"
+          className="text-[9px] font-black uppercase tracking-widest bg-white border border-[#00FF41]/30 text-black px-2 py-0.5 hover:bg-[#00FF41] hover:border-[#00FF41] transition-all cursor-pointer"
         >
-          {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+          {copied ? 'COPIED!' : 'COPY'}
         </button>
       </div>
       <code className="block font-mono text-sm leading-relaxed text-[#00FF41] break-all">
@@ -51,7 +51,7 @@ const CodeBlock = ({ code, label, highlight = true }: { code: string; label?: st
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="absolute top-2 right-10 bg-soy-red text-white text-[10px] px-2 py-0.5 font-bold uppercase"
+            className="absolute top-2 right-16 bg-soy-red text-white text-[10px] px-2 py-0.5 font-bold uppercase"
           >
             Copied!
           </motion.div>
@@ -63,6 +63,13 @@ const CodeBlock = ({ code, label, highlight = true }: { code: string; label?: st
 
 export default function CLI() {
   const [activeTab, setActiveTab] = useState('github');
+  const [heroCopied, setHeroCopied] = useState(false);
+
+  const handleHeroCopy = () => {
+    navigator.clipboard.writeText('npx soyce check');
+    setHeroCopied(true);
+    setTimeout(() => setHeroCopied(false), 2000);
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
@@ -91,12 +98,10 @@ export default function CLI() {
             ></motion.div>
           </div>
           <button 
-            onClick={() => {
-              navigator.clipboard.writeText('npx soyce check');
-            }}
-            className="absolute bottom-4 right-4 text-[10px] font-bold text-white/40 uppercase hover:text-[#00FF41] transition-colors flex items-center gap-2"
+            onClick={handleHeroCopy}
+            className="absolute bottom-4 right-4 text-[10px] font-black uppercase tracking-widest bg-[#00FF41] text-black border border-[#00FF41] px-4 py-2 hover:bg-black hover:text-[#00FF41] hover:border-[#00FF41] transition-all shadow-[3px_3px_0px_#00FF41] cursor-pointer"
           >
-            <Copy size={12} /> COPY COMMAND
+            {heroCopied ? 'COPIED!' : 'COPY COMMAND'}
           </button>
         </div>
       </section>

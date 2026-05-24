@@ -11,7 +11,11 @@ const DEAD_REPOS = [
     score: 3.5,
     staleSince: "SEPT 2020",
     whyItMattered: "The industry standard for date manipulation for nearly a decade.",
-    replacedBy: "date-fns / Day.js / Temporal API",
+    replacedBy: [
+      { name: "date-fns", link: "/lookup/date-fns/date-fns" },
+      { name: "Day.js", link: "/lookup/iamkun/dayjs" },
+      { name: "Temporal API", link: "https://tc39.es/proposal-temporal/docs/" }
+    ],
     forkableParts: "Robust timezone database logic.",
     category: "UTILS"
   },
@@ -21,7 +25,10 @@ const DEAD_REPOS = [
     score: 2.1,
     staleSince: "FEB 2020",
     whyItMattered: "Made HTTP requests readable before fetch() exist.",
-    replacedBy: "Axios / native fetch()",
+    replacedBy: [
+      { name: "Axios", link: "/lookup/axios/axios" },
+      { name: "Native Fetch", link: "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API" }
+    ],
     forkableParts: "Excellent OAuth 1.0 logic.",
     category: "NETWORK"
   },
@@ -31,7 +38,10 @@ const DEAD_REPOS = [
     score: 2.8,
     staleSince: "2018 (DE FACTO)",
     whyItMattered: "The first true JavaScript task runner.",
-    replacedBy: "Vite / Turborepo",
+    replacedBy: [
+      { name: "Vite", link: "/lookup/vitejs/vite" },
+      { name: "Turborepo", link: "https://turbo.build/repo" }
+    ],
     forkableParts: "Plugin architecture schema.",
     category: "DEVTOOLS"
   },
@@ -41,7 +51,10 @@ const DEAD_REPOS = [
     score: 1.5,
     staleSince: "2017",
     whyItMattered: "Managed frontend dependencies when npm couldn't.",
-    replacedBy: "npm / pnpm",
+    replacedBy: [
+      { name: "npm", link: "https://www.npmjs.com/" },
+      { name: "pnpm", link: "https://pnpm.io/" }
+    ],
     forkableParts: "Registry coordination code.",
     category: "INFRA"
   }
@@ -138,10 +151,33 @@ export default function Graveyard() {
                   <p className="text-sm font-medium leading-relaxed italic">"{repo.whyItMattered}"</p>
                </div>
 
-               <div className="grid grid-cols-2 gap-8">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                   <div>
                     <span className="text-[8px] font-black uppercase tracking-widest opacity-40">REPLACED BY</span>
-                    <div className="text-xs font-black uppercase tracking-widest mt-1">{repo.replacedBy}</div>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {repo.replacedBy.map((alt) => {
+                        const isInternal = alt.link.startsWith('/');
+                        return isInternal ? (
+                          <Link
+                            key={alt.name}
+                            to={alt.link}
+                            className="bg-soy-label text-soy-bottle border border-soy-bottle/30 text-[9px] font-black px-2.5 py-1 hover:bg-soy-red hover:text-white hover:border-soy-red transition-all inline-block uppercase tracking-wider"
+                          >
+                            {alt.name}
+                          </Link>
+                        ) : (
+                          <a
+                            key={alt.name}
+                            href={alt.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-soy-label text-soy-bottle border border-soy-bottle/30 text-[9px] font-black px-2.5 py-1 hover:bg-soy-red hover:text-white hover:border-soy-red transition-all inline-flex items-center gap-1 uppercase tracking-wider"
+                          >
+                            {alt.name} <ExternalLink size={10} />
+                          </a>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div>
                     <span className="text-[8px] font-black uppercase tracking-widest opacity-40">FORKABLE PARTS</span>

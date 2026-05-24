@@ -74,6 +74,7 @@ export default function AiGraveyard() {
               tagline={entry.tagline}
               category={entry.category}
               lastCommitClaim={entry.lastCommitClaim}
+              historicalLastCommit={entry.historicalLastCommit}
               state={s}
             />
           );
@@ -104,6 +105,7 @@ function GraveyardCard({
   tagline,
   category,
   lastCommitClaim,
+  historicalLastCommit,
   state,
 }: {
   owner: string;
@@ -111,6 +113,7 @@ function GraveyardCard({
   tagline: string;
   category: AiCategory;
   lastCommitClaim: string;
+  historicalLastCommit: string;
   state: BoardScoreState | undefined;
   key?: any;
 }) {
@@ -177,11 +180,12 @@ function GraveyardCard({
         )}
       </div>
 
-      {!isLoading && !isError && monthsAgo && (
-        <p className="relative z-10 mt-3 text-[10px] font-black uppercase tracking-widest opacity-70">
-          Last commit: <span className="text-soy-red">{monthsAgo}</span>
-        </p>
-      )}
+      <p className="relative z-10 mt-3 text-[10px] font-black uppercase tracking-widest opacity-70">
+        Last commit:{' '}
+        <span className="text-soy-red">
+          {!isLoading && !isError && monthsAgo ? monthsAgo : `${formatMonthsAgo(historicalLastCommit)} (Historical)`}
+        </span>
+      </p>
 
       <div className="relative z-10 mt-4 pt-3 border-t border-black/10 text-[9px] font-black uppercase tracking-[0.2em] text-soy-red flex items-center gap-2">
         SCAN LIVE <ArrowRight size={12} />

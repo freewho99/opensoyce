@@ -193,6 +193,24 @@ export default function Home() {
                 SUBMIT A PROJECT
               </Link>
             </motion.div>
+
+            {/* CI/CD integrations shortcut ribbon */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="mt-8 pt-6 border-t border-black/10 flex flex-wrap items-center gap-3 justify-center lg:justify-start text-center lg:text-left"
+            >
+              <span className="bg-black text-white px-2.5 py-1 text-[9px] font-black uppercase tracking-widest border border-black shadow-[2px_2px_0px_#E63322]">
+                CI/CD PIPELINE
+              </span>
+              <p className="text-xs font-bold uppercase tracking-wider opacity-60">
+                Or integrate directly:
+                <Link to="/cli" className="text-soy-red hover:underline ml-2 font-black italic">Install CLI Tool →</Link>
+                <span className="mx-2 opacity-30">|</span>
+                <Link to="/guard" className="text-soy-red hover:underline font-black italic">Install GitHub App →</Link>
+              </p>
+            </motion.div>
           </div>
 
           <div className="lg:col-span-5 flex justify-center relative">

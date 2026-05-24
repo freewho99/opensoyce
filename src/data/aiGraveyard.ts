@@ -22,13 +22,8 @@ export type AiGraveyardEntry = {
   repo: string;
   category: AiCategory;
   tagline: string;
-  /**
-   * Curator's claim about why this is on the graveyard — a short, honest
-   * note. Shown as the secondary line under the live last-commit date.
-   * Examples: "Renamed to transformers in 2019", "Archived 2023",
-   * "Superseded by langgraph".
-   */
   lastCommitClaim: string;
+  historicalLastCommit: string;
 };
 
 export const AI_GRAVEYARD: AiGraveyardEntry[] = [
@@ -38,6 +33,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'llm-frameworks',
     tagline: 'The original Transformers package, pre-rename.',
     lastCommitClaim: 'Renamed to huggingface/transformers in 2019 — old name still pip-installed in legacy tutorials.',
+    historicalLastCommit: '2019-09-17',
   },
   {
     owner: 'huggingface',
@@ -45,6 +41,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'llm-frameworks',
     tagline: 'Pre-Transformers-era BERT loader.',
     lastCommitClaim: 'Superseded by transformers in 2018 — still surfaces in academic notebooks and old Colabs.',
+    historicalLastCommit: '2019-08-20',
   },
   {
     owner: 'hwchase17',
@@ -52,6 +49,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'agents',
     tagline: 'Original LangChain prompt sharing repo.',
     lastCommitClaim: 'Replaced by LangChain Hub on smith.langchain.com — repo dormant but still linked in tutorials.',
+    historicalLastCommit: '2023-09-05',
   },
   {
     owner: 'openai',
@@ -59,6 +57,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'training',
     tagline: 'The original GPT-2 release.',
     lastCommitClaim: 'Frozen as a historical artifact — still cloned for educational projects despite being obsolete.',
+    historicalLastCommit: '2020-03-10',
   },
   {
     owner: 'openai',
@@ -66,6 +65,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'llm-frameworks',
     tagline: 'GPT-3 paper repo (no model code).',
     lastCommitClaim: 'Paper-only repo, never received the model — still starred and forked as if it had source.',
+    historicalLastCommit: '2020-06-01',
   },
   {
     owner: 'EleutherAI',
@@ -73,6 +73,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'training',
     tagline: 'Pre-Pythia EleutherAI model code.',
     lastCommitClaim: 'Superseded by gpt-neox and pythia — old training scripts still copied into derivative projects.',
+    historicalLastCommit: '2022-09-15',
   },
   {
     owner: 'tatsu-lab',
@@ -80,6 +81,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'training',
     tagline: 'The original Alpaca fine-tuning recipe.',
     lastCommitClaim: 'Research artifact from early 2023 — recipe still pasted into fine-tuning blog posts.',
+    historicalLastCommit: '2023-04-20',
   },
   {
     owner: 'tloen',
@@ -87,6 +89,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'training',
     tagline: 'LoRA fine-tuning recipe for LLaMA.',
     lastCommitClaim: 'Effectively unmaintained since LLaMA 2 launch — PEFT replaces it but tutorials still link here.',
+    historicalLastCommit: '2023-08-15',
   },
   {
     owner: 'AntonOsika',
@@ -94,6 +97,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'agents',
     tagline: 'Early autonomous coding agent.',
     lastCommitClaim: 'Maintenance slowed dramatically as the category moved to aider / OpenHands / Cursor.',
+    historicalLastCommit: '2024-02-10',
   },
   {
     owner: 'Significant-Gravitas',
@@ -101,6 +105,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'agents',
     tagline: 'The viral 2023 autonomous agent.',
     lastCommitClaim: 'Rebranded to AutoGPT Platform; the original v0 loop is no longer the maintained surface.',
+    historicalLastCommit: '2024-05-15',
   },
   {
     owner: 'yoheinakajima',
@@ -108,6 +113,7 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'agents',
     tagline: 'Minimal task-driven autonomous agent.',
     lastCommitClaim: 'Pinned-in-time demo from early 2023 — still forked as an agent-loop tutorial template.',
+    historicalLastCommit: '2023-06-25',
   },
   {
     owner: 'TransformerOptimus',
@@ -115,5 +121,6 @@ export const AI_GRAVEYARD: AiGraveyardEntry[] = [
     category: 'agents',
     tagline: 'Autonomous AI agent framework.',
     lastCommitClaim: 'Activity dropped sharply through 2024 while the company pivoted; framework still listed in agent surveys.',
+    historicalLastCommit: '2024-04-30',
   },
 ];

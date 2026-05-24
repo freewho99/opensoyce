@@ -746,31 +746,115 @@ export default function Dashboard() {
 
   if (phase === 'unauth') {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="bg-white border-4 border-soy-bottle p-12 shadow-[12px_12px_0px_#E63322] text-center w-full max-w-md">
-          <Shield size={64} className="text-soy-red mx-auto mb-8" />
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-4">EXCEPTIONS DASHBOARD</h2>
-          <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-6 leading-relaxed">
-            SIGN IN WITH GITHUB TO MANAGE EXCEPTIONS FOR REPOS WHERE GUARD IS INSTALLED.
-          </p>
-          {errorMessage && (
-            <div className="bg-soy-red text-white border-2 border-soy-bottle p-3 mb-6 text-[10px] font-black uppercase tracking-widest">
-              {errorMessage}
+      <div className="max-w-7xl mx-auto px-4 py-16 min-h-[70vh] flex flex-col justify-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          {/* Left Column - Sign In */}
+          <div className="lg:col-span-5 flex justify-center">
+            <div className="bg-white border-4 border-soy-bottle p-10 shadow-[12px_12px_0px_#E63322] text-center w-full max-w-md">
+              <Shield size={64} className="text-soy-red mx-auto mb-6" />
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-4">EXCEPTIONS DASHBOARD</h2>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-6 leading-relaxed">
+                SIGN IN WITH GITHUB TO MANAGE EXCEPTIONS FOR REPOS WHERE GUARD IS INSTALLED.
+              </p>
+              {errorMessage && (
+                <div className="bg-soy-red text-white border-2 border-soy-bottle p-3 mb-6 text-[10px] font-black uppercase tracking-widest">
+                  {errorMessage}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleSignIn}
+                disabled={!oauthClientId}
+                className="w-full bg-soy-bottle text-soy-label py-4 text-lg font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              >
+                <Github size={20} />
+                {oauthClientId === null ? 'LOADING…' : oauthClientId === '' ? 'OAUTH NOT CONFIGURED' : 'SIGN IN WITH GITHUB'}
+              </button>
             </div>
-          )}
-          <button
-            type="button"
-            onClick={handleSignIn}
-            disabled={!oauthClientId}
-            className="w-full bg-soy-bottle text-soy-label py-4 text-xl font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            <Github size={24} />
-            {oauthClientId === null ? 'LOADING…' : oauthClientId === '' ? 'OAUTH NOT CONFIGURED' : 'SIGN IN WITH GITHUB'}
-          </button>
+          </div>
+
+          {/* Right Column - Visual Mockup Preview */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="border-4 border-soy-bottle bg-white shadow-[8px_8px_0px_#000] overflow-hidden">
+              {/* Window Header */}
+              <div className="bg-soy-bottle text-soy-label px-4 py-2 flex items-center justify-between border-b-4 border-soy-bottle select-none">
+                <div className="flex gap-2">
+                  <div className="w-3 h-3 rounded-full bg-soy-red"></div>
+                  <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-60 font-mono">
+                  exceptions-live-preview.exe
+                </span>
+                <div className="w-12"></div>
+              </div>
+
+              {/* Mock Content */}
+              <div className="p-6 font-mono text-xs space-y-6">
+                <div>
+                  <h3 className="text-lg font-black uppercase italic mb-1">active exceptions [repo: acme/web-app]</h3>
+                  <p className="text-[10px] opacity-60 font-bold uppercase tracking-wider">showing active and historical security overrides</p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b-2 border-soy-bottle text-[10px] font-black uppercase opacity-60 text-left">
+                        <th className="pb-2">PACKAGE</th>
+                        <th className="pb-2">ECOSYSTEM</th>
+                        <th className="pb-2">REASON</th>
+                        <th className="pb-2">EXPIRY</th>
+                        <th className="pb-2 text-right">STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-soy-bottle/10">
+                      <tr className="bg-white">
+                        <td className="py-2.5 font-bold text-soy-bottle">@babel/core</td>
+                        <td className="py-2.5"><span className="border border-soy-bottle/40 px-1 py-0.5 text-[9px] font-black">npm</span></td>
+                        <td className="py-2.5 opacity-80">Transitive vuln verified benign in our dev environment.</td>
+                        <td className="py-2.5">Jun 15, 2026</td>
+                        <td className="py-2.5 text-right"><span className="bg-emerald-500 text-white border border-black px-1.5 py-0.5 text-[9px] font-black">ACTIVE</span></td>
+                      </tr>
+                      <tr className="bg-white">
+                        <td className="py-2.5 font-bold text-soy-bottle">axios</td>
+                        <td className="py-2.5"><span className="border border-soy-bottle/40 px-1 py-0.5 text-[9px] font-black">npm</span></td>
+                        <td className="py-2.5 opacity-80">SSRF mitigation handled at network Gateway layer.</td>
+                        <td className="py-2.5">Jul 20, 2026</td>
+                        <td className="py-2.5 text-right"><span className="bg-emerald-500 text-white border border-black px-1.5 py-0.5 text-[9px] font-black">ACTIVE</span></td>
+                      </tr>
+                      <tr className="bg-soy-label/20 opacity-50">
+                        <td className="py-2.5 font-bold text-soy-bottle line-through">minimist</td>
+                        <td className="py-2.5"><span className="border border-soy-bottle/20 px-1 py-0.5 text-[9px] font-black">npm</span></td>
+                        <td className="py-2.5 line-through">Prototype pollution prototype bypass.</td>
+                        <td className="py-2.5">Expired May 10</td>
+                        <td className="py-2.5 text-right"><span className="bg-gray-400 text-white border border-soy-bottle px-1.5 py-0.5 text-[9px] font-black">EXPIRED</span></td>
+                      </tr>
+                      <tr className="bg-soy-label/20 opacity-50">
+                        <td className="py-2.5 font-bold text-soy-bottle line-through">nanoid</td>
+                        <td className="py-2.5"><span className="border border-soy-bottle/20 px-1 py-0.5 text-[9px] font-black">npm</span></td>
+                        <td className="py-2.5 line-through">Random generator seeding fallback review.</td>
+                        <td className="py-2.5">Revoked</td>
+                        <td className="py-2.5 text-right"><span className="bg-soy-red text-white border border-black px-1.5 py-0.5 text-[9px] font-black">REVOKED</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="p-4 border-2 border-dashed border-soy-bottle/20 bg-soy-label/10 flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Grant new exception:</span>
+                  <span className="text-[9px] font-black bg-soy-bottle text-soy-label px-2 py-1 select-none cursor-not-allowed">[ + ADD POLICY ]</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs font-bold uppercase tracking-widest opacity-60 italic text-center lg:text-left">
+              * Exceptions allow your build pipelines to pass despite score-caps on specific, audited dependencies.
+            </p>
+          </div>
         </div>
       </div>
     );
   }
+
 
   // phase === 'auth'
   return (

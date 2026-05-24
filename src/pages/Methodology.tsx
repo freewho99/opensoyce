@@ -319,6 +319,62 @@ export default function Methodology() {
   );
 }
 
+function VocabCard({ title, score, subLabel, desc }: { title: string, score: string, subLabel?: string, desc: string }) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const isLong = desc.length > 150;
+
+  return (
+    <div className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000] flex flex-col justify-between">
+      <div>
+        <div className="mb-4">
+          <h3 className="text-2xl font-black uppercase italic tracking-tight mb-1">{title}</h3>
+          <div className="text-soy-red font-black text-xs uppercase tracking-widest">{score}</div>
+        </div>
+        {subLabel && (
+          <p className="text-xs font-medium italic opacity-60 mb-3 leading-snug">{subLabel}</p>
+        )}
+        <p className="text-sm font-medium opacity-80 leading-relaxed italic">
+          "{isLong && !isExpanded ? `${desc.slice(0, 150)}...` : desc}"
+        </p>
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="mt-4 text-left text-xs font-black uppercase tracking-widest text-soy-red hover:underline outline-none"
+        >
+          {isExpanded ? 'COLLAPSE -' : 'EXPAND +'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function LimitationCard({ tag, title, body, status }: { tag: string, title: string, body: string, status: string }) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const isLong = body.length > 200;
+
+  return (
+    <div className="bg-soy-label border-4 border-black p-8 shadow-[8px_8px_0px_#000] flex flex-col justify-between">
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <span className="inline-block bg-black text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.3em]">{tag}</span>
+          <span className="inline-block bg-soy-red text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em]">{status}</span>
+        </div>
+        <h3 className="text-xl font-black uppercase italic tracking-tight mb-3 leading-tight">{title}</h3>
+        <p className="text-sm font-medium opacity-80 leading-relaxed">{isLong && !isExpanded ? `${body.slice(0, 200)}...` : body}</p>
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="mt-4 text-left text-xs font-black uppercase tracking-widest text-soy-red hover:underline outline-none"
+        >
+          {isExpanded ? 'READ LESS -' : 'READ MORE +'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ScoreRange({ label, status, subLabel, desc, color }: { label: string, status: string, subLabel?: string, desc: string, color: string }) {
   return (
     <div className="flex flex-col md:flex-row md:items-start gap-4">
@@ -330,34 +386,6 @@ function ScoreRange({ label, status, subLabel, desc, color }: { label: string, s
         )}
         <p className="text-[10px] font-bold uppercase tracking-widest opacity-40 leading-relaxed">{desc}</p>
       </div>
-    </div>
-  );
-}
-
-function VocabCard({ title, score, subLabel, desc }: { title: string, score: string, subLabel?: string, desc: string }) {
-  return (
-    <div className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#000]">
-      <div className="mb-4">
-        <h3 className="text-2xl font-black uppercase italic tracking-tight mb-1">{title}</h3>
-        <div className="text-soy-red font-black text-xs uppercase tracking-widest">{score}</div>
-      </div>
-      {subLabel && (
-        <p className="text-xs font-medium italic opacity-60 mb-3 leading-snug">{subLabel}</p>
-      )}
-      <p className="text-sm font-medium opacity-80 leading-relaxed italic">"{desc}"</p>
-    </div>
-  );
-}
-
-function LimitationCard({ tag, title, body, status }: { tag: string, title: string, body: string, status: string }) {
-  return (
-    <div className="bg-soy-label border-4 border-black p-8 shadow-[8px_8px_0px_#000] flex flex-col">
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <span className="inline-block bg-black text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.3em]">{tag}</span>
-        <span className="inline-block bg-soy-red text-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em]">{status}</span>
-      </div>
-      <h3 className="text-xl font-black uppercase italic tracking-tight mb-3 leading-tight">{title}</h3>
-      <p className="text-sm font-medium opacity-80 leading-relaxed">{body}</p>
     </div>
   );
 }

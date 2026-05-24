@@ -16,10 +16,18 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Watchlist() {
-  const { watchlist, removeFromWatchlist } = useWatchlist();
+  const { watchlist, removeFromWatchlist, addToWatchlist } = useWatchlist();
   const [projectsData, setProjectsData] = useState<Record<string, Project>>({});
   const [loading, setLoading] = useState(true);
   const [hasToken, setHasToken] = useState<boolean | null>(null);
+
+  const PRESETS = [
+    { owner: 'facebook', repo: 'react', score: 8.8, desc: 'Web UI Standard' },
+    { owner: 'vercel', repo: 'next.js', score: 8.5, desc: 'Full-stack React Framework' },
+    { owner: 'tiangolo', repo: 'fastapi', score: 9.2, desc: 'Python API Framework' },
+    { owner: 'expressjs', repo: 'express', score: 7.8, desc: 'Node.js Web Server' },
+    { owner: 'lodash', repo: 'lodash', score: 8.0, desc: 'Utility Toolkit' },
+  ];
 
   useEffect(() => {
     fetch('/api/config')
@@ -119,7 +127,7 @@ export default function Watchlist() {
 
   if (watchlist.length === 0) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-20 flex flex-col items-center justify-center text-center">
+      <div className="max-w-7xl mx-auto px-4 py-16 flex flex-col items-center justify-center text-center">
         <h1 className="text-6xl md:text-8xl font-black uppercase italic tracking-tighter mb-8 bg-soy-bottle text-soy-label px-8 py-4 shadow-[12px_12px_0px_#E63322]">
           YOUR WATCHLIST IS EMPTY
         </h1>
@@ -127,14 +135,44 @@ export default function Watchlist() {
           Track your critical dependencies. Get notified when scores drop. 
           Don't let your stack rot.
         </p>
-        <Link 
-          to="/lookup" 
-          className="group relative inline-flex items-center gap-4 bg-soy-red text-white text-3xl font-black uppercase italic px-12 py-6 hover:translate-x-1 hover:-translate-y-1 transition-transform"
-        >
-          <div className="absolute inset-0 bg-soy-bottle translate-x-3 translate-y-3 -z-10 group-hover:translate-x-4 group-hover:translate-y-4 transition-transform"></div>
-          <Plus size={40} strokeWidth={4} />
-          ADD REPO
-        </Link>
+        <div className="mb-16">
+          <Link 
+            to="/lookup" 
+            className="group relative inline-flex items-center gap-4 bg-soy-red text-white text-3xl font-black uppercase italic px-12 py-6 hover:translate-x-1 hover:-translate-y-1 transition-transform"
+          >
+            <div className="absolute inset-0 bg-soy-bottle translate-x-3 translate-y-3 -z-10 group-hover:translate-x-4 group-hover:translate-y-4 transition-transform"></div>
+            <Plus size={40} strokeWidth={4} />
+            ADD REPO
+          </Link>
+        </div>
+
+        <div className="w-full max-w-4xl border-4 border-soy-bottle bg-white p-8 shadow-[8px_8px_0px_#000] text-left">
+          <h3 className="text-2xl font-black uppercase italic tracking-tight mb-4 text-soy-bottle">
+            OR SEED WITH POPULAR PRESETS:
+          </h3>
+          <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-6">
+            Quickly monitor some of the most common packages in the ecosystem with one click.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {PRESETS.map((preset) => (
+              <div 
+                key={`${preset.owner}/${preset.repo}`} 
+                className="border-2 border-soy-bottle/40 p-4 bg-soy-label/20 flex items-center justify-between hover:bg-soy-label/50 transition-colors"
+              >
+                <div>
+                  <h4 className="text-lg font-black uppercase tracking-tight">{preset.owner}/{preset.repo}</h4>
+                  <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">{preset.desc}</p>
+                </div>
+                <button
+                  onClick={() => addToWatchlist(preset.owner, preset.repo, preset.score)}
+                  className="bg-soy-bottle text-soy-label text-xs font-black uppercase px-4 py-2 hover:bg-soy-red hover:text-white transition-colors border-2 border-black"
+                >
+                  ADD +
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
