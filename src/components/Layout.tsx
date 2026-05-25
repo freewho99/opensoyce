@@ -472,7 +472,7 @@ export default function Layout() {
                               className="lg:hidden fixed inset-0 top-14 z-30 bg-black/40 cursor-default"
                             />
                 )}
-                     <aside className={`fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-64 lg:w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden transform transition-transform duration-200 ease-out lg:translate-x-0 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                     <aside className={`fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-64 lg:w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex-col overflow-hidden transform transition-transform duration-200 ease-out lg:translate-x-0 ${drawerOpen ? 'flex translate-x-0' : 'hidden lg:flex -translate-x-full'}`}>
                       <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
 
                         {/* ── CORE — Always visible, visually prioritised ──────────── */}

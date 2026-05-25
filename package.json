@@ -11,6 +11,8 @@
     "lint": "tsc --noEmit",
     "check:mojibake": "node scripts/check-mojibake.mjs",
     "test:swarm": "playwright test e2e/opensoyce-swarm.spec.ts --grep \"4-PERSONA SWARM\"",
+    "test:mobile": "playwright test e2e/test-mobile.spec.ts",
+    "test:routes": "playwright test e2e/opensoyce-routes-swarm.spec.ts",
     "test:models": "node test-models.js"
   },
   "dependencies": {

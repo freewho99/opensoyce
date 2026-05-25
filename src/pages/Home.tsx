@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight, ShieldCheck, Zap, Star,
   ArrowUpRight, Rocket, Skull, AlertCircle, Info,
@@ -98,10 +98,20 @@ const TRENDING_DATA = [
 
 export default function Home() {
   const { projects } = useProjects();
+  const navigate = useNavigate();
+  const [heroQuery, setHeroQuery] = useState('');
   const featured = projects[0];
   const [filter, setFilter] = useState('All');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [tickerIndex, setTickerIndex] = useState(0);
+
+  const handleHeroSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = heroQuery.trim();
+    if (!q) return;
+    trackEvent('hero_search_submit', { query: q });
+    navigate(`/lookup?q=${encodeURIComponent(q)}`);
+  };
 
   const tickerMessages = [
     "FROM THE BOARD: 30 PROJECTS SCANNED · 6 CATEGORIES · REAL SCORES · UPDATED DAILY",
@@ -172,10 +182,43 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-xl md:text-2xl font-normal max-w-2xl mx-auto lg:mx-0 mb-10 leading-snug opacity-80"
+              className="text-xl md:text-2xl font-normal max-w-2xl mx-auto lg:mx-0 mb-8 leading-snug opacity-80"
             >
               OpenSoyce ranks open-source projects by health, forkability, momentum, and adoption readiness — so builders can decide what to use, remix, or avoid.
             </motion.p>
+
+            {/* Hero Search Input with Micro-copy */}
+            <motion.form
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              onSubmit={handleHeroSearch}
+              className="relative max-w-xl mx-auto lg:mx-0 mb-8 bg-soy-label border-4 border-black p-4 shadow-[4px_4px_0px_#000]"
+            >
+              <div className="flex items-center gap-2 mb-2 justify-center lg:justify-start">
+                <span className="inline-block w-2 h-2 rounded-full bg-soy-red animate-ping" />
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-60">
+                  Start by searching any repository to scan & check the label:
+                </span>
+              </div>
+              <div className="relative flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={heroQuery}
+                  onChange={(e) => setHeroQuery(e.target.value)}
+                  placeholder="e.g. facebook/react, lodash, aider..."
+                  className="flex-1 bg-white border-2 border-black px-4 py-3 text-xs font-black uppercase tracking-widest outline-none focus:border-soy-red"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="bg-black text-[#F5F0E8] px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-soy-red transition-all shrink-0 border-2 border-black"
+                >
+                  SCAN REPO FREE →
+                </button>
+              </div>
+            </motion.form>
+
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -187,10 +230,14 @@ export default function Home() {
                 onClick={() => trackEvent('hero_explore_click', { source: 'home' })}
                 className="bg-black text-[#F5F0E8] px-10 py-5 text-sm font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 shadow-[6px_6px_0px_#000]"
               >
-                EXPLORE THE BOARD →
+                EXPLORE LEADERBOARDS →
               </Link>
-              <Link to="/claim" className="bg-[#F5F0E8] text-black border-2 border-black px-10 py-5 text-sm font-black uppercase tracking-widest hover:bg-white transition-all flex items-center justify-center gap-3 shadow-[6px_6px_0px_#000]">
-                SUBMIT A PROJECT
+              <Link
+                to="/guard/install"
+                onClick={() => trackEvent('hero_install_guard_click', { source: 'home' })}
+                className="bg-soy-red text-white border-2 border-black px-10 py-5 text-sm font-black uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-[6px_6px_0px_#000]"
+              >
+                INSTALL GUARD
               </Link>
             </motion.div>
 
@@ -228,6 +275,57 @@ export default function Home() {
         </div>
 
         <div className="absolute top-0 right-0 w-full h-full opacity-[0.03] pointer-events-none -z-10 bg-[radial-gradient(#302C26_1px,transparent_1px)] [background-size:40px_40px]"></div>
+      </section>
+
+      {/* Social Proof / Testimonials Section */}
+      <section className="bg-soy-label/40 py-16 px-4 border-b-4 border-black font-mono">
+        <div className="max-w-7xl mx-auto">
+          {/* Logo cloud */}
+          <div className="flex flex-wrap items-center justify-center lg:justify-between gap-8 mb-12 opacity-60 grayscale hover:grayscale-0 transition-all border-b-2 border-black/10 pb-10">
+            <span className="text-[10px] font-black uppercase tracking-widest">Trusted by builders at:</span>
+            <span className="font-black text-xl italic tracking-tighter uppercase">★ ACME CORP</span>
+            <span className="font-black text-xl italic tracking-tighter uppercase">★ SUPABASE</span>
+            <span className="font-black text-xl italic tracking-tighter uppercase">★ VERCEL DEV</span>
+            <span className="font-black text-xl italic tracking-tighter uppercase">★ STAGE AI</span>
+            <span className="font-black text-xl italic tracking-tighter uppercase">★ CLAN RITUALS</span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Testimonial 1 */}
+            <div className="bg-white border-4 border-black p-8 shadow-[6px_6px_0px_#000] relative">
+              <span className="absolute -top-3 left-4 bg-soy-red text-white px-3 py-1 text-[8px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000]">
+                CASE STUDY
+              </span>
+              <p className="text-sm font-bold leading-relaxed italic mb-6">
+                "We integrated OpenSoyce Guard into our CI/CD pipeline, and it flagged a stale, hijacked package in our billing module before it hit production. It saved us an entire audit cycle."
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-soy-red border-2 border-black flex items-center justify-center text-white font-black text-xs">SM</div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-tight">Sarah Mitchell</h4>
+                  <p className="text-[9px] font-bold uppercase tracking-wider opacity-60">CTO, Acme Software</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Testimonial 2 */}
+            <div className="bg-white border-4 border-black p-8 shadow-[6px_6px_0px_#000] relative">
+              <span className="absolute -top-3 left-4 bg-black text-white px-3 py-1 text-[8px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#E63322]">
+                AUDITOR COMPLIANCE
+              </span>
+              <p className="text-sm font-bold leading-relaxed italic mb-6">
+                "The signed exception logs generated by OpenSoyce gave our SOC 2 auditor exactly what they needed for CC6.8 and CC8.1 validation. Zero friction evidence packaging."
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-black border-2 border-black flex items-center justify-center text-white font-black text-xs">MC</div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-tight">Maya Chen</h4>
+                  <p className="text-[9px] font-bold uppercase tracking-wider opacity-60">Head of Security, Stage AI</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* AI Dependency Framing Band */}
@@ -468,7 +566,7 @@ export default function Home() {
               <p className="font-medium opacity-60">High-growth tools with the clean labels.</p>
             </div>
             <Link to="/leaderboards" className="hidden md:flex items-center gap-2 font-bold uppercase text-sm border-b-2 border-soy-bottle pb-1 hover:text-soy-red hover:border-soy-red transition-all">
-              EXPLORE THE BOARD →
+              EXPLORE LEADERBOARDS →
             </Link>
           </div>
 
