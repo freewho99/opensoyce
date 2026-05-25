@@ -1,10 +1,74 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Settings as SettingsIcon, Bell, Star, KeyRound, ArrowUpRight, Search } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Star, KeyRound, ArrowUpRight, Search, Shield, Check, Copy, Loader2, Lock, Plus } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function Settings() {
   const [search, setSearch] = useState('');
+  
+  // Compliance API Token States
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
+  const [sessionUser, setSessionUser] = useState<string | null>(null);
+  const [orgsList, setOrgsList] = useState<string[]>([]);
+  const [selectedOrg, setSelectedOrg] = useState<string>('');
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [mintLoading, setMintLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkAuth = async () => {
+      try {
+        setAuthStatus('checking');
+        const resp = await fetch('/api/exceptions?action=whoami');
+        if (resp.ok) {
+          const body = await resp.json();
+          if (cancelled) return;
+          setSessionUser(body.login || null);
+          setOrgsList(body.orgs || []);
+          if (body.orgs && body.orgs.length > 0) {
+            setSelectedOrg(body.orgs[0]);
+          }
+          setAuthStatus('authenticated');
+        } else {
+          if (!cancelled) setAuthStatus('unauthenticated');
+        }
+      } catch (err) {
+        if (!cancelled) setAuthStatus('unauthenticated');
+      }
+    };
+    checkAuth();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleGenerateKey = async () => {
+    if (!selectedOrg) return;
+    try {
+      setMintLoading(true);
+      const resp = await fetch('/api/exceptions?action=compliance-token-mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org: selectedOrg }),
+      });
+      if (resp.ok) {
+        const body = await resp.json();
+        setGeneratedKey(body.key);
+      } else {
+        alert('Failed to generate key');
+      }
+    } catch (e) {
+      alert('Error generating key');
+    } finally {
+      setMintLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (!generatedKey) return;
+    navigator.clipboard.writeText(generatedKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const activeFeatures = [
     {
@@ -168,6 +232,107 @@ export default function Settings() {
           </p>
         </div>
       )}
+
+      {/* Compliance Integrations Section */}
+      <section className="mb-12 border-t-4 border-dashed border-soy-bottle/20 pt-10">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-3 h-8 bg-soy-red" />
+          <h2 className="text-2xl font-black uppercase italic tracking-tight text-soy-bottle">Compliance Integrations</h2>
+          <div className="flex-1 h-[3px] bg-soy-bottle" />
+          <span className="text-[9px] font-black uppercase tracking-widest bg-soy-red text-white px-3 py-1 border-2 border-black shadow-[2px_2px_0px_#000]">[PAID / ENTERPRISE]</span>
+        </div>
+
+        {authStatus === 'checking' && (
+          <div className="bg-white border-4 border-soy-bottle p-8 shadow-[4px_4px_0px_#000] flex flex-col items-center justify-center py-12">
+            <Loader2 className="animate-spin text-soy-red mb-3" />
+            <p className="text-xs font-black uppercase tracking-widest opacity-60">Checking compliance status...</p>
+          </div>
+        )}
+
+        {authStatus === 'unauthenticated' && (
+          <div className="bg-white border-4 border-soy-bottle p-8 shadow-[4px_4px_0px_#000] text-center">
+            <Lock className="text-soy-red mx-auto mb-4" size={40} />
+            <h3 className="text-xl font-black uppercase italic tracking-tight mb-2">Gated Feature: API Auditor Keys</h3>
+            <p className="text-sm opacity-70 max-w-lg mx-auto mb-6">
+              Connect OpenSoyce to Vanta, Drata, or your custom compliance logs. Sign in via GitHub to generate keys authorized for your repositories.
+            </p>
+            <Link
+              to="/dashboard"
+              className="inline-block bg-soy-bottle text-white font-black uppercase tracking-widest text-xs py-3 px-8 border-4 border-black hover:bg-soy-red transition-all shadow-[4px_4px_0px_#000]"
+            >
+              Sign In via Dashboard
+            </Link>
+          </div>
+        )}
+
+        {authStatus === 'authenticated' && (
+          <div className="bg-white border-4 border-soy-bottle p-8 shadow-[4px_4px_0px_#000] space-y-6">
+            <div className="flex items-center gap-3 mb-2">
+              <Shield className="text-soy-red" size={24} />
+              <h3 className="text-lg font-black uppercase tracking-widest">Generate Compliance Token</h3>
+            </div>
+            
+            <p className="text-sm opacity-70">
+              Generate a 1-year read-only compliance access token for Vanta/Drata to query exceptions and evidence.
+            </p>
+
+            {orgsList.length === 0 ? (
+              <div className="bg-amber-50 border-2 border-amber-400 p-4 text-xs font-bold uppercase tracking-wider text-amber-800">
+                ⚠️ You must belong to at least one GitHub organization to generate compliance keys.
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-4 items-end">
+                <div className="flex-1 space-y-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-widest opacity-40">SELECT TARGET ORG</label>
+                  <select
+                    value={selectedOrg}
+                    onChange={(e) => setSelectedOrg(e.target.value)}
+                    className="w-full bg-soy-label border-4 border-soy-bottle p-3 font-mono text-xs font-black uppercase tracking-widest outline-none focus:bg-white"
+                  >
+                    {orgsList.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleGenerateKey}
+                  disabled={mintLoading}
+                  className="bg-soy-bottle text-white py-4 px-6 text-xs font-black uppercase tracking-widest border-4 border-black hover:bg-soy-red transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {mintLoading ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />}
+                  Generate Auditor Key
+                </button>
+              </div>
+            )}
+
+            {generatedKey && (
+              <div className="space-y-3 pt-4 border-t border-black/10">
+                <div className="block text-[10px] font-bold uppercase tracking-widest opacity-40">YOUR AUDITOR KEY (SAVE NOW)</div>
+                <div className="flex bg-soy-label border-4 border-soy-bottle p-4 items-center justify-between font-mono text-xs">
+                  <span className="break-all select-all font-black text-soy-bottle">{generatedKey}</span>
+                  <button
+                    onClick={handleCopy}
+                    className="ml-4 p-2 bg-white border-2 border-black hover:bg-soy-label text-soy-bottle transition-all"
+                    title="Copy Key"
+                  >
+                    {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                  </button>
+                </div>
+
+                <div className="bg-[#0f0f0f] border-4 border-soy-bottle p-6 text-white font-mono text-[11px] leading-relaxed space-y-3">
+                  <div className="text-[10px] font-black uppercase text-soy-red tracking-widest border-b border-white/10 pb-1">Vanta/Drata Configuration Guide</div>
+                  <div>To ingest audit evidence, configure your custom compliance pull agent with:</div>
+                  <div className="space-y-1 pl-4">
+                    <div><strong>Connection Type:</strong> REST API (PULL)</div>
+                    <div><strong>Evidence Fetch URL:</strong> <code className="text-emerald-400">https://opensoyce.com/api/compliance/evidence?org={selectedOrg}</code></div>
+                    <div><strong>Authorization:</strong> <code className="text-emerald-400">Bearer osg_auditor_...</code></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       <section className="bg-soy-label border-2 border-soy-bottle p-6">
         <p className="text-sm font-bold opacity-80 mb-2">

@@ -13,6 +13,7 @@
     "test:swarm": "playwright test e2e/opensoyce-swarm.spec.ts --grep \"4-PERSONA SWARM\"",
     "test:mobile": "playwright test e2e/test-mobile.spec.ts",
     "test:routes": "playwright test e2e/opensoyce-routes-swarm.spec.ts",
+    "test:compliance": "node scripts/test-compliance-evidence.mjs",
     "test:models": "node test-models.js"
   },
   "dependencies": {

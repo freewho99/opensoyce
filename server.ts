@@ -407,6 +407,16 @@ async function startServer() {
   app.get("/api/exceptions", exceptionsAdapter);
   app.post("/api/exceptions", exceptionsAdapter);
   app.delete("/api/exceptions", exceptionsAdapter);
+  
+  app.get("/api/compliance/evidence", async (req: express.Request, res: express.Response) => {
+    try {
+      req.query = { ...req.query, action: 'compliance-evidence' };
+      await exceptionsHandler(req, res);
+    } catch (err: any) {
+      console.error('compliance evidence handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ error: 'INTERNAL_ERROR', message: 'unexpected server error' });
+    }
+  });
 
   const slackWebhookAdapter = async (req: express.Request, res: express.Response) => {
     try {

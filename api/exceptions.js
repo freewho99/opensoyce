@@ -180,6 +180,47 @@ export function verifySessionToken(token, key, opts = {}) {
   return { login: payload.login, orgs };
 }
 
+export function signAuditorToken({ login, org, ttlSec = 31536000 }, key) {
+  if (!key || typeof key !== 'string') throw new Error('HMAC_KEY_MISSING');
+  if (!login || typeof login !== 'string') throw new Error('LOGIN_MISSING');
+  if (!org || typeof org !== 'string') throw new Error('ORG_MISSING');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { login, org, role: 'auditor', exp: now + ttlSec };
+  const json = JSON.stringify(payload);
+  const enc = base64urlEncode(json);
+  const sig = crypto.createHmac('sha256', key).update(json).digest('hex');
+  return `osg_auditor_${enc}.${sig}`;
+}
+
+export function verifyAuditorToken(token, key) {
+  if (!key || typeof key !== 'string') return null;
+  if (typeof token !== 'string' || !token.startsWith('osg_auditor_')) return null;
+  const parts = token.slice('osg_auditor_'.length);
+  if (!parts.includes('.')) return null;
+  const idx = parts.indexOf('.');
+  const enc = parts.slice(0, idx);
+  const sig = parts.slice(idx + 1);
+  if (!enc || !sig) return null;
+  let json;
+  try {
+    json = base64urlDecode(enc).toString('utf8');
+  } catch {
+    return null;
+  }
+  const expected = crypto.createHmac('sha256', key).update(json).digest('hex');
+  if (!timingSafeEqualHex(sig, expected)) return null;
+  let payload;
+  try {
+    payload = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (!payload || typeof payload.login !== 'string' || typeof payload.org !== 'string' || payload.role !== 'auditor' || typeof payload.exp !== 'number') return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (now >= payload.exp) return null;
+  return payload;
+}
+
 function parseCookieHeader(raw) {
   const out = {};
   if (typeof raw !== 'string' || !raw) return out;
@@ -773,6 +814,147 @@ async function handleWhoami(req, res, session) {
 async function handleLogout(req, res) {
   clearSessionCookie(res);
   return sendJson(res, 200, { ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// Compliance Integrations (Vanta/Drata evidence + scoped tokens)
+// ---------------------------------------------------------------------------
+
+async function handleComplianceEvidence(req, res) {
+  // Extract token from Authorization: Bearer <token> or key=<token>
+  let token = null;
+  const auth = req.headers && (req.headers.authorization || req.headers.Authorization);
+  if (typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
+    token = auth.slice(7).trim();
+  } else {
+    const q = getQuery(req);
+    if (typeof q.key === 'string') token = q.key.trim();
+  }
+
+  if (!token) {
+    return err(res, 401, 'AUTH_REQUIRED', 'Auditor API key is required');
+  }
+
+  const secret = process.env.OPENSOYCE_DASHBOARD_SECRET;
+  if (!secret) {
+    return err(res, 500, 'DASHBOARD_NOT_CONFIGURED', 'dashboard is not configured');
+  }
+
+  const auditorSession = verifyAuditorToken(token, secret);
+  if (!auditorSession) {
+    return err(res, 401, 'INVALID_TOKEN', 'invalid or expired compliance auditor key');
+  }
+
+  const q = getQuery(req);
+  const org = typeof q.org === 'string' ? q.org.trim() : '';
+  if (!org) {
+    return err(res, 400, 'BAD_REQUEST', 'org query parameter is required');
+  }
+
+  if (auditorSession.org.toLowerCase() !== org.toLowerCase()) {
+    return err(res, 403, 'FORBIDDEN', 'this auditor key is not authorized for the requested organization');
+  }
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('compliance-evidence: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  // Fetch all exceptions for the org
+  const { data, error } = await sb
+    .from('exceptions')
+    .select('id, owner, repo, package_name, ecosystem, reason, expires_at, granted_by, created_at, revoked_at, status, revoked_by')
+    .eq('owner', org)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('compliance-evidence query failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+
+  const list = data || [];
+  const now = Date.now();
+  let active = 0;
+  let expired = 0;
+  let revoked = 0;
+  let pending = 0;
+
+  for (const row of list) {
+    if (row.status === 'pending') {
+      pending++;
+    } else if (row.status === 'revoked' || row.revoked_at) {
+      revoked++;
+    } else {
+      const expiresMs = Date.parse(row.expires_at);
+      if (Number.isFinite(expiresMs) && expiresMs <= now) {
+        expired++;
+      } else {
+        active++;
+      }
+    }
+  }
+
+  const report = {
+    reportType: 'SOC2_COMPLIANCE_EVIDENCE',
+    org,
+    generatedAt: new Date().toISOString(),
+    summary: {
+      total: list.length,
+      active,
+      expired,
+      revoked,
+      pending,
+    },
+    exceptions: list,
+  };
+
+  const signingKey = process.env.OPENSOYCE_SIGNING_PRIVATE_KEY;
+  if (signingKey && signingKey.trim()) {
+    try {
+      const signed = signReport(report, {
+        privateKeyPem: signingKey,
+        publicKeyPem: process.env.OPENSOYCE_SIGNING_PUBLIC_KEY,
+        location: 'top-level',
+      });
+      return sendJson(res, 200, signed);
+    } catch (e) {
+      console.error('compliance-evidence: signing failed', e.message);
+      res.setHeader('X-OpenSoyce-Signing-Error', String(e.message || e).slice(0, 200));
+      return sendJson(res, 200, report);
+    }
+  }
+
+  return sendJson(res, 200, report);
+}
+
+async function handleComplianceTokenMint(req, res, session) {
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+
+  const org = typeof body.org === 'string' ? body.org.trim() : '';
+  if (!org || !isValidGithubName(org)) {
+    return err(res, 400, 'BAD_REQUEST', 'org is missing or invalid');
+  }
+
+  const sessionOrgs = Array.isArray(session.orgs) ? session.orgs : [];
+  if (!sessionOrgs.includes(org)) {
+    return err(res, 403, 'FORBIDDEN', 'you are not a member of that GitHub org');
+  }
+
+  const secret = process.env.OPENSOYCE_DASHBOARD_SECRET;
+  if (!secret) {
+    return err(res, 500, 'DASHBOARD_NOT_CONFIGURED', 'dashboard is not configured');
+  }
+
+  const key = signAuditorToken({ login: session.login, org }, secret);
+  return sendJson(res, 200, { ok: true, org, key });
 }
 
 // ---------------------------------------------------------------------------
@@ -1711,11 +1893,13 @@ export default async function handler(req, res) {
     if (method === 'POST' && action === 'auth-callback') return await handleAuthCallback(req, res);
     if (method === 'POST' && action === 'logout') return await handleLogout(req, res);
     if (method === 'POST' && action === 'slack-webhook') return await handleSlackWebhook(req, res);
+    if (method === 'GET' && action === 'compliance-evidence') return await handleComplianceEvidence(req, res);
 
     // Auth-gated branches.
     const session = verifyDashboardSession(req);
     if (!session) return err(res, 401, 'AUTH_REQUIRED', 'a valid dashboard session is required');
 
+    if (method === 'POST' && action === 'compliance-token-mint') return await handleComplianceTokenMint(req, res, session);
     if (method === 'GET' && action === 'compliance-report') return await handleComplianceReport(req, res, session);
     if (method === 'GET' && action === 'whoami') return await handleWhoami(req, res, session);
     if (method === 'GET' && action === 'my-repos') return await handleMyRepos(req, res, session);

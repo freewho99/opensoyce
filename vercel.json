@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/compliance/evidence",
+      "destination": "/api/exceptions?action=compliance-evidence"
+    },
+    {
       "source": "/api/integrations/slack/webhook",
       "destination": "/api/exceptions?action=slack-webhook"
     },
