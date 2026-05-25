@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/integrations/slack/webhook",
+      "destination": "/api/exceptions?action=slack-webhook"
+    },
+    {
       "source": "/api/github/:owner/:repo",
       "destination": "/api/github"
     },

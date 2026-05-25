@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import slackWebhookHandler from '../api/integrations/slack/webhook.js';
+import slackWebhookHandler from '../api/exceptions.js';
 import { __resetSupabaseClientForTests } from '../api/_supabase.js';
 
 let passed = 0;
@@ -71,6 +71,7 @@ function generateSlackSignature(rawBody, timestamp, secret) {
 
 test('Slack Webhook: rejects non-POST requests', async () => {
   const req = new MockReq('GET');
+  req.query = { action: 'slack-webhook' };
   const res = new MockRes();
   
   await slackWebhookHandler(req, res);
@@ -98,6 +99,7 @@ test('Slack Webhook: parses valid payload and updates status', async () => {
     'x-slack-request-timestamp': timestamp,
     'content-type': 'application/x-www-form-urlencoded'
   }, bodyText);
+  req.query = { action: 'slack-webhook' };
   const res = new MockRes();
   
   // Mock Supabase client
