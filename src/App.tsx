@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -37,7 +37,6 @@ import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Guard from './pages/Guard';
 import Proof from './pages/Proof';
-import Soc2 from './pages/Soc2';
 import NotFound from './pages/NotFound';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
@@ -69,7 +68,7 @@ export function AppRoutes() {
         <Route path="/about" element={<About />} />
         <Route path="/methodology" element={<Methodology />} />
         <Route path="/proof" element={<Proof />} />
-        <Route path="/soc2" element={<Soc2 />} />
+        <Route path="/soc2" element={<Navigate to="/guard?tab=compliance" replace />} />
         <Route path="/remix" element={<Remix />} />
         <Route path="/heat-check" element={<HeatCheck />} />
         <Route path="/submit-project" element={<SubmitProject />} />

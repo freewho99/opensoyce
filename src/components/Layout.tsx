@@ -62,7 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'AI Recipes', path: '/recipes', hint: 'AI-powered stack recommendations', icon: Wand2, group: 'COMMUNITY' },
   { label: 'Remix', path: '/remix', hint: 'Remix and fork projects', icon: Shuffle, group: 'COMMUNITY' },
   { label: 'Methodology', path: '/methodology', hint: 'How we score projects', icon: BookOpen, group: 'TRUST' },
-  { label: 'SOC 2', path: '/soc2', hint: 'SOC 2 & ISO 27001 compliance', icon: Shield, group: 'TRUST' },
+  { label: 'SOC 2', path: '/guard?tab=compliance', hint: 'SOC 2 & ISO 27001 compliance', icon: Shield, group: 'TRUST' },
   { label: 'About', path: '/about', hint: 'About OpenSoyce', icon: Info, group: 'TRUST' },
   { label: 'FAQ', path: '/faq', hint: 'Frequently asked questions', icon: HelpCircle, group: 'TRUST' },
   { label: 'Dashboard', path: '/dashboard', hint: 'Your Guard dashboard', icon: LayoutDashboard, group: 'DEVELOPER' },
@@ -76,6 +76,67 @@ const PAGES = NAV_ITEMS.map(({ label, path, hint }) => ({ label, path, hint }));
 function formatStars(n: number): string {
     if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
     return String(n);
+}
+
+interface CollapsibleGroupProps {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+  items: NavItem[];
+  getNavLinkClass: (path: string) => string;
+  onNavClick: (label: string) => void;
+}
+
+function CollapsibleGroup({
+  label,
+  expanded,
+  onToggle,
+  items,
+  getNavLinkClass,
+  onNavClick,
+}: CollapsibleGroupProps) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center justify-between px-3 py-[7px] text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 hover:text-soy-bottle/80 transition-colors w-full mt-1 mb-0.5"
+      >
+        <span>{label}</span>
+        <ChevronDown
+          size={11}
+          strokeWidth={2.5}
+          className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden flex flex-col gap-0.5"
+          >
+            {items.map(item => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => onNavClick(item.label)}
+                  className={getNavLinkClass(item.path)}
+                >
+                  <Icon size={13} strokeWidth={2.5} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 export default function Layout() {
@@ -98,6 +159,22 @@ export default function Layout() {
 
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
     useEffect(() => { setDevExpanded(isLoggedIn); }, [isLoggedIn]);
+
+  // Auto-expand the group that owns the currently active route
+  const activeGroup = NAV_ITEMS.find(i => {
+    const basePath = i.path.split('?')[0];
+    return basePath === location.pathname;
+  })?.group;
+  const [discoverExpanded, setDiscoverExpanded] = useState(() => activeGroup === 'DISCOVER');
+  const [communityExpanded, setCommunityExpanded] = useState(() => activeGroup === 'COMMUNITY');
+  const [trustExpanded, setTrustExpanded] = useState(() => activeGroup === 'TRUST');
+
+  // Keep groups open when navigating within them
+  useEffect(() => {
+    if (activeGroup === 'DISCOVER') setDiscoverExpanded(true);
+    if (activeGroup === 'COMMUNITY') setCommunityExpanded(true);
+    if (activeGroup === 'TRUST') setTrustExpanded(true);
+  }, [activeGroup]);
 
   const isRepo = (q: string) => /^[\w.-]+\/[\w.-]+$/.test(q.trim());
 
@@ -181,10 +258,28 @@ export default function Layout() {
         setLastClickTime(now);
   };
 
-  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-        `flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm ${
-                isActive ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : 'text-soy-bottle/70'
-        }`;
+  const getIsGuardActive = () => {
+    return location.pathname === '/guard' && new URLSearchParams(location.search).get('tab') !== 'compliance';
+  };
+
+  const getNavLinkClass = (path: string) => {
+    const [base, query] = path.split('?');
+    const isPathActive = location.pathname === base;
+    let isQueryActive = true;
+    if (query) {
+      const searchParams = new URLSearchParams(location.search);
+      const [qKey, qVal] = query.split('=');
+      isQueryActive = searchParams.get(qKey) === qVal;
+    } else if (base === '/guard') {
+      // If guard link, only active if not on compliance tab
+      const searchParams = new URLSearchParams(location.search);
+      isQueryActive = searchParams.get('tab') !== 'compliance';
+    }
+    const active = isPathActive && isQueryActive;
+    return `flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm ${
+      active ? 'text-soy-red border-l-2 border-soy-red pl-[10px]' : 'text-soy-bottle/70'
+    }`;
+  };
 
   const bottomLinkClass = 'flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-colors duration-150 hover:text-soy-red hover:bg-soy-bottle/5 rounded-sm text-soy-bottle/50 hover:text-soy-bottle/80';
 
@@ -377,83 +472,148 @@ export default function Layout() {
                               className="lg:hidden fixed inset-0 top-14 z-30 bg-black/40 cursor-default"
                             />
                 )}
-        
-          {/* Left Sidebar */}
-              <aside className={`fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-64 lg:w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden transform transition-transform duration-200 ease-out lg:translate-x-0 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                     <aside className={`fixed top-14 left-0 h-[calc(100vh-3.5rem)] w-64 lg:w-52 bg-soy-label border-r border-soy-bottle/20 z-40 flex flex-col overflow-hidden transform transition-transform duration-200 ease-out lg:translate-x-0 ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                       <nav className="flex flex-col px-2 py-3 gap-0.5 flex-1 overflow-y-auto">
-                        {NAV_GROUP_ORDER.map((group, idx) => {
-                      const items = NAV_ITEMS.filter(i => i.group === group);
-                      if (items.length === 0) return null;
-          
-                      if (group === 'DEVELOPER') {
-                                      return (
-                                                        <div key={group} className="flex flex-col gap-0.5">
-                                                                          <div className="border-t border-soy-bottle/15 my-2 mx-1" />
-                                                                          <button
-                                                                                                type="button"
-                                                                                                onClick={() => setDevExpanded(v => !v)}
-                                                                                                className="flex items-center justify-between px-3 py-[7px] text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 hover:text-soy-bottle/80 transition-colors w-full mt-1 mb-0.5"
-                                                                                              >
-                                                                                              <span>{group}</span>
-                                                                                              <ChevronDown
-                                                                                                                      size={11}
-                                                                                                                      strokeWidth={2.5}
-                                                                                                                      className={`transition-transform duration-200 ${devExpanded ? 'rotate-180' : ''}`}
-                                                                                                                    />
-                                                                          </button>
-                                                                          <AnimatePresence initial={false}>
-                                                                            {devExpanded && (
-                                                                                <motion.div
-                                                                                                          initial={{ height: 0, opacity: 0 }}
-                                                                                                          animate={{ height: 'auto', opacity: 1 }}
-                                                                                                          exit={{ height: 0, opacity: 0 }}
-                                                                                                          transition={{ duration: 0.18 }}
-                                                                                                          className="overflow-hidden flex flex-col gap-0.5"
-                                                                                                        >
-                                                                                  {items.map(item => {
-                                                                                                                                    const Icon = item.icon;
-                                                                                                                                    return (
-                                                                                                                                                                  <NavLink
-                                                                                                                                                                                                  key={item.path}
-                                                                                                                                                                                                  to={item.path}
-                                                                                                                                                                                                  onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
-                                                                                                                                                                                                  className={navLinkClass}
-                                                                                                                                                                                                >
-                                                                                                                                                                                                <Icon size={13} strokeWidth={2.5} />
-                                                                                                                                                                                                <span>{item.label}</span>
-                                                                                                                                                                    </NavLink>
-                                                                                                                                                                );
-                                                                            })}
-                                                                                  </motion.div>
-                                                                              )}
-                                                                          </AnimatePresence>
-                                                        </div>
-                                                      );
-                      }
-          
-                      return (
-                                      <div key={group} className="flex flex-col gap-0.5">
-                                        {idx > 0 && <div className="border-t border-soy-bottle/15 my-2 mx-1" />}
-                                                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 px-3 mt-1 mb-1">
-                                                        {group}
-                                                      </p>
-                                        {items.map(item => {
-                                                          const Icon = item.icon;
-                                                          return (
-                                                                                <NavLink
-                                                                                                        key={item.path}
-                                                                                                        to={item.path}
-                                                                                                        onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
-                                                                                                        className={navLinkClass}
-                                                                                                      >
-                                                                                                      <Icon size={13} strokeWidth={2.5} />
-                                                                                                      <span>{item.label}</span>
-                                                                                  </NavLink>
-                                                                              );
-                                      })}
-                                      </div>
-                                    );
-        })}
+
+                        {/* ── CORE — Always visible, visually prioritised ──────────── */}
+                        <div className="flex flex-col gap-1 mb-1">
+                          {NAV_ITEMS.filter(i => i.group === 'CORE').map(item => {
+                            const Icon = item.icon;
+                            const isGuard = item.path === '/guard';
+                            const isPricing = item.path === '/pricing';
+
+                            if (isGuard) {
+                              const isActive = getIsGuardActive();
+                              return (
+                                <Link
+                                  key={item.path}
+                                  to={item.path}
+                                  onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
+                                  className={
+                                    `flex items-center gap-2.5 px-3 py-[8px] text-[11px] font-black uppercase tracking-widest transition-all duration-150 border-2 ${
+                                      isActive
+                                        ? 'bg-soy-red text-white border-soy-red shadow-[2px_2px_0px_#000]'
+                                        : 'bg-soy-red/10 text-soy-red border-soy-red/30 hover:bg-soy-red hover:text-white hover:border-soy-red hover:shadow-[2px_2px_0px_#000]'
+                                    }`
+                                  }
+                                >
+                                  <Icon size={13} strokeWidth={2.5} />
+                                  <span className="flex-1">{item.label}</span>
+                                  <span className="text-[8px] font-black uppercase tracking-widest opacity-60 border border-current px-1 py-0.5 leading-none">PRO</span>
+                                </Link>
+                              );
+                            }
+
+                            if (isPricing) {
+                              // We can use standard getNavLinkClass for pricing since it has no tabs
+                              const isActive = location.pathname === '/pricing';
+                              return (
+                                <Link
+                                  key={item.path}
+                                  to={item.path}
+                                  onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
+                                  className={
+                                    `flex items-center gap-2.5 px-3 py-[7px] text-[11px] font-black uppercase tracking-widest transition-all duration-150 border-l-2 ${
+                                      isActive
+                                        ? 'text-soy-red border-amber-500 bg-amber-500/10'
+                                        : 'text-soy-bottle/80 border-amber-500/40 hover:text-amber-700 hover:border-amber-500 hover:bg-amber-500/5'
+                                    }`
+                                  }
+                                >
+                                  <Icon size={13} strokeWidth={2.5} />
+                                  <span>{item.label}</span>
+                                </Link>
+                              );
+                            }
+
+                            // Standard CORE item (Scanner, Compare)
+                            return (
+                              <Link
+                                key={item.path}
+                                to={item.path}
+                                onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
+                                className={getNavLinkClass(item.path)}
+                              >
+                                <Icon size={13} strokeWidth={2.5} />
+                                <span>{item.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+
+                        {/* ── DISCOVER — Collapsible ────────────────────────────────── */}
+                        <CollapsibleGroup
+                          label="Explore"
+                          expanded={discoverExpanded}
+                          onToggle={() => setDiscoverExpanded(v => !v)}
+                          items={NAV_ITEMS.filter(i => i.group === 'DISCOVER')}
+                          getNavLinkClass={getNavLinkClass}
+                          onNavClick={(label) => trackEvent('nav_click', { source: 'nav', label, group: 'DISCOVER' })}
+                        />
+
+                        {/* ── COMMUNITY — Collapsible ───────────────────────────────── */}
+                        <CollapsibleGroup
+                          label="Community"
+                          expanded={communityExpanded}
+                          onToggle={() => setCommunityExpanded(v => !v)}
+                          items={NAV_ITEMS.filter(i => i.group === 'COMMUNITY')}
+                          getNavLinkClass={getNavLinkClass}
+                          onNavClick={(label) => trackEvent('nav_click', { source: 'nav', label, group: 'COMMUNITY' })}
+                        />
+
+                        {/* ── TRUST / Resources — Collapsible ──────────────────────── */}
+                        <CollapsibleGroup
+                          label="Resources"
+                          expanded={trustExpanded}
+                          onToggle={() => setTrustExpanded(v => !v)}
+                          items={NAV_ITEMS.filter(i => i.group === 'TRUST')}
+                          getNavLinkClass={getNavLinkClass}
+                          onNavClick={(label) => trackEvent('nav_click', { source: 'nav', label, group: 'TRUST' })}
+                        />
+
+                        {/* ── DEVELOPER — Collapsible (auto-expands when logged in) ── */}
+                        <div className="flex flex-col gap-0.5">
+                          <div className="border-t border-soy-bottle/15 my-2 mx-1" />
+                          <button
+                            type="button"
+                            onClick={() => setDevExpanded(v => !v)}
+                            className="flex items-center justify-between px-3 py-[7px] text-[9px] font-black uppercase tracking-[0.2em] text-soy-bottle/50 hover:text-soy-bottle/80 transition-colors w-full mt-1 mb-0.5"
+                          >
+                            <span>Developer</span>
+                            <ChevronDown
+                              size={11}
+                              strokeWidth={2.5}
+                              className={`transition-transform duration-200 ${devExpanded ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+                          <AnimatePresence initial={false}>
+                            {devExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.18 }}
+                                className="overflow-hidden flex flex-col gap-0.5"
+                              >
+                                {NAV_ITEMS.filter(i => i.group === 'DEVELOPER').map(item => {
+                                  const Icon = item.icon;
+                                  return (
+                                    <Link
+                                      key={item.path}
+                                      to={item.path}
+                                      onClick={() => trackEvent('nav_click', { source: 'nav', label: item.label, group: item.group })}
+                                      className={getNavLinkClass(item.path)}
+                                    >
+                                      <Icon size={13} strokeWidth={2.5} />
+                                      <span>{item.label}</span>
+                                    </Link>
+                                  );
+                                })}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
                       </nav>
                       <div className="border-t border-soy-bottle/15 px-2 pb-3 pt-2 flex-shrink-0">
                                 <a href="mailto:support@opensoyce.com" className={bottomLinkClass} onClick={() => trackEvent('support_click', { source: 'nav' })}>

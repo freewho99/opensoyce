@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Shield, ShieldAlert, ShieldCheck, Trash2, Search, Loader2, AlertCircle, RefreshCw, Check, ArrowRight, GitPullRequest, FileCode, MessageSquare, Download, X, AlertTriangle, Lock, Activity, Users, Zap, FlaskConical, AlertOctagon, Shuffle, Scale, History, Skull } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Shield, ShieldAlert, ShieldCheck, Trash2, Search, Loader2, AlertCircle, RefreshCw, Check, ArrowRight, GitPullRequest, FileCode, MessageSquare, Download, X, AlertTriangle, Lock, Activity, Users, Zap, FlaskConical, AlertOctagon, Shuffle, Scale, History, Skull, CheckCircle } from 'lucide-react';
 import { trackEvent } from '../utils/analytics';
 import { motion, AnimatePresence } from 'motion/react';
 import GuardPrCommentPreview from '../components/GuardPrCommentPreview';
+import { TSC_CONTROLS, PRESETS } from '../data/complianceControls';
 
 interface GuardedRepo {
   id: string;
@@ -79,13 +80,33 @@ function classifyCompStatus(row: any): 'active' | 'expired' | 'revoked' {
 }
 
 export default function Guard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
   const [activeTab, setActiveTab] = useState<'sandbox' | 'app' | 'compliance'>(() => {
+    if (tabParam === 'sandbox' || tabParam === 'app' || tabParam === 'compliance') {
+      return tabParam;
+    }
     const saved = localStorage.getItem('soyce_guarded_repos');
     if (saved && JSON.parse(saved).length > 0) {
       return 'sandbox';
     }
     return 'app';
   });
+
+  const [activePreset, setActivePreset] = useState('soc2');
+
+  // Sync state if search params change
+  useEffect(() => {
+    if (tabParam === 'sandbox' || tabParam === 'app' || tabParam === 'compliance') {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: 'sandbox' | 'app' | 'compliance') => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -344,7 +365,7 @@ export default function Guard() {
         {/* Tab switcher */}
         <div className="flex flex-wrap bg-soy-label border-4 border-soy-bottle p-1 font-black uppercase italic tracking-wider text-xs gap-1">
           <button
-            onClick={() => setActiveTab('sandbox')}
+            onClick={() => handleTabChange('sandbox')}
             className={`px-4 py-2 transition-all ${
               activeTab === 'sandbox'
                 ? 'bg-soy-red text-white shadow-[2px_2px_0px_#000]'
@@ -354,7 +375,7 @@ export default function Guard() {
             🛡️ Sandbox Guard
           </button>
           <button
-            onClick={() => setActiveTab('compliance')}
+            onClick={() => handleTabChange('compliance')}
             className={`px-4 py-2 transition-all ${
               activeTab === 'compliance'
                 ? 'bg-soy-red text-white shadow-[2px_2px_0px_#000]'
@@ -364,7 +385,7 @@ export default function Guard() {
             🛡️ SOC 2 Compliance
           </button>
           <button
-            onClick={() => setActiveTab('app')}
+            onClick={() => handleTabChange('app')}
             className={`px-4 py-2 transition-all ${
               activeTab === 'app'
                 ? 'bg-soy-red text-white shadow-[2px_2px_0px_#000]'
@@ -515,8 +536,156 @@ export default function Guard() {
       )}
 
       {activeTab === 'compliance' && (
-        <div className="space-y-8 font-mono">
-          {authStatus === 'checking' && (
+        <div className="space-y-16">
+          {/* ─── COMPLIANCE INFRASTRUCTURE OVERVIEW ─────────────────────── */}
+          <section className="bg-black text-white p-8 md:p-12 border-4 border-soy-red shadow-[8px_8px_0px_#000] relative overflow-hidden">
+            <div className="absolute inset-0 opacity-5 pointer-events-none"
+              style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 40px, #E63322 40px, #E63322 41px), repeating-linear-gradient(90deg, transparent, transparent 40px, #E63322 40px, #E63322 41px)' }}
+            />
+            <div className="relative z-10 font-mono">
+              <div className="inline-flex items-center gap-3 bg-soy-red text-white px-5 py-2 text-xs font-black uppercase tracking-widest italic mb-6 shadow-[4px_4px_0px_rgba(255,255,255,0.2)]">
+                <Shield size={14} /> COMPLIANCE INFRASTRUCTURE
+              </div>
+              <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter mb-4">
+                SOC 2 TYPE II & ISO 27001 READY
+              </h2>
+              <p className="text-sm font-bold uppercase tracking-widest text-white/70 italic leading-relaxed max-w-3xl">
+                OpenSoyce maps directly to SOC 2 Trust Service Criteria and ISO 27001 controls. Policy-as-code, signed audit trails, and automated PR gates — built in, not bolted on.
+              </p>
+            </div>
+          </section>
+
+          {/* ─── TRUST SERVICE CRITERIA GRID ──────────────────────────────── */}
+          <section className="font-mono">
+            <div className="mb-8">
+              <div className="inline-block bg-soy-red text-white px-4 py-1 text-[10px] font-black uppercase tracking-widest italic mb-3 shadow-[2px_2px_0px_#000]">
+                CRITERIA MAPPING
+              </div>
+              <h3 className="text-3xl font-black uppercase italic tracking-tighter text-soy-bottle">Every Control. Covered.</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {TSC_CONTROLS.map((ctrl) => {
+                const Icon = ctrl.icon;
+                return (
+                  <div
+                    key={ctrl.id}
+                    className="bg-white border-4 border-black shadow-[6px_6px_0px_#000] overflow-hidden flex flex-col"
+                  >
+                    <div className={`${ctrl.accent} text-white px-4 py-2 flex items-center justify-between`}>
+                      <div className="flex items-center gap-2">
+                        <Icon size={14} />
+                        <span className="font-black uppercase tracking-widest text-[10px]">{ctrl.code}</span>
+                      </div>
+                      <span className="text-[8px] font-black uppercase tracking-widest opacity-70 italic">{ctrl.category}</span>
+                    </div>
+
+                    <div className="p-5 flex-1 flex flex-col">
+                      <h4 className="text-base font-black uppercase italic tracking-tight leading-tight mb-2 text-soy-bottle">{ctrl.title}</h4>
+                      <p className="text-[11px] font-bold opacity-60 leading-relaxed mb-4 text-soy-bottle">{ctrl.desc}</p>
+
+                      <ul className="mt-auto space-y-1.5">
+                        {ctrl.features.map(f => (
+                          <li key={f} className="flex items-start gap-2.5 text-[10px] font-bold text-soy-bottle">
+                            <CheckCircle size={12} className="text-emerald-500 shrink-0 mt-0.5" />
+                            <span className="opacity-80 leading-snug">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* ─── POLICY PRESET STUDIO ─────────────────────────────────────── */}
+          <section className="bg-black text-white p-8 border-4 border-soy-red shadow-[8px_8px_0px_#000] font-mono">
+            <div className="mb-8">
+              <div className="inline-block bg-soy-red text-white px-4 py-1 text-[10px] font-black uppercase tracking-widest italic mb-3 shadow-[2px_2px_0px_rgba(255,255,255,0.2)]">
+                POLICY-AS-CODE
+              </div>
+              <h3 className="text-3xl font-black uppercase italic tracking-tighter">One line. Full compliance.</h3>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-4 space-y-3">
+                {PRESETS.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setActivePreset(p.id)}
+                    className={`w-full text-left px-4 py-3 border-4 transition-all font-mono ${p.color} ${
+                      activePreset === p.id
+                        ? `${p.bgActive} shadow-[4px_4px_0px_rgba(255,255,255,0.2)]`
+                        : 'bg-white/5 text-white hover:bg-white/10 border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-black uppercase italic tracking-tight text-sm">{p.label}</span>
+                      <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 border ${
+                        activePreset === p.id ? 'bg-white/20 border-white/40' : 'border-white/20 opacity-60'
+                      }`}>{p.badge}</span>
+                    </div>
+                    <div className="text-[9px] opacity-60 uppercase tracking-wider mt-1 font-bold">
+                      {p.id === 'soc2' ? 'blocks graveyard + risky · warns watchlist' :
+                       p.id === 'iso27001' ? 'identical thresholds, different audit framing' :
+                       'blocks graveyard + risky + watchlist · warns stable'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="lg:col-span-8">
+                {(() => {
+                  const currentPreset = PRESETS.find(p => p.id === activePreset)!;
+                  return (
+                    <div className={`border-4 ${currentPreset.color} bg-[#0d0d0d] overflow-hidden`}>
+                      <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/10">
+                        <div className="flex gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full bg-soy-red" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40 font-mono">.opensoyce.yml</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40">{currentPreset.label}</span>
+                      </div>
+
+                      <pre className="p-4 font-mono text-xs leading-relaxed overflow-x-auto text-white/80">
+                        {currentPreset.yaml.split('\n').map((line, i) => {
+                          const isComment = line.trim().startsWith('#');
+                          const isKey = line.includes(':') && !isComment;
+                          const isValue = line.trim().startsWith('- ');
+                          return (
+                            <div key={i} className={
+                              isComment ? 'text-white/30' :
+                              isValue ? 'text-emerald-400' :
+                              isKey ? 'text-soy-red' :
+                              'text-white/80'
+                            }>
+                              {line || '\u00A0'}
+                            </div>
+                          );
+                        })}
+                      </pre>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── LIVE COMPLIANCE AUDIT TRAIL ────────────────────────────── */}
+          <section className="pt-8 border-t-4 border-soy-bottle/30 space-y-6">
+            <div className="mb-4">
+              <div className="inline-block bg-soy-red text-white px-4 py-1 text-[10px] font-black uppercase tracking-widest italic mb-3 shadow-[2px_2px_0px_#000]">
+                ACTIVE AUDIT RECORDS
+              </div>
+              <h3 className="text-3xl font-black uppercase italic tracking-tighter text-soy-bottle">Cryptographic Evidence Trail</h3>
+            </div>
+
+            <div className="font-mono text-soy-bottle">
+              {authStatus === 'checking' && (
             <div className="flex flex-col items-center justify-center p-12 bg-white border-4 border-soy-bottle shadow-[6px_6px_0px_#000]">
               <Loader2 className="animate-spin text-soy-red mb-4" size={32} />
               <p className="text-xs font-black uppercase tracking-widest opacity-60">Verifying your dashboard session...</p>
@@ -754,7 +923,9 @@ export default function Guard() {
             </div>
           )}
         </div>
-      )}
+      </section>
+    </div>
+  )}
 
       {activeTab === 'app' && (
         <div className="space-y-24">
@@ -778,7 +949,7 @@ export default function Guard() {
                 Install GitHub Guard <ArrowRight size={20} />
               </Link>
               <button
-                onClick={() => setActiveTab('sandbox')}
+                onClick={() => handleTabChange('sandbox')}
                 className="inline-flex items-center gap-2 bg-white text-soy-bottle px-8 py-4 text-lg font-black uppercase italic tracking-tight border-4 border-soy-bottle shadow-[6px_6px_0px_#302C26] hover:translate-x-1 hover:translate-y-1 hover:shadow-[2px_2px_0px_#302C26] transition-all"
               >
                 Try Sandbox Guard <ArrowRight size={20} />
@@ -942,7 +1113,7 @@ export default function Guard() {
                 Install GitHub Guard <ArrowRight size={20} />
               </Link>
               <button
-                onClick={() => setActiveTab('sandbox')}
+                onClick={() => handleTabChange('sandbox')}
                 className="inline-flex items-center gap-2 bg-white text-soy-bottle px-8 py-4 text-lg font-black uppercase italic tracking-tight border-4 border-soy-bottle shadow-[6px_6px_0px_#302C26] hover:translate-x-1 hover:translate-y-1 hover:shadow-[2px_2px_0px_#302C26] transition-all"
               >
                 Try Sandbox Guard <ArrowRight size={20} />
