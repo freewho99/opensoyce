@@ -8,6 +8,7 @@ import ProjectCard from '../components/ProjectCard';
 export default function Recommend() {
   const { projects } = useProjects();
   const [prompt, setPrompt] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [recommendations, setRecommendations] = useState<{
     items: { project: Project; reason: string }[];
@@ -16,14 +17,20 @@ export default function Recommend() {
   } | null>(null);
 
   const techOptions = ['React', 'Angular', 'Node.js', 'Python', 'Rust', 'Go', 'Docker', 'Redis', 'Wasm', 'Warp', 'SQLite'];
+  const categories = ['All', 'INFRASTRUCTURE', 'DEVTOOLS', 'DATA SOVEREIGNTY', 'AGENTIC AI', 'SECURITY'];
 
   const handleRecommend = (e: React.FormEvent) => {
     e.preventDefault();
     
     const query = (prompt + ' ' + selectedTools.join(' ')).toLowerCase();
     
+    // Filter projects by category first if not 'All'
+    const filteredProjects = selectedCategory === 'All'
+      ? projects
+      : projects.filter(p => p.category.toUpperCase() === selectedCategory.toUpperCase());
+
     // Simple mock logic for recommendation
-    const matches = projects.map(p => {
+    const matches = filteredProjects.map(p => {
       let weight = 0;
       if (query.includes(p.name.toLowerCase())) weight += 10;
       if (query.includes(p.category.toLowerCase())) weight += 5;
@@ -67,14 +74,34 @@ export default function Recommend() {
           OPTIMIZE YOUR DEPENDENCY HEALTH BEFORE YOU IMPORT.
         </p>
         <p className="text-sm font-bold uppercase tracking-widest opacity-60 leading-relaxed max-w-3xl">
-          Don't blindly trust random npm, uv, or Poetry packages. Describe your engineering goals below, and our recommendation engine will audit and compose a customized stack of high-Soyce-score, secure, and actively maintained packages.
+          Engineering a new product? Avoid security issues, abandonments, and licensing traps before they enter your codebase. Input your engineering goals below, select your stack, and click <strong className="text-soy-red">SIMULATE RECOMMENDATION</strong> to instantly generate a verified recipe of high-grade, battle-tested open-source dependencies.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         {/* Form Column */}
         <div className="lg:col-span-12">
-          <form onSubmit={handleRecommend} className="bg-white border-4 border-soy-bottle p-8 shadow-[8px_8px_0px_#302C26] space-y-8">
+          <form onSubmit={handleRecommend} className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_#302C26] space-y-8">
+            <div className="space-y-4">
+              <label className="text-xs font-bold uppercase tracking-[0.3em] opacity-40">Filter by Category</label>
+              <div className="flex flex-wrap gap-2">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-4 py-2 border-2 text-xs font-bold uppercase transition-all ${
+                      selectedCategory === cat
+                        ? 'bg-black text-white border-black'
+                        : 'bg-white text-soy-bottle border-soy-bottle/20 hover:border-soy-bottle'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-4">
               <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.3em] opacity-40">
                 <BrainCircuit size={16} className="text-soy-red" /> What are you building?

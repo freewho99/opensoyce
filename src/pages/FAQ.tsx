@@ -4,6 +4,11 @@ import { ChevronDown, HelpCircle, Compass, Zap, ShieldCheck, CreditCard } from '
 
 const AccordionItem = ({ question, answer }: { question: string; answer: string; key?: React.Key }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [feedback, setFeedback] = useState<'yes' | 'no' | null>(null);
+
+  const handleFeedback = (type: 'yes' | 'no') => {
+    setFeedback(type);
+  };
 
   return (
     <div className={`border-b-2 border-soy-bottle/20 transition-all ${isOpen ? 'bg-white' : ''}`}>
@@ -31,6 +36,31 @@ const AccordionItem = ({ question, answer }: { question: string; answer: string;
           >
             <div className="p-8 pt-0 font-bold opacity-60 uppercase tracking-widest text-sm leading-relaxed">
               {answer}
+            </div>
+            
+            {/* Feedback Toggle */}
+            <div className="px-8 pb-6 flex items-center gap-3 border-t border-dashed border-soy-bottle/10 pt-4">
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-40">WAS THIS HELPFUL?</span>
+              {feedback === null ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleFeedback('yes')}
+                    className="px-3 py-1 bg-white hover:bg-black hover:text-white border-2 border-black text-[9px] font-black uppercase tracking-widest transition-all shadow-[2px_2px_0px_#000]"
+                  >
+                    YES
+                  </button>
+                  <button
+                    onClick={() => handleFeedback('no')}
+                    className="px-3 py-1 bg-white hover:bg-soy-red hover:text-white border-2 border-black text-[9px] font-black uppercase tracking-widest transition-all shadow-[2px_2px_0px_#000]"
+                  >
+                    NO
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 italic">
+                  ✓ THANK YOU FOR YOUR FEEDBACK!
+                </span>
+              )}
             </div>
           </motion.div>
         )}

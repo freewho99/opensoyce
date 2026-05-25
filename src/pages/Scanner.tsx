@@ -647,13 +647,28 @@ export default function Scanner() {
           )}
 
           {!result && !scanning && !errorState && (
-            <div className="mt-8 flex flex-col items-center justify-center p-12 border-4 border-dashed border-soy-bottle/20 rounded-xl text-center">
-              <ShieldCheck size={48} className="opacity-15 mb-4 text-soy-bottle" />
-              <p className="text-lg font-bold uppercase italic tracking-widest opacity-35">Awaiting Lockfile Upload</p>
-              <p className="text-xs font-medium opacity-35 max-w-xs mt-2">
-                Paste or upload a package-lock.json above to scan your dependency tree against the OSV vulnerability registry.
-              </p>
-            </div>
+            (filename || input) ? (
+              <div className="mt-8 bg-yellow-300 text-black border-4 border-black p-6 flex items-center justify-between shadow-[6px_6px_0px_#000]">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📁</span>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-75">FILE STAGED</div>
+                    <div className="text-lg font-black uppercase tracking-tight">Staged: {filename || 'Pasted Content'} — Ready to Scan</div>
+                  </div>
+                </div>
+                <div className="bg-black text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest border-2 border-black">
+                  WAITING ON ANALYZE
+                </div>
+              </div>
+            ) : (
+              <div className="mt-8 flex flex-col items-center justify-center p-12 border-4 border-dashed border-soy-bottle/20 rounded-xl text-center">
+                <ShieldCheck size={48} className="opacity-15 mb-4 text-soy-bottle" />
+                <p className="text-lg font-bold uppercase italic tracking-widest opacity-35">Awaiting Lockfile Upload</p>
+                <p className="text-xs font-medium opacity-35 max-w-xs mt-2">
+                  Paste or upload a package-lock.json above to scan your dependency tree against the OSV vulnerability registry.
+                </p>
+              </div>
+            )
           )}
         </div>
       </div>

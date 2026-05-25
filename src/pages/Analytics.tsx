@@ -191,23 +191,43 @@ export default function Analytics() {
       <section className="bg-black border-t-2 border-white/10 text-white">
         <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-white/10 border-b border-white/10">
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="Cumulative interactions tracked across all active user sessions">TOTAL</div>
+            <div className="mb-2">
+              <Tooltip content="Cumulative interactions tracked across all active user sessions.">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 cursor-help underline decoration-dotted">TOTAL</span>
+              </Tooltip>
+            </div>
             <div className="text-4xl font-black italic">{metrics?.totalEvents || 0}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="Distinct browser contexts identified by unique anonymous session IDs">SESSIONS</div>
+            <div className="mb-2">
+              <Tooltip content="Distinct browser contexts identified by unique anonymous session IDs.">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 cursor-help underline decoration-dotted">SESSIONS</span>
+              </Tooltip>
+            </div>
             <div className="text-4xl font-black italic">{metrics?.uniqueSessions || 0}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="The most frequently dispatched analytics event in this reporting period">TOP EVENT</div>
+            <div className="mb-2">
+              <Tooltip content="The most frequently dispatched analytics event in this reporting period.">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 cursor-help underline decoration-dotted">TOP EVENT</span>
+              </Tooltip>
+            </div>
             <div className="text-xl font-black italic truncate px-4">{metrics?.topEvent || '—'}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="The highest scoring intent category based on weighted user actions">DOMINANT INTENT</div>
+            <div className="mb-2">
+              <Tooltip content="The highest scoring intent category based on weighted user actions.">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 cursor-help underline decoration-dotted">DOMINANT INTENT</span>
+              </Tooltip>
+            </div>
             <div className="text-xl font-black italic text-[#E63322]">{productRadar.dominantName}</div>
           </div>
           <div className="p-8 text-center">
-            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 cursor-help underline decoration-dotted" title="The most recent telemetry ping received by the analytics collector">LAST EVENT</div>
+            <div className="mb-2">
+              <Tooltip content="The most recent telemetry ping received by the analytics collector.">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 cursor-help underline decoration-dotted">LAST EVENT</span>
+              </Tooltip>
+            </div>
             <div className="text-xl font-black italic truncate px-4">{metrics?.lastEvent?.event || '—'}</div>
             {metrics?.lastEvent && (
               <div className="text-[10px] opacity-40 uppercase">{formatRelativeTime(metrics.lastEvent.timestamp)}</div>
@@ -281,7 +301,11 @@ export default function Analytics() {
                 style={{ borderLeftWidth: '4px', borderLeftColor: cluster.color }}
               >
                 <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{cluster.intent}</div>
-                <h3 className="text-xl font-black uppercase tracking-tight mb-4">{cluster.name}</h3>
+                <h3 className="text-xl font-black uppercase tracking-tight mb-4">
+                  <Tooltip content={`Tracks cluster events: ${cluster.events}`}>
+                    <span className="cursor-help underline decoration-dotted">{cluster.name}</span>
+                  </Tooltip>
+                </h3>
                 <div className="text-5xl font-black italic text-[#E63322] mb-6">{cluster.count}</div>
                 <div className="mt-auto space-y-4">
                   <div className="text-[9px] font-mono opacity-40 leading-tight">
@@ -309,15 +333,15 @@ export default function Analytics() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <StatBox label="USE" count={breakdown.use} color="border-emerald-500" />
-            <StatBox label="FORK" count={breakdown.fork} color="border-blue-500" />
-            <StatBox label="GROW" count={breakdown.grow} color="border-orange-500" />
+            <StatBox label="USE" count={breakdown.use} color="border-emerald-500" tooltip="Total clicks tracking direct package downloads or adoption instructions (e.g. use npm, uv)." />
+            <StatBox label="FORK" count={breakdown.fork} color="border-blue-500" tooltip="Clicks tracking interest in copying, modifying, or remixing the source repository." />
+            <StatBox label="GROW" count={breakdown.grow} color="border-orange-500" tooltip="Clicks tracking contributions, sponsor integrations, or community ritual subscriptions." />
           </div>
 
           <div className="space-y-4 max-w-2xl">
-            <Bar label="USE" count={breakdown.use} max={breakdown.max} color="bg-emerald-500" />
-            <Bar label="FORK" count={breakdown.fork} max={breakdown.max} color="bg-blue-500" />
-            <Bar label="GROW" count={breakdown.grow} max={breakdown.max} color="bg-orange-500" />
+            <Bar label="USE" count={breakdown.use} max={breakdown.max} color="bg-emerald-500" tooltip="Calculated as (use_clicks / total_clicks) * 100. Measures direct usage interest." />
+            <Bar label="FORK" count={breakdown.fork} max={breakdown.max} color="bg-blue-500" tooltip="Calculated as (fork_clicks / total_clicks) * 100. Measures remixing interest." />
+            <Bar label="GROW" count={breakdown.grow} max={breakdown.max} color="bg-orange-500" tooltip="Calculated as (grow_clicks / total_clicks) * 100. Measures ecosystem expansion interest." />
           </div>
         </section>
 
@@ -433,21 +457,45 @@ export default function Analytics() {
   );
 }
 
-function StatBox({ label, count, color }: { label: string, count: number, color: string }) {
+function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div 
+      className="relative inline-block"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {children}
+      {show && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-black text-white text-[10px] font-mono p-3 border-2 border-soy-red shadow-[3px_3px_0px_#000] z-50 normal-case leading-relaxed pointer-events-none text-center">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatBox({ label, count, color, tooltip }: { label: string, count: number, color: string, tooltip: string }) {
   return (
     <div className={`bg-white border-2 border-black ${color} p-8 shadow-[6px_6px_0px_#000] text-center`}>
-      <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">{label}</div>
+      <div className="mb-2">
+        <Tooltip content={tooltip}>
+          <span className="text-[10px] font-black uppercase tracking-widest opacity-40 cursor-help underline decoration-dotted">{label}</span>
+        </Tooltip>
+      </div>
       <div className="text-5xl font-black italic">{count}</div>
     </div>
   );
 }
 
-function Bar({ label, count, max, color }: { label: string, count: number, max: number, color: string }) {
+function Bar({ label, count, max, color, tooltip }: { label: string, count: number, max: number, color: string, tooltip: string }) {
   const width = (count / max) * 100;
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-[8px] font-black uppercase tracking-widest">
-        <span>{label}</span>
+        <Tooltip content={tooltip}>
+          <span className="cursor-help underline decoration-dotted">{label}</span>
+        </Tooltip>
         <span>{count}</span>
       </div>
       <div className="h-4 bg-black/5 border border-black overflow-hidden">

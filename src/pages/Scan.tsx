@@ -7,11 +7,39 @@ import { Project } from '../types';
 export default function Scan() {
   const { projects } = useProjects();
   const [input, setInput] = useState('');
+  const [dragActive, setDragActive] = useState(false);
   const [results, setResults] = useState<{
     dependencies: { name: string; version: string; project?: Project }[];
     overallScore: number;
     healthStatus: 'Excellent' | 'Good' | 'Risky' | 'Critical';
   } | null>(null);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setInput(event.target.result as string);
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
 
   const handleScan = () => {
     try {
@@ -52,7 +80,7 @@ export default function Scan() {
     <div className="max-w-7xl mx-auto px-4 py-12">
       <div className="mb-12">
         <h1 className="text-5xl font-bold uppercase italic tracking-tighter mb-4">Stack Scanner</h1>
-        <p className="text-xl font-medium opacity-60">Paste your package.json to reveal the hidden health of your dependencies.</p>
+        <p className="text-xl font-medium opacity-60">Paste or drag package.json to reveal the hidden health of your dependencies.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -62,12 +90,28 @@ export default function Scan() {
               <FileJson className="text-soy-red" size={24} />
               <h2 className="text-xl font-bold uppercase italic tracking-tight">Input Manifest</h2>
             </div>
-            <textarea
-              className="w-full h-96 bg-soy-label/20 p-4 font-mono text-xs border-2 border-soy-bottle outline-none focus:ring-2 focus:ring-soy-red resize-none"
-              placeholder='{ "dependencies": { "betaswarm": "^1.0.0", ... } }'
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-            />
+            
+            <div 
+              onDragEnter={handleDrag} 
+              onDragLeave={handleDrag} 
+              onDragOver={handleDrag} 
+              onDrop={handleDrop}
+              className={`relative ${dragActive ? 'border-dashed border-soy-red bg-soy-red/5' : ''}`}
+            >
+              {dragActive && (
+                <div className="absolute inset-0 bg-soy-red/10 border-4 border-dashed border-soy-red flex flex-col items-center justify-center pointer-events-none z-10">
+                  <FileJson size={48} className="text-soy-red animate-pulse" />
+                  <span className="text-sm font-black uppercase text-soy-red mt-2">Drop package.json here</span>
+                </div>
+              )}
+              <textarea
+                className="w-full h-96 bg-soy-label/20 p-4 font-mono text-xs border-2 border-soy-bottle outline-none focus:ring-2 focus:ring-soy-red resize-none"
+                placeholder='{ "dependencies": { "betaswarm": "^1.0.0", ... } }'
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+              />
+            </div>
+
             <button
               onClick={handleScan}
               className="w-full mt-6 bg-soy-bottle text-soy-label py-4 font-bold uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-2"
@@ -145,12 +189,18 @@ export default function Scan() {
                     ))}
                   </div>
                 </div>
+
+                {/* Swarm Intelligence Callout */}
+                <div className="bg-[#302C26] text-[#F5F0E8] p-5 border-2 border-black text-xs font-mono shadow-[4px_4px_0px_#000] mt-6">
+                  <span className="text-soy-red font-black uppercase block mb-1">🐝 SWARM INTELLIGENCE VALUE:</span>
+                  This scan cross-references our collective developer swarm data to track how dependencies are behaving in actual production pipelines. By measuring usage velocity and community verification signals, Swarm Intelligence identifies hidden risk anomalies before they appear in static databases, helping you avoid compromised packages.
+                </div>
               </motion.div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center p-12 border-4 border-dashed border-soy-bottle/20 rounded-xl text-center">
                  <Activity size={48} className="opacity-10 mb-4" />
                  <p className="text-lg font-bold uppercase italic tracking-widest opacity-20">Waiting for stack manifest...</p>
-                 <p className="text-xs font-medium opacity-20 max-w-xs mt-2">Upload your package.json on the left to verify the nutritional value of your code.</p>
+                 <p className="text-xs font-medium opacity-20 max-w-xs mt-2">Upload or drag your package.json on the left to verify the nutritional value of your code.</p>
               </div>
             )}
           </AnimatePresence>
@@ -159,3 +209,4 @@ export default function Scan() {
     </div>
   );
 }
+

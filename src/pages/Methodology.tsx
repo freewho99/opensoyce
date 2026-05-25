@@ -59,39 +59,102 @@ export default function Methodology() {
                 The Soyce Score is a weighted composite computed from thirteen GitHub repository signals: last commit date, star count, contributor count, fork count, license, open issue count, description / topics / homepage presence, 30-day commit volume, README content, SECURITY.md presence, release recency, recent-issue triage rate, and published security advisories (CVEs the maintainers disclosed in this repo's own code).
               </p>
 
-              <div className="bg-[#302C26] text-[#F5F0E8] p-6 border-4 border-black shadow-[8px_8px_0px_#000] font-mono text-xs overflow-x-auto leading-relaxed mb-8">
-                <span className="text-[#E63322] font-black uppercase block mb-3 text-sm">┌── COMPOSITE WEIGHTS TABLE ─────────────────────────────┐</span>
-                <pre className="whitespace-pre overflow-x-auto">
-{`+----------------+--------+-------------------------------------------------------------+
-| PILLAR         | WEIGHT | KEY SIGNALS & CRITERIA COVERED                              |
-+----------------+--------+-------------------------------------------------------------+
-| MAINTENANCE    |   30%  | Commit recency, latest tagged release within 1-2 years,     |
-|                |        | issue triage rate (recent comments & closed issues)         |
-+----------------+--------+-------------------------------------------------------------+
-| COMMUNITY      |   25%  | Log-scaled star count, contributor count, fork milestones   |
-+----------------+--------+-------------------------------------------------------------+
-| SECURITY       |   20%  | CVE advisories (weighted), license permissiveness (MIT etc) |
-|                |        | issues-per-star ratio, and SECURITY.md presence             |
-+----------------+--------+-------------------------------------------------------------+
-| DOCUMENTATION  |   15%  | Repo topics & homepage, README length, installation guides, |
-|                |        | heading structure, and code example codeblocks              |
-+----------------+--------+-------------------------------------------------------------+
-| ACTIVITY       |   10%  | Last 30 days commit volume (frequency & velocity)           |
-+----------------+--------+-------------------------------------------------------------+`}
-                </pre>
-                <span className="text-[#E63322] font-black uppercase block mt-3 text-sm">└────────────────────────────────────────────────────────┘</span>
+              <div className="bg-white border-4 border-black shadow-[8px_8px_0px_#000] overflow-x-auto mb-8">
+                <table className="w-full border-collapse text-left font-mono text-xs">
+                  <thead>
+                    <tr className="bg-black text-white uppercase italic border-b-4 border-black">
+                      <th className="p-3 border-r-2 border-black">Pillar</th>
+                      <th className="p-3 border-r-2 border-black text-center">Weight</th>
+                      <th className="p-3">Key Signals &amp; Criteria Covered</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y-2 divide-black/10 font-bold">
+                    <tr>
+                      <td className="p-3 border-r-2 border-black bg-soy-label/10">MAINTENANCE</td>
+                      <td className="p-3 border-r-2 border-black text-center text-soy-red text-sm">30%</td>
+                      <td className="p-3 normal-case text-[11px] opacity-80">Commit recency, latest tagged release within 1-2 years, issue triage rate (recent comments & closed issues).</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-r-2 border-black bg-soy-label/10">COMMUNITY</td>
+                      <td className="p-3 border-r-2 border-black text-center text-soy-red text-sm">25%</td>
+                      <td className="p-3 normal-case text-[11px] opacity-80">Log-scaled star count, contributor count, fork milestones.</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-r-2 border-black bg-soy-label/10">SECURITY</td>
+                      <td className="p-3 border-r-2 border-black text-center text-soy-red text-sm">20%</td>
+                      <td className="p-3 normal-case text-[11px] opacity-80">CVE advisories (weighted), license permissiveness (MIT etc), issues-per-star ratio, and SECURITY.md presence.</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-r-2 border-black bg-soy-label/10">DOCUMENTATION</td>
+                      <td className="p-3 border-r-2 border-black text-center text-soy-red text-sm">15%</td>
+                      <td className="p-3 normal-case text-[11px] opacity-80">Repo topics & homepage, README length, installation guides, heading structure, and code example codeblocks.</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-r-2 border-black bg-soy-label/10">ACTIVITY</td>
+                      <td className="p-3 border-r-2 border-black text-center text-soy-red text-sm">10%</td>
+                      <td className="p-3 normal-case text-[11px] opacity-80">Last 30 days commit volume (frequency & velocity).</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            <div className="bg-black text-white p-12 shadow-[12px_12px_0px_#E63322]">
-              <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-8 text-soy-red">SCORE RANGES</h3>
-              <div className="space-y-8">
-                 <ScoreRange label="8.5+" status="USE READY" subLabel="Safe to adopt — strong across all pillars" desc="Production grade. Real CVE hygiene, active maintenance, strong docs." color="text-green-500" />
-                 <ScoreRange label="7.0 – 8.4" status="FORKABLE" subLabel="Healthy and trustworthy — fork-worthy as a base" desc="Mature core infrastructure. Minor gaps in one or two pillars." color="text-blue-500" />
-                 <ScoreRange label="6.0 – 6.9" status="STABLE" subLabel="Mature, lower-velocity, still maintained" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits." color="text-emerald-500" />
-                 <ScoreRange label="4.0 – 5.9" status="WATCHLIST" subLabel="Real issues; verify before adoption" desc="Works today, but signals are mixed. Verify the per-pillar breakdown before adopting." color="text-yellow-500" />
-                 <ScoreRange label="2.5 – 3.9" status="RISKY" subLabel="Multiple bands flag concerns" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." color="text-orange-500" />
-                 <ScoreRange label="BELOW 2.5" status="STALE" subLabel="Abandoned or dormant" desc="Effectively abandoned. No recent commits, no releases, no triage." color="text-soy-red" />
+            <div className="bg-black text-white p-8 shadow-[12px_12px_0px_#E63322] border-4 border-white/20">
+              <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-6 text-soy-red border-b border-white/10 pb-2">SCORE RANGES</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-mono text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/25 text-[10px] font-black uppercase tracking-widest opacity-60">
+                      <th className="pb-3 pr-2">Range</th>
+                      <th className="pb-3 px-2">Verdict</th>
+                      <th className="pb-3 pl-2">Interpretation Guidelines</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10 font-medium">
+                    <tr>
+                      <td className="py-3 pr-2 font-black text-green-400 text-sm">8.5+</td>
+                      <td className="py-3 px-2">
+                        <span className="bg-green-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">USE READY</span>
+                      </td>
+                      <td className="py-3 pl-2 opacity-80 normal-case">Production grade. Real CVE hygiene, active maintenance, and strong documentation. Safe to adopt.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-3 pr-2 font-black text-blue-400 text-sm">7.0–8.4</td>
+                      <td className="py-3 px-2">
+                        <span className="bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">FORKABLE</span>
+                      </td>
+                      <td className="py-3 pl-2 opacity-80 normal-case">Mature core infrastructure with minor gaps. Trustworthy base for internal customization.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-3 pr-2 font-black text-emerald-400 text-sm">6.0–6.9</td>
+                      <td className="py-3 px-2">
+                        <span className="bg-emerald-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">STABLE</span>
+                      </td>
+                      <td className="py-3 pl-2 opacity-80 normal-case">Healthy maintained library in stable mode without daily commits. Ideal for light integrations.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-3 pr-2 font-black text-yellow-400 text-sm">4.0–5.9</td>
+                      <td className="py-3 px-2">
+                        <span className="bg-yellow-600 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">WATCHLIST</span>
+                      </td>
+                      <td className="py-3 pl-2 opacity-80 normal-case">Works today but signals are mixed. Verify per-pillar breakdowns before adoption.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-3 pr-2 font-black text-orange-400 text-sm">2.5–3.9</td>
+                      <td className="py-3 px-2">
+                        <span className="bg-orange-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">RISKY</span>
+                      </td>
+                      <td className="py-3 pl-2 opacity-80 normal-case">Concerns in multiple pillars. Maintenance debt, licensing gaps, or unaddressed CVEs.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-3 pr-2 font-black text-red-500 text-sm">&lt; 2.5</td>
+                      <td className="py-3 px-2">
+                        <span className="bg-red-700 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">STALE</span>
+                      </td>
+                      <td className="py-3 pl-2 opacity-80 normal-case">Effectively abandoned or dormant. No commits, releases, or triage for a long period.</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

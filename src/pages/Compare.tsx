@@ -130,7 +130,8 @@ function CustomCompareSection() {
       )}
 
       {dataA && dataB && (
-        <div className="border-4 border-black overflow-x-auto mt-8 shadow-[4px_4px_0px_#000]">
+        <>
+          <div className="border-4 border-black overflow-x-auto mt-8 shadow-[4px_4px_0px_#000]">
           <table className="w-full border-collapse text-left min-w-[600px]">
             <thead>
               <tr className="bg-black text-white font-black uppercase italic text-sm border-b-4 border-black">
@@ -263,7 +264,17 @@ function CustomCompareSection() {
               })()}
             </tbody>
           </table>
-        </div>
+          </div>
+          <div className="mt-6 bg-[#E6F4EA] border-2 border-emerald-500 p-4 text-emerald-800 font-bold text-xs uppercase tracking-wider shadow-[4px_4px_0px_#000]">
+            <div className="flex items-center gap-2 mb-2 text-sm text-emerald-950">
+              <ShieldCheck className="text-emerald-600" />
+              <span>Comparison Complete: {dataA.total > dataB.total ? `${dataA.repo.owner}/${dataA.repo.name}` : `${dataB.repo.owner}/${dataB.repo.name}`} Leads</span>
+            </div>
+            <p className="font-mono text-[11px] text-emerald-900 normal-case font-medium">
+              The winner has a higher composite Soyce Score, driven by healthier maintenance response times and superior security controls. Integrating the leading dependency will reduce code-rot risk and help maintain your project's compliance posture.
+            </p>
+          </div>
+        </>
       )}
     </div>
   );
@@ -278,6 +289,14 @@ function CompareIndex() {
         </h1>
         <p className="text-xl font-bold uppercase tracking-widest text-soy-red italic">
           BATTLE-TESTED DATA. REAL SCORES. NO OPINIONS.
+        </p>
+      </div>
+
+      {/* Top-level Overview Card */}
+      <div className="bg-soy-label border-4 border-black p-6 shadow-[6px_6px_0px_#000] mb-8">
+        <h2 className="text-lg font-black uppercase tracking-widest text-soy-red mb-2">⚖️ Why Compare Dependencies?</h2>
+        <p className="text-sm font-medium opacity-85 leading-relaxed">
+          Choosing the wrong open-source ingredient can contaminate your entire software supply chain. Use our comparison engine to benchmark packages across critical dimensions like security posture, active maintenance, and community bottlenecks. Instantly filter packages to see which ones are production-ready.
         </p>
       </div>
 

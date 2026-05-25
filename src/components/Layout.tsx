@@ -62,6 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'AI Recipes', path: '/recipes', hint: 'AI-powered stack recommendations', icon: Wand2, group: 'COMMUNITY' },
   { label: 'Remix', path: '/remix', hint: 'Remix and fork projects', icon: Shuffle, group: 'COMMUNITY' },
   { label: 'Methodology', path: '/methodology', hint: 'How we score projects', icon: BookOpen, group: 'TRUST' },
+  { label: 'SOC 2', path: '/soc2', hint: 'SOC 2 & ISO 27001 compliance', icon: Shield, group: 'TRUST' },
   { label: 'About', path: '/about', hint: 'About OpenSoyce', icon: Info, group: 'TRUST' },
   { label: 'FAQ', path: '/faq', hint: 'Frequently asked questions', icon: HelpCircle, group: 'TRUST' },
   { label: 'Dashboard', path: '/dashboard', hint: 'Your Guard dashboard', icon: LayoutDashboard, group: 'DEVELOPER' },

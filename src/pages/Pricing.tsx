@@ -216,6 +216,14 @@ export default function Pricing() {
             question="Do you offer open source discounts?"
             answer="If you maintain a popular open source project, email oss@opensoyce.io. We'll get you set up."
           />
+          <FAQItem
+            question="Does OpenSoyce offer on-premises or self-hosted deployment options?"
+            answer="Yes, for Enterprise customers we offer fully containerized, self-hosted deployment options via Docker and Kubernetes. This ensures your codebases and lockfiles never leave your local network."
+          />
+          <FAQItem
+            question="Is OpenSoyce SOC 2 compliant, and can we define custom compliance policies?"
+            answer="Yes, OpenSoyce is built to satisfy SOC 2 supply-chain security auditing guidelines. Enterprise tier unlocks custom policy templates, compliance-friendly PDF/SARIF audit trail exports, and single-sign-on (SSO/SAML) integrations to align with your organization's security controls."
+          />
         </div>
       </div>
 

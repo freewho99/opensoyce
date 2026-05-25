@@ -275,6 +275,20 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
               <p className="text-[9px] font-black text-[#211a15]/50 uppercase tracking-widest mt-1">
                 {repo.owner} · github.com/{repo.owner}/{repo.name}
               </p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="bg-black text-[#efe8dc] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest border border-black shadow-[2px_2px_0px_#000]">
+                  📜 License: {meta.license || 'N/A'}
+                </span>
+                <span className="bg-black text-[#efe8dc] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest border border-black shadow-[2px_2px_0px_#000]">
+                  🕒 Commits: {meta.lastCommit ? new Date(meta.lastCommit).toLocaleDateString() : 'N/A'}
+                </span>
+                <span className="bg-black text-[#efe8dc] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest border border-black shadow-[2px_2px_0px_#000]">
+                  🛡️ Vulns: {result.advisories && result.advisories.total > 0 ? `${result.advisories.total} Risk` : '0 Clean'}
+                </span>
+                <span className="bg-black text-[#efe8dc] px-2 py-0.5 text-[9px] font-black uppercase tracking-widest border border-black shadow-[2px_2px_0px_#000]">
+                  🐛 Issues: {meta.openIssues} Open
+                </span>
+              </div>
             </div>
           </div>
 

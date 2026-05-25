@@ -17,6 +17,21 @@ export default function Challenge() {
     githubHandle: ''
   });
 
+  const presets = [
+    { repo: 'tiangolo/fastapi', currentLabel: 'USE READY', proposedLabel: 'USE READY' },
+    { repo: 'langchain-ai/langgraph', currentLabel: 'FORKABLE', proposedLabel: 'USE READY' },
+    { repo: 'facebook/react', currentLabel: 'USE READY', proposedLabel: 'USE READY' }
+  ];
+
+  const applyPreset = (preset: typeof presets[0]) => {
+    setFormData({
+      ...formData,
+      repo: preset.repo,
+      currentLabel: preset.currentLabel,
+      proposedLabel: preset.proposedLabel
+    });
+  };
+
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -113,6 +128,22 @@ export default function Challenge() {
                 <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-8 border-b-4 border-black pb-4">
                   LABEL CHALLENGE
                 </h2>
+
+                <div className="mb-6">
+                  <span className="block text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">Preset Repo Challenges</span>
+                  <div className="flex flex-wrap gap-2">
+                    {presets.map(p => (
+                      <button
+                        key={p.repo}
+                        type="button"
+                        onClick={() => applyPreset(p)}
+                        className="bg-soy-label/20 hover:bg-soy-red hover:text-white border-2 border-black px-3 py-1.5 text-xs font-black uppercase tracking-wider transition-all"
+                      >
+                        {p.repo}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div>

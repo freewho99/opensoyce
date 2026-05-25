@@ -43,34 +43,40 @@ export default function About() {
              </div>
           </div>
         </div>
-        <div className="bg-soy-label p-12 border-4 border-black shadow-[16px_16px_0px_#000] relative">
+          <div className="bg-soy-label p-12 border-4 border-black shadow-[16px_16px_0px_#000] relative">
           <div className="absolute top-4 right-4 text-soy-red opacity-20">
             <Shield size={120} />
           </div>
           <h3 className="text-3xl font-black uppercase italic tracking-tight mb-8 relative z-10">THE PROBLEM WE SOLVE</h3>
-          <ul className="space-y-6 relative z-10">
-             <li className="flex items-start gap-4">
-                <div className="mt-1 text-soy-red"><Target size={20} /></div>
-                <div>
-                   <span className="block font-black uppercase italic text-sm">Invisible Rot</span>
-                   <span className="text-xs font-bold opacity-60 uppercase tracking-wider">Packages that haven't been touched in 3 years but still have 10M downloads.</span>
-                </div>
-             </li>
-             <li className="flex items-start gap-4">
-                <div className="mt-1 text-soy-red"><Shield size={20} /></div>
-                <div>
-                   <span className="block font-black uppercase italic text-sm">Supply Chain Risk</span>
-                   <span className="text-xs font-bold opacity-60 uppercase tracking-wider">Signals that indicate a maintainer is burnt out or a project is being hijacked.</span>
-                </div>
-             </li>
-             <li className="flex items-start gap-4">
-                <div className="mt-1 text-soy-red"><Users size={20} /></div>
-                <div>
-                   <span className="block font-black uppercase italic text-sm">The "Bus Factor"</span>
-                   <span className="text-xs font-bold opacity-60 uppercase tracking-wider">Identifying projects that rely entirely on one individual with no succession plan.</span>
-                </div>
-             </li>
-          </ul>
+          <div className="space-y-4 relative z-10">
+             <div className="flex items-start gap-0 border-4 border-soy-red bg-white shadow-[4px_4px_0px_#E63322] overflow-hidden">
+               <div className="bg-soy-red text-white p-4 flex items-center justify-center shrink-0">
+                 <Target size={24} className="text-white" />
+               </div>
+               <div className="p-4">
+                 <span className="block font-black uppercase italic text-sm text-soy-red mb-1">Invisible Rot</span>
+                 <span className="text-xs font-bold opacity-70 uppercase tracking-wider leading-relaxed">Packages that haven't been touched in 3 years but still have 10M downloads per month.</span>
+               </div>
+             </div>
+             <div className="flex items-start gap-0 border-4 border-amber-500 bg-amber-50 shadow-[4px_4px_0px_#F59E0B] overflow-hidden">
+               <div className="bg-amber-500 text-white p-4 flex items-center justify-center shrink-0">
+                 <Shield size={24} className="text-white" />
+               </div>
+               <div className="p-4">
+                 <span className="block font-black uppercase italic text-sm text-amber-800 mb-1">Supply Chain Risk</span>
+                 <span className="text-xs font-bold opacity-70 uppercase tracking-wider leading-relaxed">Signals that indicate a maintainer is burnt out or a project is being quietly hijacked.</span>
+               </div>
+             </div>
+             <div className="flex items-start gap-0 border-4 border-soy-bottle bg-soy-bottle shadow-[4px_4px_0px_#302C26] overflow-hidden">
+               <div className="bg-soy-label p-4 flex items-center justify-center shrink-0">
+                 <Users size={24} className="text-soy-red" />
+               </div>
+               <div className="p-4">
+                 <span className="block font-black uppercase italic text-sm text-soy-label mb-1">The "Bus Factor"</span>
+                 <span className="text-xs font-bold text-soy-label/60 uppercase tracking-wider leading-relaxed">Projects that rely entirely on one individual with no succession plan or handoff strategy.</span>
+               </div>
+             </div>
+          </div>
         </div>
       </section>
 
@@ -87,16 +93,54 @@ export default function About() {
       </section>
 
       {/* Team Section */}
-      <section className="bg-black text-white p-12 md:p-24 border-t-8 border-soy-red shadow-[20px_20px_0px_#333]">
-        <div className="max-w-3xl mx-auto text-center space-y-12">
-          <h2 className="text-6xl font-black uppercase italic tracking-tighter leading-none"> WE ARE <br/> OPENSOYCE LABS </h2>
-          <p className="text-xl font-bold uppercase tracking-widest opacity-60 italic leading-relaxed">
-            A small team of paranoid engineers based in New York and London. We obsession over dependency health so you don't have to.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12 border-t border-white/10">
-             <div className="p-6 border border-white/20 bg-white/5 uppercase tracking-widest text-[10px] font-black">BUILT IN PUBLIC</div>
-             <div className="p-6 border border-white/20 bg-white/5 uppercase tracking-widest text-[10px] font-black">POWERED BY GITHUB API</div>
-             <div className="p-6 border border-white/20 bg-white/5 uppercase tracking-widest text-[10px] font-black">OPEN SOURCE SOON</div>
+      <section className="bg-black text-white p-12 md:p-20 border-t-8 border-soy-red shadow-[20px_20px_0px_#333] mb-12">
+        <div className="max-w-5xl mx-auto space-y-16">
+          <div className="text-center">
+            <h2 className="text-5xl md:text-6xl font-black uppercase italic tracking-tighter leading-none mb-4">
+              WE ARE OPENSOYCE LABS
+            </h2>
+            <p className="text-sm font-bold uppercase tracking-widest opacity-60 italic max-w-2xl mx-auto">
+              A small team of paranoid engineers obsessing over open-source dependency health so you don't have to.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="border-2 border-white/20 p-6 bg-white/5">
+              <h3 className="text-xl font-black uppercase italic text-soy-red mb-1">Sarah Mitchell</h3>
+              <span className="text-[9px] font-black uppercase tracking-widest opacity-40 block mb-3">Head of Supply Chain Research</span>
+              <p className="text-xs opacity-70 leading-relaxed normal-case">
+                Former enterprise security architect. Obsessed with SBOM integration, license compliance, and static dependency analysis.
+              </p>
+            </div>
+            <div className="border-2 border-white/20 p-6 bg-white/5">
+              <h3 className="text-xl font-black uppercase italic text-soy-red mb-1">Maya Chen</h3>
+              <span className="text-[9px] font-black uppercase tracking-widest opacity-40 block mb-3">Lead Engine Architect</span>
+              <p className="text-xs opacity-70 leading-relaxed normal-case">
+                Compiler engineer turned open-source advocate. Architect of the Soyce scoring v2 engine and typo-squat detection algorithms.
+              </p>
+            </div>
+            <div className="border-2 border-white/20 p-6 bg-white/5">
+              <h3 className="text-xl font-black uppercase italic text-soy-red mb-1">Carlos Ruiz</h3>
+              <span className="text-[9px] font-black uppercase tracking-widest opacity-40 block mb-3">Head of Community & Platform</span>
+              <p className="text-xs opacity-70 leading-relaxed normal-case">
+                Developer relations manager and security auditor. Orchestrates the community rebuttal program and developer integrations.
+              </p>
+            </div>
+          </div>
+
+          <div className="border-t border-white/10 pt-12 text-center space-y-6">
+            <h3 className="text-2xl font-black uppercase italic tracking-tight">DEVELOPER OUTREACH</h3>
+            <p className="text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed max-w-lg mx-auto">
+              Have questions about how we index repos, want to verify your own package, or need custom enterprise integrations?
+            </p>
+            <div>
+              <a 
+                href="mailto:contact@opensoyce.io"
+                className="inline-block bg-soy-red text-white hover:bg-white hover:text-black border-2 border-white px-8 py-4 font-black uppercase italic tracking-widest transition-all shadow-[4px_4px_0px_#333]"
+              >
+                contact@opensoyce.io
+              </a>
+            </div>
           </div>
         </div>
       </section>

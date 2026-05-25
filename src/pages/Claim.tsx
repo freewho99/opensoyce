@@ -92,11 +92,30 @@ function ClaimEntry() {
           <h1 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">PUSH BACK ON YOUR SOYCE SCORE</h1>
         </div>
 
-        <div className="bg-[#302C26] text-[#F5F0E8] p-8 border-4 border-black mb-8 shadow-[8px_8px_0px_#E63322]">
-          <h2 className="text-xl font-black uppercase tracking-widest text-[#E63322] mb-3">★ THE CORE VALUE OF CLAIMING:</h2>
-          <p className="text-sm font-bold uppercase tracking-wider leading-relaxed">
-            Secure your package's page, get verified owner badges, and increase downstream consumer trust. OpenSoyce is built to verify ownership and gain visibility in the consolidated ecosystem view, helping CTOs and engineering teams choose your package with confidence.
-          </p>
+        <div className="bg-white border-4 border-black p-8 mb-8 shadow-[8px_8px_0px_#E63322] space-y-6">
+          <h2 className="text-2xl font-black uppercase italic text-soy-red border-b-2 border-black pb-2 flex items-center gap-2">
+            ★ Core Value of Claiming Your Package
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="border-2 border-black p-4 bg-soy-label/10">
+              <h3 className="font-black uppercase text-xs tracking-wider mb-2 text-soy-bottle">🔒 Verified Ownership</h3>
+              <p className="text-xs font-bold leading-relaxed opacity-75">
+                Lock down your package's details, prevent unauthorized rebuttals, and showcase authentic maintainer credentials.
+              </p>
+            </div>
+            <div className="border-2 border-black p-4 bg-soy-label/10">
+              <h3 className="font-black uppercase text-xs tracking-wider mb-2 text-soy-bottle">🛡️ Developer Trust</h3>
+              <p className="text-xs font-bold leading-relaxed opacity-75">
+                Display a "VERIFIED MAINTAINER" badge on your Nutrition Label, signaling reliability to downstream engineering teams.
+              </p>
+            </div>
+            <div className="border-2 border-black p-4 bg-soy-label/10">
+              <h3 className="font-black uppercase text-xs tracking-wider mb-2 text-soy-bottle">👁️ Consolidated Visibility</h3>
+              <p className="text-xs font-bold leading-relaxed opacity-75">
+                Ensure correct categorization in the OpenSoyce ecosystem, making your project visible to CTOs evaluating dependencies.
+              </p>
+            </div>
+          </div>
         </div>
 
         <p className="text-xl font-bold uppercase tracking-widest opacity-60 mb-8 max-w-2xl">

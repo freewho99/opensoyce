@@ -210,6 +210,21 @@ export default function Leaderboard() {
         </div>
       </div>
 
+      {/* Formula Weight Ribbon */}
+      <div className="bg-black text-[#efe8dc] p-4 border-2 border-black mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs shadow-[4px_4px_0px_#000]">
+        <div className="flex items-center gap-2">
+          <span className="text-soy-red text-base font-black">⚙️</span>
+          <span className="font-black uppercase tracking-wider">Formula Weight Distribution:</span>
+        </div>
+        <div className="flex flex-wrap gap-3 font-mono text-[11px] font-bold">
+          <span className="bg-soy-red/20 px-2 py-0.5 border border-soy-red text-soy-red uppercase tracking-wider">🛠️ 30% Maintenance</span>
+          <span className="bg-soy-red/20 px-2 py-0.5 border border-soy-red text-soy-red uppercase tracking-wider">👥 25% Community</span>
+          <span className="bg-soy-red/20 px-2 py-0.5 border border-soy-red text-soy-red uppercase tracking-wider">🛡️ 20% Security</span>
+          <span className="bg-soy-red/20 px-2 py-0.5 border border-soy-red text-soy-red uppercase tracking-wider">📚 15% Docs</span>
+          <span className="bg-soy-red/20 px-2 py-0.5 border border-soy-red text-soy-red uppercase tracking-wider">⚡ 10% Activity</span>
+        </div>
+      </div>
+
       {/* Leaderboard Grid */}
       <div className="space-y-6">
         <div className="hidden lg:grid grid-cols-12 px-6 text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mb-2">

@@ -403,6 +403,41 @@ export default function Lookup() {
                 {error}
               </motion.div>
             )}
+
+            {/* Popular Queries */}
+            {!result && (
+              <div className="mt-8 border-t-2 border-soy-bottle/10 pt-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest opacity-40">POPULAR LOOKUPS</span>
+                  <div className="flex-1 h-px bg-soy-bottle/10" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: 'vercel/next.js', desc: 'Meta-framework' },
+                    { label: 'facebook/react', desc: 'UI Library' },
+                    { label: 'tiangolo/fastapi', desc: 'Python API' },
+                    { label: 'langchain-ai/langchain', desc: 'AI Orchestration' },
+                    { label: 'expressjs/express', desc: 'Node Server' },
+                    { label: 'axios/axios', desc: 'HTTP Client' },
+                    { label: 'tailwindlabs/tailwindcss', desc: 'CSS Framework' },
+                    { label: 'vitejs/vite', desc: 'Build Tool' },
+                  ].map(({ label, desc }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        const [o, r] = label.split('/');
+                        navigate(`/lookup/${o}/${r}`);
+                      }}
+                      className="group flex items-center gap-2 bg-white border-2 border-soy-bottle/20 hover:border-soy-red hover:shadow-[3px_3px_0px_#E63322] transition-all px-3 py-2 cursor-pointer"
+                    >
+                      <span className="text-[11px] font-black uppercase tracking-widest group-hover:text-soy-red transition-colors">{label}</span>
+                      <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">{desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

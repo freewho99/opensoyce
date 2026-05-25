@@ -1027,8 +1027,46 @@ export default function Dashboard() {
 
   if (phase === 'unauth') {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-16 min-h-[70vh] flex flex-col justify-center">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <div className="max-w-7xl mx-auto px-4 py-16">
+        {/* Value Prop Hero */}
+        <section className="mb-16 text-center">
+          <div className="inline-block bg-soy-red text-white px-5 py-2 text-xs font-black uppercase tracking-widest italic mb-6 shadow-[4px_4px_0px_#000]">
+            EXCEPTIONS MANAGEMENT
+          </div>
+          <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-none mb-6">
+            OpenSoyce Exceptions Management Dashboard
+          </h1>
+          <p className="text-xl font-bold uppercase tracking-widest opacity-60 max-w-3xl mx-auto">
+            Grant, audit, and expire security override policies for your repositories — with a full audit trail and Slack alerting.
+          </p>
+        </section>
+
+        {/* 3-Column Benefit Strip */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+          <div className="bg-white border-4 border-soy-bottle p-6 shadow-[6px_6px_0px_#000] flex flex-col gap-3">
+            <Shield size={28} className="text-soy-red" />
+            <h3 className="text-lg font-black uppercase italic tracking-tight">Policy-Gated Exceptions</h3>
+            <p className="text-xs font-bold opacity-60 uppercase tracking-wider leading-relaxed">
+              Grant time-bounded overrides for known-safe dependencies that would otherwise block your CI pipeline. Every grant requires a written reason and an expiry date.
+            </p>
+          </div>
+          <div className="bg-white border-4 border-soy-bottle p-6 shadow-[6px_6px_0px_#000] flex flex-col gap-3">
+            <Eye size={28} className="text-soy-red" />
+            <h3 className="text-lg font-black uppercase italic tracking-tight">Live Score Watchlist</h3>
+            <p className="text-xs font-bold opacity-60 uppercase tracking-wider leading-relaxed">
+              Track packages across your org's repos in real-time. Receive instant alerts when a dependency's Soyce Score degrades below your configured threshold.
+            </p>
+          </div>
+          <div className="bg-white border-4 border-soy-bottle p-6 shadow-[6px_6px_0px_#000] flex flex-col gap-3">
+            <Bell size={28} className="text-soy-red" />
+            <h3 className="text-lg font-black uppercase italic tracking-tight">Slack Incident Alerting</h3>
+            <p className="text-xs font-bold opacity-60 uppercase tracking-wider leading-relaxed">
+              Wire your repo to a Slack channel and receive a direct message the moment a watched dependency shifts from STABLE → RISKY or WATCHLIST.
+            </p>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           {/* Left Column - Sign In */}
           <div className="lg:col-span-5 flex justify-center">
             <div className="bg-white border-4 border-soy-bottle p-10 shadow-[12px_12px_0px_#E63322] text-center w-full max-w-md">
