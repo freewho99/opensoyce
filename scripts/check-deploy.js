@@ -57,7 +57,7 @@ async function checkDeploy() {
     }
 
     // Check commit check-runs
-    const commitRef = '83d587c2cc1524026a87f824d79465039cc11da0';
+    const commitRef = 'b391a01944bc306c59b20b22a012de9a7f34c2c5';
     console.log(`\n--- Check Runs for Commit ${commitRef} ---`);
     const checksRes = await fetch(`https://api.github.com/repos/freewho99/opensoyce/commits/${commitRef}/check-runs`, { headers });
     if (checksRes.ok) {

@@ -14,6 +14,8 @@
     "test:mobile": "playwright test e2e/test-mobile.spec.ts",
     "test:routes": "playwright test e2e/opensoyce-routes-swarm.spec.ts",
     "test:compliance": "node scripts/test-compliance-evidence.mjs",
+    "check-deploy": "node scripts/check-deploy.js",
+    "test:real-signed": "node scripts/test-real-signed-report.js",
     "test:models": "node test-models.js"
   },
   "dependencies": {
