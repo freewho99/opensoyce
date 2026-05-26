@@ -32,3 +32,9 @@ export function getSupabase() {
 export function __resetSupabaseClientForTests() {
   supabaseClient = undefined;
 }
+
+// Test-only: inject a mock client directly, bypassing createClient and env
+// var checks. Pass `null` to clear. Production code never touches this.
+export function __setSupabaseClientForTests(client) {
+  supabaseClient = client || undefined;
+}
