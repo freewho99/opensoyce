@@ -2026,13 +2026,15 @@ async function handleSlackWebhook(req, res) {
     const rawBody = await readRawBody(req);
     const secret = process.env.SLACK_SIGNING_SECRET;
 
-    // Signature verification check
-    if (secret) {
-      if (!verifySlackSignature(req, rawBody, secret)) {
-        return err(res, 401, 'UNAUTHORIZED', 'invalid slack signature');
-      }
-    } else {
-      console.warn('Slack webhook: SLACK_SIGNING_SECRET is not set. Signature check skipped.');
+    // Signature verification check. Fail-closed when secret is unset — the
+    // previous warn-and-continue path let an attacker who knew the public
+    // webhook URL forge approve/deny actions on pending exceptions.
+    if (!secret) {
+      console.error('Slack webhook: SLACK_SIGNING_SECRET unset — refusing unverified webhook');
+      return err(res, 500, 'SLACK_NOT_CONFIGURED', 'slack webhook is not configured: signing secret required');
+    }
+    if (!verifySlackSignature(req, rawBody, secret)) {
+      return err(res, 401, 'UNAUTHORIZED', 'invalid slack signature');
     }
 
     const params = new URLSearchParams(rawBody);

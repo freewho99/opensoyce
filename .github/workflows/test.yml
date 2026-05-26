@@ -1,0 +1,48 @@
+# OpenSoyce unit + typecheck CI — ACTIVE workflow.
+#
+# Runs npm test on every push and PR. npm test = tsc --noEmit + the two
+# in-process governor/pattern test suites. Designed to be fast (no
+# Playwright, no real-network calls) so it gates PRs without burning
+# minutes on the GitHub free runner budget.
+#
+# This addresses the audit finding that no CI ran the unit tests — the
+# only prior workflow was opensoyce-scan.yml which dogfoods the scanner
+# on the lockfile but does not run any test scripts.
+
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        # npm test = lint (tsc --noEmit) + governor-gate (10 cases) +
+        # ots-patterns (5 cases). All in-process, no network.
+        run: npm test

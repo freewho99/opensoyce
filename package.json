@@ -10,6 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "check:mojibake": "node scripts/check-mojibake.mjs",
+    "test": "npm run lint && node scripts/test-governor-gate.mjs && node scripts/test-ots-patterns.mjs",
     "test:swarm": "playwright test e2e/opensoyce-swarm.spec.ts --grep \"4-PERSONA SWARM\"",
     "test:mobile": "playwright test e2e/test-mobile.spec.ts",
     "test:routes": "playwright test e2e/opensoyce-routes-swarm.spec.ts",
@@ -17,6 +18,7 @@
     "check-deploy": "node scripts/check-deploy.js",
     "test:real-signed": "node scripts/test-real-signed-report.js",
     "test:models": "node test-models.js",
+    "test:governor-gate": "node scripts/test-governor-gate.mjs",
     "test:ots-patterns": "node scripts/test-ots-patterns.mjs"
   },
   "dependencies": {

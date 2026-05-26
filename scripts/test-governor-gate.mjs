@@ -18,16 +18,28 @@ import {
 
 let passed = 0;
 let failed = 0;
+const pending = [];
 
+// IMPORTANT: every test case in this file is `async`, so the harness MUST
+// await the function. The previous synchronous `try { fn() }` returned
+// before async assertions ran, which meant rejected promises became
+// unhandled rejections AFTER `PASS` had already been printed. That hid a
+// real DB_ERROR in the slack-webhook test.
 function test(name, fn) {
-  try {
-    fn();
-    console.log(`PASS  ${name}`);
-    passed += 1;
-  } catch (e) {
-    console.log(`FAIL  ${name} -- ${e.message}\n${e.stack}`);
-    failed += 1;
-  }
+  pending.push(async () => {
+    try {
+      await fn();
+      console.log(`PASS  ${name}`);
+      passed += 1;
+    } catch (e) {
+      console.log(`FAIL  ${name} -- ${e.message}\n${e.stack}`);
+      failed += 1;
+    }
+  });
+}
+
+async function runAll() {
+  for (const fn of pending) await fn();
 }
 
 function eq(a, b, msg) {
@@ -95,11 +107,17 @@ test('OTS Gate: Allow clean dependencies', async () => {
   eq(body.dependenciesChecked, 2, 'count');
 });
 
-test('OTS Gate: Block malicious and restricted packages', async () => {
+test('OTS Gate: Block critical packages and warn on restricted-license under default policy', async () => {
+  // Default policy warn=['graveyard','risky','watchlist'], block=[]. So a
+  // restricted-license package whose verdict is 'risky' (agpl-pkg) WARNS
+  // but does not BLOCK unless policy explicitly blocks AGPL — see the
+  // dedicated license-block test below. The previous version of this test
+  // asserted agpl=BLOCK under default policy; that assertion was always
+  // wrong and only passed because the test harness ate async failures.
   const req = new MockReq(
-    'POST', 
-    { 'content-type': 'application/json' }, 
-    { action: 'compliance-gate' }, 
+    'POST',
+    { 'content-type': 'application/json' },
+    { action: 'compliance-gate' },
     { dependencies: ['react', 'malicious-pkg', 'agpl-pkg'] }
   );
   const res = new MockRes();
@@ -109,15 +127,38 @@ test('OTS Gate: Block malicious and restricted packages', async () => {
 
   eq(res.statusCode, 200, 'gate status');
   const body = JSON.parse(res.body);
-  eq(body.decision, 'BLOCK', 'decision');
+  eq(body.decision, 'BLOCK', 'decision rolls up to BLOCK (driven by malicious-pkg)');
 
   const maliciousEval = body.evaluation.find(e => e.package === 'malicious-pkg');
   eq(maliciousEval.action, 'BLOCK', 'malicious action');
   ok(maliciousEval.reason.includes('exploit') || maliciousEval.reason.includes('blocked'), 'malicious reason');
 
   const agplEval = body.evaluation.find(e => e.package === 'agpl-pkg');
-  eq(agplEval.action, 'BLOCK', 'agpl action');
-  ok(agplEval.reason.includes('License'), 'agpl reason');
+  eq(agplEval.action, 'WARN', 'agpl under default policy is WARN (verdict=risky)');
+});
+
+test('OTS Gate: Custom policy can block restricted licenses via license: prefix', async () => {
+  const req = new MockReq(
+    'POST',
+    { 'content-type': 'application/json' },
+    { action: 'compliance-gate' },
+    {
+      dependencies: ['react', 'agpl-pkg'],
+      policy: { block: ['license:agpl-3.0'], warn: [], allow: [] }
+    }
+  );
+  const res = new MockRes();
+
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 200, 'gate status');
+  const body = JSON.parse(res.body);
+  eq(body.decision, 'BLOCK', 'decision is BLOCK with license-block policy');
+
+  const agplEval = body.evaluation.find(e => e.package === 'agpl-pkg');
+  eq(agplEval.action, 'BLOCK', 'agpl is BLOCK under explicit license-block policy');
+  ok(agplEval.reason.includes('License'), 'agpl reason names the license');
 });
 
 test('OTS Gate: Handle warning status on medium-risk packages', async () => {
@@ -206,16 +247,23 @@ test('Ledger Exception: Sign and record interactive Slack approval', async () =>
   const mockSb = {
     from: (table) => {
       eq(table, 'exceptions', 'table accessed');
-      return { 
+      return {
         select: () => mockSelect,
         update: mockUpdate
       };
     }
   };
 
-  process.env.SUPABASE_URL = 'https://mock.supabase.co';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-key';
-  __resetSupabaseClientForTests();
+  // Inject the mock Supabase client (the env-var/reset pattern this test
+  // previously used left supabase-js making real DNS calls to
+  // mock.supabase.co — which failed, returning 500 DB_ERROR. The harness
+  // bug hid that. Now the mock is actually wired.)
+  __setSupabaseClientForTests(mockSb);
+
+  // Slack webhook signing — the handler now fails closed when
+  // SLACK_SIGNING_SECRET is unset, so the test must supply a real signature.
+  const SLACK_SECRET = 'unit-test-slack-signing-secret';
+  process.env.SLACK_SIGNING_SECRET = SLACK_SECRET;
 
   // Mock Slack Webhook payload
   const payload = {
@@ -224,9 +272,19 @@ test('Ledger Exception: Sign and record interactive Slack approval', async () =>
     response_url: 'https://hooks.slack.com/actions/mock-url'
   };
   const rawBody = `payload=${encodeURIComponent(JSON.stringify(payload))}`;
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const sigBase = `v0:${timestamp}:${rawBody}`;
+  const signature = `v0=${crypto.createHmac('sha256', SLACK_SECRET).update(sigBase).digest('hex')}`;
 
-  const req = new MockReq('POST', {}, { action: 'slack-webhook' }, rawBody);
-  // Inject rawBody directly
+  const req = new MockReq(
+    'POST',
+    {
+      'x-slack-signature': signature,
+      'x-slack-request-timestamp': timestamp,
+    },
+    { action: 'slack-webhook' },
+    rawBody
+  );
   req.rawBody = rawBody;
   const res = new MockRes();
 
@@ -239,7 +297,23 @@ test('Ledger Exception: Sign and record interactive Slack approval', async () =>
   eq(body.status, 'approved', 'approved');
 
   // Clean up
-  __resetSupabaseClientForTests();
+  __setSupabaseClientForTests(null);
+  delete process.env.SLACK_SIGNING_SECRET;
+});
+
+test('Slack webhook: fail-closed when SLACK_SIGNING_SECRET is unset', async () => {
+  delete process.env.SLACK_SIGNING_SECRET;
+
+  const rawBody = 'payload=%7B%7D';
+  const req = new MockReq('POST', {}, { action: 'slack-webhook' }, rawBody);
+  req.rawBody = rawBody;
+  const res = new MockRes();
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 500, 'unconfigured slack returns 500');
+  const body = JSON.parse(res.body);
+  eq(body.error, 'SLACK_NOT_CONFIGURED', 'error code names the missing config');
 });
 
 function mintSessionCookie(login) {
@@ -345,5 +419,6 @@ test('Appeals: file pending review when caller is verified maintainer', async ()
   __setSupabaseClientForTests(null);
 });
 
+await runAll();
 console.log(`\nOTS Governor & Gate Integration tests: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
