@@ -47,6 +47,7 @@ import { verdictFor } from './verdict.js';
 import { checkPublicRegistry as defaultCheckPublicRegistry } from './checkPublicRegistry.js';
 import { batchFetchCapabilityProfiles } from './installScriptAnalyzer.js';
 import { checkThreats as defaultCheckThreats } from './threatDb.js';
+import { attachOtsPatternsToRows } from './otsPatterns.js';
 
 // Severity tiering for response sort. Lower index = higher severity.
 // Duplicated only as a tiny lookup constant (intentional — it's 6 tokens,
@@ -620,15 +621,29 @@ export async function runScan({ lockfileText, filename, deps } = {}) {
     };
   }
 
+  const ciContext = {
+    ci: deps.ci === true,
+    hasSecrets: deps.hasSecrets === true
+  };
+  const processedVulnerabilities = attachOtsPatternsToRows(vulnerabilities || [], ciContext);
+  
+  let processedSelectedHealth = selectedHealth;
+  if (selectedHealth && Array.isArray(selectedHealth.scored)) {
+    processedSelectedHealth = {
+      ...selectedHealth,
+      scored: attachOtsPatternsToRows(selectedHealth.scored, ciContext)
+    };
+  }
+
   const payload = {
     totalDeps: parsed.all.length,
     directDeps: parsed.direct.length,
     ecosystem,
-    vulnerabilities: sortScanVulnerabilities(vulnerabilities || []),
+    vulnerabilities: sortScanVulnerabilities(processedVulnerabilities || []),
     scannedAt: new Date().toISOString(),
     cacheHit: false,
     inventory,
-    selectedHealth,
+    selectedHealth: processedSelectedHealth,
   };
   if (inventoryError) payload.inventoryError = inventoryError;
   if (selectedHealthError) payload.selectedHealthError = selectedHealthError;

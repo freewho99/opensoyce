@@ -15,6 +15,8 @@ import Soycie from '../components/Soycie';
 import { useProjects } from '../context/ProjectContext';
 import { CATEGORIES } from '../data/categories';
 import { trackEvent } from '../utils/analytics';
+import { detectOtsPatternsForRow, otsPatternVerdict } from '../shared/otsPatterns.js';
+import { getOtsPatternDefinition } from '../data/patterns';
 
 export default function ProjectDetail() {
   const { owner, repo } = useParams();
@@ -88,6 +90,20 @@ export default function ProjectDetail() {
 
   const project = liveData || localProject;
 
+  const mockVersion = project && project.name.toLowerCase() === 'axios' ? '1.14.1' : '1.0.0';
+  const rowForPatterns = project ? {
+    package: project.name,
+    version: mockVersion,
+    severity: (project.advisories && project.advisories.critical > 0) ? 'critical' : (project.score.overall < 60 ? 'high' : 'medium'),
+    ids: project.advisories && project.advisories.openCount > 0 ? ['CVE-MOCK'] : [],
+    hasInstallScript: project.name.toLowerCase() === 'axios' || project.name.toLowerCase() === 'malicious-pkg',
+    verified: project.status === 'Verified' ? true : 'unverified',
+    license: project.license,
+    extensionExploitRisk: project.extensionExploitRisk
+  } : null;
+  
+  const detectedPatterns = rowForPatterns ? detectOtsPatternsForRow(rowForPatterns) : [];
+
   const getHistory = () => {
     if (!project) return [];
     // Seeded random based on stars
@@ -103,7 +119,7 @@ export default function ProjectDetail() {
     for (let i = 11; i >= 0; i--) {
       const monthSeed = Math.sin(seed + i) * 0.3;
       const trendAdjustment = i * trendBase;
-      const val = Math.min(10, Math.max(1, currentScore - monthSeed - trendAdjustment));
+      const val = Math.min(100, Math.max(1, currentScore - monthSeed - trendAdjustment));
       history.push(val);
     }
     return history;
@@ -238,6 +254,83 @@ export default function ProjectDetail() {
                   </div>
                 )}
 
+                {/* OTS Detected Risk Patterns */}
+                {detectedPatterns.length > 0 && (
+                  <div className="border-4 border-black bg-white p-8 mb-12 shadow-[8px_8px_0px_#000]">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b-2 border-black">
+                      <ShieldAlert size={28} className="text-soy-red" />
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-soy-red tracking-[0.3em] block">OTS Gate Intelligence</span>
+                        <h3 className="text-2xl font-black uppercase italic tracking-tight leading-none">
+                          Detected Risk Patterns ({detectedPatterns.length})
+                        </h3>
+                      </div>
+                    </div>
+                    
+                    <p className="text-sm font-bold text-soy-bottle/70 mb-6 leading-relaxed">
+                      Our static analysis engine matched the following security & behavior patterns on this project codebase:
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {detectedPatterns.map((pat) => {
+                        const def = getOtsPatternDefinition(pat.patternId);
+                        if (!def) return null;
+                        
+                        const severityClass: Record<string, string> = {
+                          critical: 'bg-soy-red text-white border-black',
+                          high: 'bg-orange-500 text-white border-black',
+                          medium: 'bg-yellow-400 text-black border-black',
+                          low: 'bg-blue-400 text-white border-black',
+                          info: 'bg-soy-label text-black border-black',
+                        };
+                        
+                        return (
+                          <div key={pat.patternId} className="border-2 border-black p-5 bg-soy-label/40 flex flex-col justify-between shadow-[4px_4px_0px_#000]">
+                            <div>
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <span className={`text-[9px] font-black uppercase border px-2 py-0.5 ${severityClass[pat.severity] || ''}`}>
+                                  {pat.severity}
+                                </span>
+                                <span className="text-[9px] font-black uppercase text-soy-red font-mono">
+                                  {pat.policyImpact}
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-black uppercase italic mb-2 hover:underline">
+                                <Link to={`/patterns/${pat.patternId}`}>{def.name}</Link>
+                              </h4>
+                              <p className="text-xs font-bold text-soy-bottle/60 leading-normal mb-3">
+                                {def.shortDescription}
+                              </p>
+                              {pat.evidence && pat.evidence.length > 0 && (
+                                <div className="bg-white/85 p-3 border border-dashed border-black/20 rounded text-[11px] font-bold text-soy-bottle/70 mb-3 space-y-1">
+                                  {pat.evidence.map((ev: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between">
+                                      <span className="opacity-50">{ev.label}:</span>
+                                      <span>{ev.value}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <Link 
+                              to={`/patterns/${pat.patternId}`}
+                              className="text-[10px] font-black uppercase text-soy-red hover:underline block mt-2"
+                            >
+                              View Spec Specifications →
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-8 p-4 bg-black text-white text-xs font-bold flex justify-between items-center">
+                      <span>AGGREGATED OTS VERDICT: <strong className="text-soy-red font-black">{otsPatternVerdict(detectedPatterns)}</strong></span>
+                      <Link to="/patterns" className="underline hover:text-soy-red">OTS PATTERN LIBRARY</Link>
+                    </div>
+                  </div>
+                )}
+
+
                 {/* 4. SIGNAL BREAKDOWN (3-column grid) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-4 border-black mb-12">
                   <SignalSection
@@ -273,7 +366,7 @@ export default function ProjectDetail() {
                   />
                   <SignalSection 
                     title="FORKABILITY" 
-                    value={(project.score.overall - 0.4).toFixed(1)}
+                    value={(project.score.overall - 4).toFixed(1)}
                     bullets={[
                       `↑ License: ${project.license}`,
                       "↑ Modular component structure",
@@ -283,7 +376,7 @@ export default function ProjectDetail() {
                   />
                   <SignalSection 
                     title="MOMENTUM" 
-                    value={(project.score.overall + 0.3 > 10 ? 9.9 : project.score.overall + 0.3).toFixed(1)}
+                    value={(project.score.overall + 3 > 100 ? 99.9 : project.score.overall + 3).toFixed(1)}
                     bullets={[
                       "↑ Commit count accelerating",
                       "↑ Issue response < 24h",
@@ -299,9 +392,9 @@ export default function ProjectDetail() {
                 <div className="lg:sticky lg:top-40">
                   <NutritionLabel project={project} />
                   <div className="mt-8 flex items-center justify-center gap-4 bg-white border-2 border-black p-4 italic font-bold">
-                    <Soycie mood={project.score.overall > 8.5 ? "happy" : "suspicious"} size="sm" />
+                    <Soycie mood={project.score.overall > 85 ? "happy" : "suspicious"} size="sm" />
                     <span className="text-xs uppercase tracking-widest opacity-60">
-                      Mascot View: {project.score.overall > 8.5 ? "High sauce purity." : "Something is salty here."}
+                      Mascot View: {project.score.overall > 85 ? "High sauce purity." : "Something is salty here."}
                     </span>
                   </div>
                 </div>

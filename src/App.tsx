@@ -38,6 +38,9 @@ import Settings from './pages/Settings';
 import Guard from './pages/Guard';
 import Proof from './pages/Proof';
 import NotFound from './pages/NotFound';
+import Patterns from './pages/Patterns';
+import PatternDetail from './pages/PatternDetail';
+import IncidentDetail from './pages/IncidentDetail';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
 // while the browser entry uses <BrowserRouter>. Keep this in sync with the
@@ -68,6 +71,9 @@ export function AppRoutes() {
         <Route path="/about" element={<About />} />
         <Route path="/methodology" element={<Methodology />} />
         <Route path="/proof" element={<Proof />} />
+        <Route path="/patterns" element={<Patterns />} />
+        <Route path="/patterns/:patternId" element={<PatternDetail />} />
+        <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
         <Route path="/soc2" element={<Navigate to="/guard?tab=compliance" replace />} />
         <Route path="/remix" element={<Remix />} />
         <Route path="/heat-check" element={<HeatCheck />} />

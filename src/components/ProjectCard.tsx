@@ -100,12 +100,12 @@ export default function ProjectCard({ project, isCompareMode, isSelected, onTogg
                 VERIFIED
               </span>
             )}
-            {project.category === 'skills-agents' && project.score.overall >= 7.5 && (
+            {project.category === 'skills-agents' && project.score.overall >= 75 && (
               <span className="border border-[#16a34a] text-[#16a34a] text-[8px] font-black px-2 py-0.5 uppercase tracking-widest">
                 SKILL READY
               </span>
             )}
-            {project.category === 'skills-agents' && project.score.overall >= 8.0 && (
+            {project.category === 'skills-agents' && project.score.overall >= 80 && (
               <span className="border border-[#2563eb] text-[#2563eb] text-[8px] font-black px-2 py-0.5 uppercase tracking-widest">
                 AGENT READY
               </span>
@@ -145,7 +145,7 @@ export default function ProjectCard({ project, isCompareMode, isSelected, onTogg
           <span className="text-5xl font-black italic tracking-tighter text-soy-red leading-none">
             {(project.score.overall ?? 0).toFixed(1)}
           </span>
-          <span className="text-xs font-black uppercase tracking-widest opacity-30 italic">/ 10</span>
+          <span className="text-xs font-black uppercase tracking-widest opacity-30 italic">/ 100</span>
         </div>
         
         <div 

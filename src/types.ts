@@ -1,5 +1,5 @@
 export type SoyceScore = {
-  overall: number; // 0-10
+  overall: number; // 0-100
   maintenance: number; // 0-100 (for progress bars)
   security: number; // 0-100
   community: number; // 0-100

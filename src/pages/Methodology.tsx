@@ -112,42 +112,42 @@ export default function Methodology() {
                   </thead>
                   <tbody className="divide-y divide-white/10 font-medium">
                     <tr>
-                      <td className="py-3 pr-2 font-black text-green-400 text-sm">8.5+</td>
+                      <td className="py-3 pr-2 font-black text-green-400 text-sm">85+</td>
                       <td className="py-3 px-2">
                         <span className="bg-green-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">USE READY</span>
                       </td>
                       <td className="py-3 pl-2 opacity-80 normal-case">Production grade. Real CVE hygiene, active maintenance, and strong documentation. Safe to adopt.</td>
                     </tr>
                     <tr>
-                      <td className="py-3 pr-2 font-black text-blue-400 text-sm">7.0–8.4</td>
+                      <td className="py-3 pr-2 font-black text-blue-400 text-sm">70–84</td>
                       <td className="py-3 px-2">
                         <span className="bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">FORKABLE</span>
                       </td>
                       <td className="py-3 pl-2 opacity-80 normal-case">Mature core infrastructure with minor gaps. Trustworthy base for internal customization.</td>
                     </tr>
                     <tr>
-                      <td className="py-3 pr-2 font-black text-emerald-400 text-sm">6.0–6.9</td>
+                      <td className="py-3 pr-2 font-black text-emerald-400 text-sm">60–69</td>
                       <td className="py-3 px-2">
                         <span className="bg-emerald-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">STABLE</span>
                       </td>
                       <td className="py-3 pl-2 opacity-80 normal-case">Healthy maintained library in stable mode without daily commits. Ideal for light integrations.</td>
                     </tr>
                     <tr>
-                      <td className="py-3 pr-2 font-black text-yellow-400 text-sm">4.0–5.9</td>
+                      <td className="py-3 pr-2 font-black text-yellow-400 text-sm">40–59</td>
                       <td className="py-3 px-2">
                         <span className="bg-yellow-600 text-black text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">WATCHLIST</span>
                       </td>
                       <td className="py-3 pl-2 opacity-80 normal-case">Works today but signals are mixed. Verify per-pillar breakdowns before adoption.</td>
                     </tr>
                     <tr>
-                      <td className="py-3 pr-2 font-black text-orange-400 text-sm">2.5–3.9</td>
+                      <td className="py-3 pr-2 font-black text-orange-400 text-sm">25–39</td>
                       <td className="py-3 px-2">
                         <span className="bg-orange-600 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">RISKY</span>
                       </td>
                       <td className="py-3 pl-2 opacity-80 normal-case">Concerns in multiple pillars. Maintenance debt, licensing gaps, or unaddressed CVEs.</td>
                     </tr>
                     <tr>
-                      <td className="py-3 pr-2 font-black text-red-500 text-sm">&lt; 2.5</td>
+                      <td className="py-3 pr-2 font-black text-red-500 text-sm">&lt; 25</td>
                       <td className="py-3 px-2">
                         <span className="bg-red-700 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border border-white/20">STALE</span>
                       </td>
@@ -220,12 +220,12 @@ export default function Methodology() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            <VocabCard title="USE READY" score="≥ 8.5" subLabel="Safe to adopt — strong across all pillars" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
-            <VocabCard title="FORKABLE" score="7.0–8.4" subLabel="Healthy and trustworthy — fork-worthy as a base" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
-            <VocabCard title="STABLE" score="6.0–6.9" subLabel="Mature, lower-velocity, still maintained" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
-            <VocabCard title="WATCHLIST" score="4.0–5.9" subLabel="Real issues; verify before adoption" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
-            <VocabCard title="RISKY" score="2.5–3.9" subLabel="Multiple bands flag concerns" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
-            <VocabCard title="STALE" score="< 2.5" subLabel="Abandoned or dormant" desc="Effectively abandoned. No recent commits, no releases, no triage." />
+            <VocabCard title="USE READY" score="≥ 85" subLabel="Safe to adopt — strong across all pillars" desc="Production-grade signals. Real CVE hygiene, active maintenance, strong docs. Ready for serious adoption evaluation." />
+            <VocabCard title="FORKABLE" score="70–84" subLabel="Healthy and trustworthy — fork-worthy as a base" desc="Mature core infrastructure. Best for teams who want to build on top of it." />
+            <VocabCard title="STABLE" score="60–69" subLabel="Mature, lower-velocity, still maintained" desc="Healthy maintained library — may be in stable mode (releases + triage) without daily commits. Don't confuse with risky." />
+            <VocabCard title="WATCHLIST" score="40–59" subLabel="Real issues; verify before adoption" desc="Works today, but signals are mixed. Check the per-pillar breakdown before adopting." />
+            <VocabCard title="RISKY" score="25–39" subLabel="Multiple bands flag concerns" desc="Real concerns in multiple pillars. Maintenance debt, licensing gap, or unaddressed advisories." />
+            <VocabCard title="STALE" score="< 25" subLabel="Abandoned or dormant" desc="Effectively abandoned. No recent commits, no releases, no triage." />
             <VocabCard title="GRAVEYARD" score="Deprecated" desc="Shaped the ecosystem. Now a museum piece. Some have forkable infrastructure." />
           </div>
 
@@ -351,9 +351,9 @@ export default function Methodology() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-20 justify-items-center">
-            <BadgePreview color="#22c55e" score="9.5" caption="SCORE ≥ 8" />
-            <BadgePreview color="#f59e0b" score="6.8" caption="SCORE ≥ 6" />
-            <BadgePreview color="#E63322" score="3.2" caption="SCORE < 6" />
+            <BadgePreview color="#22c55e" score="95" caption="SCORE ≥ 80" />
+            <BadgePreview color="#f59e0b" score="68" caption="SCORE ≥ 60" />
+            <BadgePreview color="#E63322" score="32" caption="SCORE < 60" />
           </div>
 
           <div className="max-w-4xl mx-auto text-center">

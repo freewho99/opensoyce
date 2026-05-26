@@ -14,6 +14,7 @@
 import { test, expect, Browser, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'node:crypto';
 import { GoogleGenAI } from '@google/genai';
 import { PERSONAS, getRandomPersonas, OpenSoycePersona } from './personas';
 import * as dotenv from 'dotenv';
@@ -237,6 +238,23 @@ ${sections}
 
 
 
+function base64urlEncode(bufOrString: Buffer | string): string {
+  const buf = Buffer.isBuffer(bufOrString) ? bufOrString : Buffer.from(bufOrString, 'utf8');
+  return buf.toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function mintSessionToken(login: string, orgs: string[], secret: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { login, orgs, exp: now + 3600 };
+  const json = JSON.stringify(payload);
+  const enc = base64urlEncode(json);
+  const sig = crypto.createHmac('sha256', secret).update(json).digest('hex');
+  return `${enc}.${sig}`;
+}
+
 // ─── Core Session Logic ────────────────────────────────────────────────────────
 
 async function runPersonaSession(page: Page, persona: OpenSoycePersona): Promise<SwarmResult> {
@@ -251,6 +269,16 @@ async function runPersonaSession(page: Page, persona: OpenSoycePersona): Promise
   };
 
   try {
+    const secret = process.env.OPENSOYCE_DASHBOARD_SECRET || 'unit-test-dashboard-secret-32-chars-x';
+    const login = persona.name.replace(/\s+/g, '-').toLowerCase();
+    const token = mintSessionToken(login, ['acme-corp'], secret);
+
+    await page.context().addCookies([{
+      name: 'osg_session',
+      value: token,
+      url: BASE_URL
+    }]);
+
     console.log(`\n🤖 [${persona.name}] Starting session (goal: ${persona.goal})`);
 
     // ── 1. Land on the homepage ──────────────────────────────────────────────
@@ -265,6 +293,7 @@ async function runPersonaSession(page: Page, persona: OpenSoycePersona): Promise
     });
 
     // ── 2. Look up each repo ─────────────────────────────────────────────────
+    let complianceChecked = false;
     for (const repo of persona.reposToLookup) {
       const repoResult: RepoResult = {
         repo,
@@ -472,6 +501,37 @@ async function runPersonaSession(page: Page, persona: OpenSoycePersona): Promise
             await page.waitForTimeout(1000);
             
             // Go back to lookup URL if we have more lookups (or let it navigate in the next loop)
+            await page.goto(`${BASE_URL}/lookup?q=${encodeURIComponent(repo)}`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+          }
+
+          // F. Compliance-focused integration check (Settings Auditor key generation)
+          if ((persona.archetype === 'security-engineer' || persona.archetype === 'cto') && !complianceChecked) {
+            complianceChecked = true;
+            console.log(`   ↳ [${persona.name}] Compliance persona: testing settings Auditor Key generation`);
+            await page.goto(`${BASE_URL}/settings`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            
+            // Wait for Compliance section to load
+            const complianceHeader = page.locator('text=Compliance Integrations').first();
+            await complianceHeader.waitFor({ state: 'visible', timeout: 10000 });
+            
+            // Click Generate Auditor Key
+            const generateBtn = page.locator('button:has-text("Generate Auditor Key")').first();
+            await generateBtn.waitFor({ state: 'visible', timeout: 10000 });
+            await generateBtn.click();
+            
+            // Wait for auditor key and configuration guide to appear
+            const keyLabel = page.locator('text=YOUR AUDITOR KEY (SAVE NOW)').first();
+            await keyLabel.waitFor({ state: 'visible', timeout: 10000 });
+            console.log(`   ✅ [${persona.name}] Verified Auditor Key was generated`);
+            
+            const vantaGuide = page.locator('text=Vanta/Drata Configuration Guide').first();
+            await vantaGuide.waitFor({ state: 'visible', timeout: 10000 });
+            console.log(`   ✅ [${persona.name}] Verified Vanta/Drata Configuration Guide is visible`);
+
+            // Go back to lookup URL for remaining repos
             await page.goto(`${BASE_URL}/lookup?q=${encodeURIComponent(repo)}`, {
               waitUntil: 'domcontentloaded',
               timeout: 30000,

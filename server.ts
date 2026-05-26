@@ -324,7 +324,7 @@ async function startServer() {
       if (!data) return res.status(404).send('Not found');
 
       const score = Number.isFinite(data.total) ? data.total : 0;
-      const color = score >= 8 ? '#22c55e' : score >= 6 ? '#f59e0b' : '#E63322';
+      const color = score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : '#E63322';
 
       res.setHeader('Content-Type', 'image/svg+xml');
       res.send(`
@@ -414,6 +414,26 @@ async function startServer() {
       await exceptionsHandler(req, res);
     } catch (err: any) {
       console.error('compliance evidence handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ error: 'INTERNAL_ERROR', message: 'unexpected server error' });
+    }
+  });
+
+  app.post("/api/compliance/gate", async (req: express.Request, res: express.Response) => {
+    try {
+      req.query = { ...req.query, action: 'compliance-gate' };
+      await exceptionsHandler(req, res);
+    } catch (err: any) {
+      console.error('compliance gate handler crashed', err);
+      if (!res.headersSent) res.status(500).json({ error: 'INTERNAL_ERROR', message: 'unexpected server error' });
+    }
+  });
+
+  app.post("/api/compliance/appeal", async (req: express.Request, res: express.Response) => {
+    try {
+      req.query = { ...req.query, action: 'submit-appeal' };
+      await exceptionsHandler(req, res);
+    } catch (err: any) {
+      console.error('compliance appeal handler crashed', err);
       if (!res.headersSent) res.status(500).json({ error: 'INTERNAL_ERROR', message: 'unexpected server error' });
     }
   });

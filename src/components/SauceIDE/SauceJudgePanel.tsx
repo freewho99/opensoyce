@@ -418,13 +418,13 @@ export default function SauceJudgePanel({
       }
     } else {
       const assessment =
-        score >= 8
+        score >= 80
           ? 'Healthy code distribution, active release cadences, and standard license posture verify this as stable.'
-          : score >= 6
+          : score >= 60
           ? 'A stable repository. However, minor gaps like missing SECURITY policies or low automated scanners adjust the score.'
           : 'High risk detected. Low commit frequency, lack of package updates, and ownership concentration found.';
 
-      const verdictText = `📢 **Verdict Summary**: Overall Score of **${score.toFixed(1)}/10.0**. ${assessment}`;
+      const verdictText = `📢 **Verdict Summary**: Overall Score of **${score.toFixed(1)}/100.0**. ${assessment}`;
       setMessages([]);
       streamResponse(verdictText, []);
     }
@@ -515,7 +515,7 @@ export default function SauceJudgePanel({
 
 💡 *Try asking: "How to get badge code?" next.*`;
     } else if (query.includes('badge') || query.includes('claim') || query.includes('get badge code')) {
-      const badgeMarkdown = `[![OpenSoyce Score](https://img.shields.io/badge/OpenSoyce-${score.toFixed(1)}%20%2F%2010.0-success)](https://opensoyce.com/lookup)`;
+      const badgeMarkdown = `[![OpenSoyce Score](https://img.shields.io/badge/OpenSoyce-${score.toFixed(1)}%20%2F%20100.0-success)](https://opensoyce.com/lookup)`;
       reply = `🏷️ **Badge Integration & Claiming**:
 To claim your repository, authenticate via GitHub OAuth by clicking the **Claim Repository** button under Recommended Actions.
 
@@ -528,7 +528,7 @@ ${badgeMarkdown}
 💡 *Try asking: "What is Automerge Governor?" next.*`;
     } else if (query.includes('trusted') || query.includes('stable')) {
       reply = `🌟 **Trust Evaluation**:
-This repository has an overall score of **${score.toFixed(1)}/10.0** and is categorized under adoption band **${verdict}**.
+This repository has an overall score of **${score.toFixed(1)}/100.0** and is categorized under adoption band **${verdict}**.
 It demonstrates solid engineering practices, but security hygiene and ownership distribution are vital for high-assurance environments.
 
 💡 *Try asking: "What is Automerge Governor?" next.*`;
@@ -700,10 +700,10 @@ The Automerge Governor checks dependency updates against live compliance rules. 
           </div>
 
           <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-4xl font-black text-soy-label tracking-tighter leading-none">{score.toFixed(1)}</span>
-            <span className="text-xs text-soy-label/40 font-bold">/ 10.0</span>
+            <span className="text-4xl font-black text-soy-label tracking-tighter leading-none">{Math.round(score)}</span>
+            <span className="text-xs text-soy-label/40 font-bold">/ 100</span>
             <span className="text-[10px] font-black uppercase tracking-widest text-soy-red ml-auto">
-              ADOPTION: {score >= 8.5 ? 'EXCELLENT' : score >= 7.0 ? 'GOOD' : score >= 6.0 ? 'STABLE' : 'RISKY'}
+              ADOPTION: {score >= 85 ? 'EXCELLENT' : score >= 70 ? 'GOOD' : score >= 60 ? 'STABLE' : 'RISKY'}
             </span>
           </div>
 
@@ -720,11 +720,11 @@ The Automerge Governor checks dependency updates against live compliance rules. 
               </button>
             </div>
             {[
-              { name: 'Maintenance', val: breakdown.maintenance.toFixed(1), max: '3.0', tab: 'commits' as EvidenceTabKey, reason: 'Inspecting commit cadence and developer activity logs.' },
-              { name: 'Security', val: breakdown.security.toFixed(1), max: '2.0', tab: 'security' as EvidenceTabKey, reason: 'Checking for automated scanners and vulnerability response policies.' },
-              { name: 'Community', val: breakdown.community.toFixed(1), max: '2.5', tab: 'dependencies' as EvidenceTabKey, reason: 'Evaluating total contributors and external dependencies.' },
-              { name: 'Docs', val: breakdown.documentation.toFixed(1), max: '1.5', tab: 'readme' as EvidenceTabKey, reason: 'Scanning README installation guides and project metadata.' },
-              { name: 'Activity', val: breakdown.activity.toFixed(1), max: '1.0', tab: 'commits' as EvidenceTabKey, reason: 'Analyzing code churn rates and release cycles.' },
+              { name: 'Maintenance', val: Math.round(breakdown.maintenance), weight: 30, tab: 'commits' as EvidenceTabKey, reason: 'Inspecting commit cadence and developer activity logs.' },
+              { name: 'Security', val: Math.round(breakdown.security), weight: 20, tab: 'security' as EvidenceTabKey, reason: 'Checking for automated scanners and vulnerability response policies.' },
+              { name: 'Community', val: Math.round(breakdown.community), weight: 25, tab: 'dependencies' as EvidenceTabKey, reason: 'Evaluating total contributors and external dependencies.' },
+              { name: 'Docs', val: Math.round(breakdown.documentation), weight: 15, tab: 'readme' as EvidenceTabKey, reason: 'Scanning README installation guides and project metadata.' },
+              { name: 'Activity', val: Math.round(breakdown.activity), weight: 10, tab: 'commits' as EvidenceTabKey, reason: 'Analyzing code churn rates and release cycles.' },
             ].map((pillar) => (
               <button
                 key={pillar.name}
@@ -733,7 +733,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                 className="w-full flex justify-between items-center text-[10px] text-soy-label/80 hover:text-soy-red transition-all text-left py-0.5 cursor-pointer"
               >
                 <span className="font-bold">{pillar.name}</span>
-                <span className="font-mono text-soy-label/50">{pillar.val} <span className="opacity-40">/ {pillar.max}</span></span>
+                <span className="font-mono text-soy-label/50">{pillar.val} <span className="opacity-40">/ 100 <span className="text-[8px]">({pillar.weight}%)</span></span></span>
               </button>
             ))}
           </div>

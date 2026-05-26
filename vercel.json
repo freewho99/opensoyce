@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/compliance/gate",
+      "destination": "/api/exceptions?action=compliance-gate"
+    },
+    {
+      "source": "/api/compliance/appeal",
+      "destination": "/api/exceptions?action=submit-appeal"
+    },
+    {
       "source": "/api/compliance/evidence",
       "destination": "/api/exceptions?action=compliance-evidence"
     },

@@ -62,9 +62,9 @@ export default function Scan() {
         : 0;
 
       let status: 'Excellent' | 'Good' | 'Risky' | 'Critical' = 'Critical';
-      if (totalScore >= 8.5) status = 'Excellent';
-      else if (totalScore >= 7) status = 'Good';
-      else if (totalScore >= 5) status = 'Risky';
+      if (totalScore >= 85) status = 'Excellent';
+      else if (totalScore >= 70) status = 'Good';
+      else if (totalScore >= 50) status = 'Risky';
 
       setResults({
         dependencies: scannedDeps,
@@ -146,7 +146,7 @@ export default function Scan() {
                   <div className="h-4 bg-white/10 rounded-full overflow-hidden">
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ width: `${results.overallScore * 10}%` }}
+                      animate={{ width: `${results.overallScore}%` }}
                       className="h-full bg-soy-red"
                     />
                   </div>

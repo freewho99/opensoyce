@@ -13,7 +13,7 @@ export const MOCK_PROJECTS: Project[] = [
     category: 'Agentic AI',
     scoreTrend: 'up',
     score: {
-      overall: 8.5,
+      overall: 85,
       maintenance: 82,
       security: 91,
       community: 64,
@@ -34,7 +34,7 @@ export const MOCK_PROJECTS: Project[] = [
     category: 'Security',
     scoreTrend: 'down',
     score: {
-      overall: 7.2,
+      overall: 72,
       maintenance: 65,
       security: 98,
       community: 42,
@@ -55,7 +55,7 @@ export const MOCK_PROJECTS: Project[] = [
     category: 'Data Sovereignty',
     scoreTrend: 'flat',
     score: {
-      overall: 9.1,
+      overall: 91,
       maintenance: 94,
       security: 89,
       community: 82,

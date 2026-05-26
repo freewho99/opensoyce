@@ -19,8 +19,8 @@ export default function SauceTracePanel({
     `parsing file tree structure ... found package.json, LICENSE, README.md`,
     `evaluating security rules ... dependabot file check complete`,
     `auditing contributors commit cadence ... 12 commit cycles resolved`,
-    `running soyce-score calculations ... overall score: ${score.toFixed(1)}/10.0`,
-    `SAUCE TRACE: scan completed · 5 pillars · 14 signals analyzed · overall score: ${score.toFixed(1)}/10.0`
+    `running soyce-score calculations ... overall score: ${score.toFixed(1)}/100.0`,
+    `SAUCE TRACE: scan completed · 5 pillars · 14 signals analyzed · overall score: ${score.toFixed(1)}/100.0`
   ];
 
   // Animate initial scan trace receipts

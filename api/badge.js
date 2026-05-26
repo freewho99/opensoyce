@@ -50,7 +50,7 @@ export default async function handler(req, res) {
 
     const { total } = calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues);
     const score = Number.isFinite(total) ? total : 0;
-    const color = score >= 8 ? '#22c55e' : score >= 6 ? '#f59e0b' : '#E63322';
+    const color = score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : '#E63322';
 
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');

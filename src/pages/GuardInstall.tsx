@@ -284,7 +284,7 @@ export default function GuardInstall() {
                         </span>
                       </div>
                       <p className="text-xs font-bold uppercase tracking-wide text-soy-bottle opacity-70">
-                        Score: 3.4 / 10 (Critical drop from 8.0)
+                        Score: 34 / 100 (Critical drop from 80.0)
                       </p>
                       <p className="text-[10px] font-mono opacity-80 mt-2 leading-relaxed text-red-700 bg-red-50 p-2 border border-red-200">
                         Signal: Unclaimed package hijack suspected. Publisher account changed, publish token leaked on public git history.
@@ -306,7 +306,7 @@ export default function GuardInstall() {
                         </span>
                       </div>
                       <p className="text-xs font-bold uppercase tracking-wide text-soy-bottle opacity-70">
-                        Score: 4.2 / 10 (Stale deprecation warning)
+                        Score: 42 / 100 (Stale deprecation warning)
                       </p>
                       <p className="text-[10px] font-mono opacity-80 mt-2 leading-relaxed text-amber-800 bg-amber-50 p-2 border border-amber-200">
                         Signal: Package deprecated. Maintainers recommend migrating to dayjs or date-fns.

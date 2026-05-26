@@ -164,7 +164,7 @@ export default function CLI() {
 ┃ axios              9.4  ↑ <span class="text-emerald-500">FRESH</span>    <span class="opacity-60">MIT</span>
 ┃ moment             4.2  ↓ <span class="text-soy-red font-bold">STALE</span>    <span class="opacity-60">MIT</span>  <span class="bg-soy-red text-white px-1 font-bold">⚠ DEPRECATED</span>
 ┃
-┃ OVERALL STACK SCORE: <span class="text-emerald-500 font-bold">7.6 / 10.0</span>
+┃ OVERALL STACK SCORE: <span class="text-emerald-500 font-bold">76 / 100.0</span>
 ┗ <span class="bg-emerald-500 text-black px-2 font-black italic">PASS</span> (threshold: 7.0)`}}
           />
           <div className="mt-8 pt-4 border-t border-white/10 text-[10px] uppercase font-bold text-white/40 italic flex justify-between">
@@ -194,11 +194,21 @@ export default function CLI() {
         <div className="min-h-[150px]">
           {activeTab === 'github' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <CodeBlock 
-                label=".github/workflows/soyce.yml"
-                code={`- name: Check dependency health
-  run: npx soyce check --fail-below 7.0`} 
-              />
+              <div className="space-y-4">
+                <CodeBlock 
+                  label=".github/workflows/opensoyce-gate.yml"
+                  code={`- name: OpenSoyce Trust Stack (OTS) Gate Check
+  uses: opensoyce/gate-action@v1
+  with:
+    fail-below: 7.0
+    remediate: true # auto-upgrade and commit safe versions in PR branch`} 
+                />
+                <CodeBlock 
+                  label="Alternative: CLI Script Run"
+                  code={`- name: Check dependency health via CLI
+  run: npx soyce check --fail-below 7.0 --remediate`} 
+                />
+              </div>
             </motion.div>
           )}
           {activeTab === 'npm' && (
@@ -240,7 +250,7 @@ export default function CLI() {
               <span className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-4">Preview</span>
               <div className="inline-flex items-stretch border-2 border-soy-bottle shadow-[4px_4px_0px_#000]">
                 <div className="bg-soy-bottle text-white px-3 py-1 text-[10px] font-black uppercase flex items-center">OpenSoyce Score</div>
-                <div className="bg-soy-red text-white px-3 py-1 text-[10px] font-black italic flex items-center">9.8 / 10</div>
+                <div className="bg-soy-red text-white px-3 py-1 text-[10px] font-black italic flex items-center">98 / 100</div>
               </div>
               <p className="mt-4 text-xs font-bold italic opacity-40 italic">Updates live with your repository metadata.</p>
             </div>

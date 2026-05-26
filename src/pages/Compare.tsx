@@ -161,13 +161,13 @@ function CustomCompareSection() {
                       <td className="p-4 bg-soy-label/10">OVERALL SOYCE SCORE</td>
                       <td className={`p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5`}>
                         <div className="flex flex-col items-center gap-1">
-                          <span>{totalA.toFixed(1)} / 10.0</span>
+                          <span>{totalA.toFixed(1)} / 100.0</span>
                           {totalA > totalB && <span className="bg-emerald-500 text-white text-[9px] px-2 py-0.5 tracking-widest uppercase border border-black shadow-[2px_2px_0px_#000]">WINNER ★</span>}
                         </div>
                       </td>
                       <td className={`p-4 text-center text-3xl font-black text-soy-red bg-soy-red/5`}>
                         <div className="flex flex-col items-center gap-1">
-                          <span>{totalB.toFixed(1)} / 10.0</span>
+                          <span>{totalB.toFixed(1)} / 100.0</span>
                           {totalB > totalA && <span className="bg-emerald-500 text-white text-[9px] px-2 py-0.5 tracking-widest uppercase border border-black shadow-[2px_2px_0px_#000]">WINNER ★</span>}
                         </div>
                       </td>

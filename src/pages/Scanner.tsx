@@ -15,6 +15,8 @@ import { summarizeScan } from '../shared/scanSummary.js';
 import { computeRiskProfile } from '../shared/riskProfile.js';
 import { buildMarkdownReport, buildJsonReport } from '../shared/buildScanReport.js';
 import { isTrustedInstallScript } from '../data/trustedInstallScripts.js';
+import { getOtsPatternDefinition } from '../data/patterns';
+
 
 // Typo-squat homoglyph detection v0 — shape emitted by detectTypoSquat() in
 // src/data/protectedPackageNames.js. Informational only; the chip never
@@ -170,6 +172,7 @@ interface Vulnerability {
   blastRadius?: BlastRadius | null;
   // Phase 3 — install-script static analysis result from the npm registry.
   capabilityProfile?: CapabilityProfile | null;
+  otsPatterns?: any[];
 }
 
 // Scanner v3a -- whole-tree dependency inventory. Purely additive surface;
@@ -1673,8 +1676,40 @@ function VulnRow({ v }: { v: Vulnerability }) {
         {v.summary}
       </p>
 
+      {/* OTS Detected Risk Patterns */}
+      {v.otsPatterns && v.otsPatterns.length > 0 && (
+        <div className="mt-3 mb-4 p-3 bg-soy-label border-2 border-soy-bottle">
+          <div className="text-[9px] font-black uppercase text-soy-red tracking-wider mb-2 flex items-center gap-1">
+            <ShieldAlert size={12} /> Detected OTS Risk Patterns ({v.otsPatterns.length})
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {v.otsPatterns.map((pat: any) => {
+              const def = getOtsPatternDefinition(pat.patternId);
+              const label = def ? def.name : pat.patternId;
+              const severityClass: Record<string, string> = {
+                critical: 'bg-soy-red text-white border-black',
+                high: 'bg-orange-500 text-white border-black',
+                medium: 'bg-yellow-400 text-black border-black',
+                low: 'bg-blue-400 text-white border-black',
+                info: 'bg-soy-label text-black border-black',
+              };
+              return (
+                <Link
+                  key={pat.patternId}
+                  to={`/patterns/${pat.patternId}`}
+                  className={`text-[9px] font-black uppercase border px-2 py-0.5 shadow-[1px_1px_0px_#000] hover:translate-y-[1px] hover:shadow-none transition-all flex items-center gap-1 ${severityClass[pat.severity] || ''}`}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Fixed-in + Lookup link */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t-2 border-soy-bottle/10">
+
         <div className="text-[11px] font-black uppercase tracking-widest">
           {v.fixedIn ? (
             <>

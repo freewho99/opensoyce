@@ -16,7 +16,8 @@
     "test:compliance": "node scripts/test-compliance-evidence.mjs",
     "check-deploy": "node scripts/check-deploy.js",
     "test:real-signed": "node scripts/test-real-signed-report.js",
-    "test:models": "node test-models.js"
+    "test:models": "node test-models.js",
+    "test:ots-patterns": "node scripts/test-ots-patterns.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

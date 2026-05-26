@@ -63,41 +63,35 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
     setSimBusFactorHealthy(result.busFactorHealthy !== false);
   }, [result]);
 
-  const breakdown = result.score.raw || {
-    maintenance: (result.score.maintenance / 100) * 3.0,
-    security: (result.score.security / 100) * 2.0,
-    community: (result.score.community / 100) * 2.5,
-    documentation: (result.score.documentation / 100) * 1.5,
-    activity: ((result.score.activity || 0) / 100) * 1.0,
+  // Breakdown in 0-100 space (one value per pillar, matching SoyceScore normalized fields).
+  // The score.raw block (if present) contains the old fractional values — we do NOT use it
+  // for display any more; all UI and simulator arithmetic now lives on the 0-100 scale.
+  const breakdown = {
+    maintenance: result.score.maintenance,
+    security: result.score.security,
+    community: result.score.community,
+    documentation: result.score.documentation,
+    activity: result.score.activity ?? 0,
   };
 
-  // Re-compute scoring and exploit risk using overrides if simulator is active
+  // Re-compute scoring and exploit risk using overrides if simulator is active.
+  // Simulator deltas are expressed in the 0-100 normalized scale.
+  // Dependabot / SAST each account for 0.25/2.0 of the security pillar → 12.5 pts on 0-100.
+  // Bus-factor community penalty is 0.2/2.5 → 8 pts on 0-100.
   let simSecurity = breakdown.security;
   if (simulatorActive) {
-    if (!result.hasDependabot && simHasDependabot) {
-      simSecurity += 0.25;
-    }
-    if (result.hasDependabot && !simHasDependabot) {
-      simSecurity -= 0.25;
-    }
-    if (!result.hasSast && simHasSast) {
-      simSecurity += 0.25;
-    }
-    if (result.hasSast && !simHasSast) {
-      simSecurity -= 0.25;
-    }
-    simSecurity = Math.max(0, Math.min(2.0, simSecurity));
+    if (!result.hasDependabot && simHasDependabot) simSecurity += 12.5;
+    if (result.hasDependabot && !simHasDependabot) simSecurity -= 12.5;
+    if (!result.hasSast && simHasSast) simSecurity += 12.5;
+    if (result.hasSast && !simHasSast) simSecurity -= 12.5;
+    simSecurity = Math.max(0, Math.min(100, simSecurity));
   }
 
   let simCommunity = breakdown.community;
   if (simulatorActive) {
-    if (result.busFactorHealthy === false && simBusFactorHealthy) {
-      simCommunity += 0.2;
-    }
-    if (result.busFactorHealthy !== false && !simBusFactorHealthy) {
-      simCommunity -= 0.2;
-    }
-    simCommunity = Math.max(0, Math.min(2.5, simCommunity));
+    if (result.busFactorHealthy === false && simBusFactorHealthy) simCommunity += 8;
+    if (result.busFactorHealthy !== false && !simBusFactorHealthy) simCommunity -= 8;
+    simCommunity = Math.max(0, Math.min(100, simCommunity));
   }
 
   const simBreakdown = {
@@ -106,8 +100,17 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
     community: simCommunity,
   };
 
+  // Weighted overall in 0-100 space: weights 30/25/20/15/10 (must sum to 100).
   const simTotal = simulatorActive
-    ? parseFloat((breakdown.maintenance + simSecurity + simCommunity + breakdown.documentation + breakdown.activity).toFixed(1))
+    ? parseFloat(
+        (
+          simBreakdown.maintenance * 0.30 +
+          simCommunity            * 0.25 +
+          simSecurity             * 0.20 +
+          simBreakdown.documentation * 0.15 +
+          simBreakdown.activity   * 0.10
+        ).toFixed(1)
+      )
     : result.score.overall;
 
   const total = simTotal;
@@ -338,8 +341,8 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
                 SOYCE SCORE
               </div>
               <div className="bg-soy-red text-white px-4 py-1 text-2xl font-black italic">
-                <span aria-label={`Soyce Score ${total.toFixed(1)} of 10`}>
-                  {total.toFixed(1)}{simulatorActive && '*'}
+                <span aria-label={`Soyce Score ${total.toFixed(0)} of 100`}>
+                  {total.toFixed(0)}{simulatorActive && '*'}
                 </span>
               </div>
             </div>

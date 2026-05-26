@@ -268,7 +268,7 @@ export function trustPostureFor(score, opts = {}) {
 
   if (
     er.status === 'MAINTAINER BOTTLENECK' ||
-    score < 8.5 ||
+    score < 85 ||
     highOpen >= 1 ||
     isSingle ||
     !securityAutomationDetected
@@ -293,21 +293,21 @@ export function trustPostureFor(score, opts = {}) {
 export function verdictFor(score, opts = {}) {
   // Let's resolve what the normal verdict would be without the hijack/bottleneck caps first.
   let verdict = 'STALE';
-  if (score >= 8.5) verdict = 'USE READY';
-  else if (score >= 7.0) verdict = 'FORKABLE';
+  if (score >= 85) verdict = 'USE READY';
+  else if (score >= 70) verdict = 'FORKABLE';
   else if (opts && opts.earlyBreakout) verdict = 'HIGH MOMENTUM';
-  else if (score >= 6.0) verdict = 'STABLE';
-  else if (score >= 4.0) verdict = 'WATCHLIST';
-  else if (score >= 2.5) verdict = 'RISKY';
+  else if (score >= 60) verdict = 'STABLE';
+  else if (score >= 40) verdict = 'WATCHLIST';
+  else if (score >= 25) verdict = 'RISKY';
 
   if (opts && opts.advisorySummary) {
     const a = opts.advisorySummary;
     const criticalOpen = a.critical || 0;
     const highOpen = a.high || 0;
     const seriousOpen = criticalOpen + highOpen;
-    if (criticalOpen >= 1 && score >= 7.0) verdict = 'WATCHLIST';
-    else if (seriousOpen >= 3 && score >= 7.0) verdict = 'WATCHLIST';
-    else if (highOpen >= 1 && score >= 8.5) verdict = 'FORKABLE';
+    if (criticalOpen >= 1 && score >= 70) verdict = 'WATCHLIST';
+    else if (seriousOpen >= 3 && score >= 70) verdict = 'WATCHLIST';
+    else if (highOpen >= 1 && score >= 85) verdict = 'FORKABLE';
   }
 
   if (opts && opts.maintainerConcentration && !opts.vendorSdkMatch) {
@@ -316,7 +316,7 @@ export function verdictFor(score, opts = {}) {
       mc.isSingleMaintainer === true
       && typeof mc.daysSinceLastCommit === 'number'
       && mc.daysSinceLastCommit > 30
-      && score >= 8.5
+      && score >= 85
     ) {
       if (verdict === 'USE READY') {
         verdict = 'FORKABLE';

@@ -320,7 +320,7 @@ export default function Lookup() {
                 {result.score.overall.toFixed(1)}
               </span>
               <span className="text-[9px] font-black text-soy-label/60 mt-1 uppercase italic">
-                {result.score.overall >= 8.5 ? 'EXCELLENT' : result.score.overall >= 7.0 ? 'GOOD' : result.score.overall >= 6.0 ? 'STABLE' : 'RISKY'}
+                {result.score.overall >= 85 ? 'EXCELLENT' : result.score.overall >= 70 ? 'GOOD' : result.score.overall >= 60 ? 'STABLE' : 'RISKY'}
               </span>
             </div>
             <button

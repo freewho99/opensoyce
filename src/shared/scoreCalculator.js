@@ -39,7 +39,7 @@
  * @property {number | null} avgResolutionDays
  *
  * @typedef {Object} ScoreResult
- * @property {number}          total      0.0 - 10.0, sum of all pillars, rounded to 1 decimal
+ * @property {number}          total      0.0 - 100.0, sum of all pillars × 10, rounded to 1 decimal
  * @property {ScoreBreakdown}  breakdown
  * @property {ScoreMeta}       meta
  */
@@ -203,7 +203,10 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   else if (last30DaysCommits >= 1) activity = 0.4;
   else activity = 0.0;
 
-  const total = round1(maintenance + community + security + documentation + activity);
+  // Multiply by 10 to convert from the 0–10 internal range to the 0–100 public scale.
+  // The sub-score breakdown stays on its raw pillar ranges (0–3, 0–2.5, etc.) so
+  // downstream progress bars (value / max * 100) continue to work without change.
+  const total = round1((maintenance + community + security + documentation + activity) * 10);
 
   return {
     total,
