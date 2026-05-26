@@ -77,6 +77,50 @@ export const OTS_PATTERN_DEFINITIONS = [
     recommendedAction: 'Audit the tarball contents directly using OpenSoyce diff viewer or compile from the tagged source commit.',
     realWorldExamples: ['xz-utils backdoor payload hiding']
   },
+  {
+    id: 'known-vulnerability-exposure',
+    name: 'Known Vulnerability Exposure',
+    category: 'vulnerability',
+    defaultSeverity: 'critical',
+    shortDescription: 'The package or version is referenced by a known CVE, GHSA, or OpenSoyce advisory.',
+    whyItMatters: 'Installing a package with a published vulnerability gives attackers a documented exploit path before the project has time to patch — and the advisory itself is often the first thing scanners outside of OpenSoyce pick up.',
+    defaultPolicyImpact: 'block',
+    recommendedAction: 'Upgrade to a patched version listed in the advisory, or replace the package; if no fix exists, file an exception with a documented expiry and mitigation note.',
+    realWorldExamples: ['log4shell (CVE-2021-44228)', 'Spring4Shell unpatched ingestion']
+  },
+  {
+    id: 'install-time-execution',
+    name: 'Install-Time Lifecycle Execution',
+    category: 'package-behavior',
+    defaultSeverity: 'medium',
+    shortDescription: 'The package runs npm lifecycle scripts (preinstall / install / postinstall) on every install, without observed remote payload retrieval.',
+    whyItMatters: 'Lifecycle scripts run with full developer or CI permissions before any code inspection happens. Even non-remote scripts can read environment variables, write outside the install directory, or alter local tooling. This is the lower-severity sibling of install-time-remote-execution — the script exists, but evidence of a network call is absent.',
+    defaultPolicyImpact: 'warn',
+    recommendedAction: 'Audit the lifecycle script content, prefer a fork or alternative without postinstall hooks, or install with `--ignore-scripts` in CI.',
+    realWorldExamples: ['node-ipc protest payload (initially via postinstall)']
+  },
+  {
+    id: 'dependency-confusion-risk',
+    name: 'Dependency Confusion Risk',
+    category: 'dependency-chain',
+    defaultSeverity: 'high',
+    shortDescription: 'The dependency name shadows an internal/private package namespace also published to a public registry, opening a dependency-confusion attack path.',
+    whyItMatters: 'When internal package names also exist publicly, package managers can resolve the public (potentially malicious) version over the intended internal one. Attackers register the public name to intercept builds at install time.',
+    defaultPolicyImpact: 'block',
+    recommendedAction: 'Scope private packages to a verified org namespace, configure a registry proxy that prefers internal sources, and lock the dependency to the internal feed.',
+    realWorldExamples: ['Alex Birsan 2021 disclosure across 35+ companies', '`@internal/`-style internal-name public exposures']
+  },
+  {
+    id: 'high-blast-radius',
+    name: 'High Blast Radius',
+    category: 'package-behavior',
+    defaultSeverity: 'high',
+    shortDescription: 'The package is depended on by a large number of downstream projects, so any compromise affects a wide surface.',
+    whyItMatters: 'Even a low-severity issue in a high-blast-radius package can become a high-impact incident because of how many downstream pipelines pull it. Compromised maintainer accounts on such packages are catastrophic.',
+    defaultPolicyImpact: 'warn',
+    recommendedAction: 'Pin the version, enable maintainer-change alerts, and review release diffs before bumping.',
+    realWorldExamples: ['ua-parser-js compromise downstream sprawl', 'event-stream breach reaching production at scale']
+  },
 
   // --- Pack 2: GitHub Actions Pattern Pack ---
   {
@@ -309,15 +353,19 @@ export const OTS_PATTERN_PACKS = [
   {
     id: 'npm-supply-chain',
     name: 'npm Supply-Chain Pattern Pack',
-    description: 'Tracks recurring risk patterns in package registries: compromised maintainers, typosquatting, remote download scripts, and source mismatches.',
+    description: 'Tracks recurring risk patterns in package registries: compromised maintainers, typosquatting, remote download scripts, source mismatches, known vulnerabilities, and blast-radius amplification.',
     patternIds: [
       'hidden-dependency-injection',
       'install-time-remote-execution',
+      'install-time-execution',
       'lookalike-package-injection',
       'fresh-release-cooldown-violation',
       'maintainer-account-compromise-signal',
       'trusted-publishing-bypass',
-      'source-package-mismatch'
+      'source-package-mismatch',
+      'known-vulnerability-exposure',
+      'dependency-confusion-risk',
+      'high-blast-radius'
     ]
   },
   {
