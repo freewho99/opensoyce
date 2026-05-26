@@ -495,7 +495,10 @@ async function handleGrant(req, res, session) {
   const id = crypto.randomUUID();
   let finalReason = reason;
   if (status === 'approved') {
-    const secret = process.env.OPENSOYCE_DASHBOARD_SECRET || 'secret';
+    const secret = process.env.OPENSOYCE_DASHBOARD_SECRET;
+    if (!secret) {
+      return err(res, 500, 'DASHBOARD_NOT_CONFIGURED', 'dashboard is not configured: ledger signature cannot be issued');
+    }
     const signature = signExceptionLedger(id, packageName, session.login, reason, secret);
     finalReason = `${reason}\n--- LEDGER SIGNATURE: ${signature}`;
   }
@@ -1151,6 +1154,13 @@ async function handleComplianceGate(req, res) {
   });
 }
 
+// Test-only seam: lets unit tests stub the GitHub permission lookup without
+// patching global fetch. Production code path uses getRepoPermissionForUser.
+let __appealPermissionResolver = null;
+export function __setAppealPermissionResolverForTests(fn) {
+  __appealPermissionResolver = fn;
+}
+
 async function handleSubmitAppeal(req, res, session) {
   let body;
   try {
@@ -1161,36 +1171,72 @@ async function handleSubmitAppeal(req, res, session) {
 
   const packageName = typeof body.package_name === 'string' ? body.package_name.trim() : '';
   const ecosystem = typeof body.ecosystem === 'string' ? body.ecosystem.trim() : '';
-  const repo = typeof body.repo === 'string' ? body.repo.trim() : '';
+  const repoStr = typeof body.repo === 'string' ? body.repo.trim() : '';
+  const rationale = typeof body.rationale === 'string' ? body.rationale.trim().slice(0, 2000) : '';
 
-  if (!packageName || !ecosystem || !repo) {
-    return err(res, 400, 'BAD_REQUEST', 'package_name, ecosystem, and repo are required');
+  if (!packageName || !ecosystem || !repoStr) {
+    return err(res, 400, 'BAD_REQUEST', 'package_name, ecosystem, and repo (owner/repo) are required');
+  }
+  if (!ALLOWED_ECOSYSTEMS.has(ecosystem)) {
+    return err(res, 400, 'BAD_REQUEST', `ecosystem must be one of ${[...ALLOWED_ECOSYSTEMS].join(', ')}`);
   }
 
-  if (DEPS_REGISTRY[packageName]) {
-    DEPS_REGISTRY[packageName].score = Math.min(DEPS_REGISTRY[packageName].score + 1.0, 10.0);
-    if (DEPS_REGISTRY[packageName].verdict === 'graveyard') {
-      DEPS_REGISTRY[packageName].verdict = 'risky';
-    } else if (DEPS_REGISTRY[packageName].verdict === 'risky') {
-      DEPS_REGISTRY[packageName].verdict = 'watchlist';
-    } else if (DEPS_REGISTRY[packageName].verdict === 'watchlist') {
-      DEPS_REGISTRY[packageName].verdict = 'stable';
-    }
-  } else {
-    DEPS_REGISTRY[packageName] = {
-      score: 8.0,
-      license: 'MIT',
-      verdict: 'stable',
-      status: 'FRESH'
-    };
+  const repoParts = repoStr.split('/');
+  if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) {
+    return err(res, 400, 'BAD_REQUEST', 'repo must be in "owner/repo" format');
+  }
+  const sourceOwner = repoParts[0];
+  const sourceRepo = repoParts[1];
+
+  // Verify the caller is admin or write on the claimed source repo via the
+  // installed GitHub App. This is the maintainership check the previous
+  // implementation only claimed to perform.
+  const resolver = __appealPermissionResolver || getRepoPermissionForUser;
+  const perm = await resolver(sourceOwner, sourceRepo, session.login);
+  if (perm === 'none') {
+    return err(res, 404, 'NOT_FOUND', `OpenSoyce Guard is not installed on ${sourceOwner}/${sourceRepo}, or you have no access. Install the app on the source repo before filing an appeal.`);
+  }
+  if (perm !== 'admin' && perm !== 'write') {
+    return err(res, 403, 'FORBIDDEN', `appeal requires admin or write permission on ${sourceOwner}/${sourceRepo}; your role is "${perm}"`);
+  }
+
+  // Persist a pending appeal. Status is 'pending' until a reviewer examines
+  // it; the package score is NOT auto-mutated.
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions submit-appeal: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const appealId = crypto.randomUUID();
+  const { error: insertErr } = await sb
+    .from('appeals')
+    .insert({
+      id: appealId,
+      package_name: packageName,
+      ecosystem,
+      source_owner: sourceOwner,
+      source_repo: sourceRepo,
+      submitted_by: session.login,
+      submitted_by_role: perm,
+      rationale: rationale || null,
+      status: 'pending',
+    });
+
+  if (insertErr) {
+    console.error('exceptions submit-appeal: insert failed', insertErr.message);
+    return err(res, 500, 'DB_ERROR', 'failed to file appeal');
   }
 
   return sendJson(res, 200, {
     ok: true,
-    message: `Cryptographic appeal verified for maintainer of ${packageName}. Dynamic score recalculated.`,
+    appealId,
+    status: 'pending',
     packageName,
-    newScore: DEPS_REGISTRY[packageName].score,
-    newVerdict: DEPS_REGISTRY[packageName].verdict.toUpperCase()
+    verifiedRole: perm,
+    message: `Appeal filed for ${packageName}. A reviewer will examine your verified maintainership claim before any score change is applied.`,
   });
 }
 
@@ -2046,7 +2092,11 @@ async function handleSlackWebhook(req, res) {
 
     if (actionId === 'approve') {
       updatedStatus = 'approved';
-      const secret = process.env.OPENSOYCE_DASHBOARD_SECRET || 'secret';
+      const secret = process.env.OPENSOYCE_DASHBOARD_SECRET;
+      if (!secret) {
+        console.error('Slack webhook: OPENSOYCE_DASHBOARD_SECRET unset — refusing to sign with weak fallback');
+        return err(res, 500, 'DASHBOARD_NOT_CONFIGURED', 'dashboard is not configured: ledger signature cannot be issued');
+      }
       const signature = signExceptionLedger(row.id, row.package_name, `slack:${slackUser}`, row.reason || '', secret);
       const finalReason = `${row.reason || ''}\n--- LEDGER SIGNATURE: ${signature}`;
 

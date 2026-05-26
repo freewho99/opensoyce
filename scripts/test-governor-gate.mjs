@@ -7,8 +7,14 @@
 
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import exceptionsHandler, { signExceptionLedger, DEPS_REGISTRY } from '../api/exceptions.js';
-import { __resetSupabaseClientForTests } from '../api/_supabase.js';
+import exceptionsHandler, {
+  signExceptionLedger,
+  __setAppealPermissionResolverForTests,
+} from '../api/exceptions.js';
+import {
+  __resetSupabaseClientForTests,
+  __setSupabaseClientForTests,
+} from '../api/_supabase.js';
 
 let passed = 0;
 let failed = 0;
@@ -236,20 +242,21 @@ test('Ledger Exception: Sign and record interactive Slack approval', async () =>
   __resetSupabaseClientForTests();
 });
 
-test('Cryptographic Appeals: Re-evaluate and elevate package score', async () => {
-  const originalScore = DEPS_REGISTRY['moment'].score;
-  const originalVerdict = DEPS_REGISTRY['moment'].verdict;
-
-  // Session token for authenticated maintainer
-  const payload = { login: 'maintainer-bob', orgs: ['acme-corp'], exp: Math.floor(Date.now() / 1000) + 1000 };
+function mintSessionCookie(login) {
+  const payload = { login, orgs: [], exp: Math.floor(Date.now() / 1000) + 1000 };
   const b64 = Buffer.from(JSON.stringify(payload)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
   const hmac = crypto.createHmac('sha256', DASHBOARD_SECRET).update(JSON.stringify(payload)).digest('hex');
-  const validCookie = `osg_session=${b64}.${hmac}`;
+  return `osg_session=${b64}.${hmac}`;
+}
+
+test('Appeals: reject when caller lacks write or admin on source repo', async () => {
+  // Stub the permission lookup to return read-only.
+  __setAppealPermissionResolverForTests(async () => 'read');
 
   const req = new MockReq(
-    'POST', 
-    { cookie: validCookie }, 
-    { action: 'submit-appeal' }, 
+    'POST',
+    { cookie: mintSessionCookie('random-user') },
+    { action: 'submit-appeal' },
     { package_name: 'moment', ecosystem: 'npm', repo: 'moment/moment' }
   );
   const res = new MockRes();
@@ -257,16 +264,85 @@ test('Cryptographic Appeals: Re-evaluate and elevate package score', async () =>
   req.resume();
   await exceptionsHandler(req, res);
 
-  eq(res.statusCode, 200, 'appeal status');
+  eq(res.statusCode, 403, 'non-maintainer is rejected');
+  const body = JSON.parse(res.body);
+  eq(body.error, 'FORBIDDEN', 'error code');
+  ok(/admin or write/.test(body.message), 'message names the required role');
+
+  __setAppealPermissionResolverForTests(null);
+});
+
+test('Appeals: reject when GitHub App is not installed on source repo', async () => {
+  __setAppealPermissionResolverForTests(async () => 'none');
+
+  const req = new MockReq(
+    'POST',
+    { cookie: mintSessionCookie('random-user') },
+    { action: 'submit-appeal' },
+    { package_name: 'moment', ecosystem: 'npm', repo: 'moment/moment' }
+  );
+  const res = new MockRes();
+
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 404, 'no-installation is rejected');
+  const body = JSON.parse(res.body);
+  eq(body.error, 'NOT_FOUND', 'error code');
+  ok(/Guard is not installed/.test(body.message), 'message names the install requirement');
+
+  __setAppealPermissionResolverForTests(null);
+});
+
+test('Appeals: file pending review when caller is verified maintainer', async () => {
+  __setAppealPermissionResolverForTests(async () => 'admin');
+
+  let insertedRow = null;
+  const mockSb = {
+    from: (table) => {
+      eq(table, 'appeals', 'appeals table accessed');
+      return {
+        insert: (row) => {
+          insertedRow = row;
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+  };
+  __setSupabaseClientForTests(mockSb);
+
+  const req = new MockReq(
+    'POST',
+    { cookie: mintSessionCookie('maintainer-bob') },
+    { action: 'submit-appeal' },
+    { package_name: 'moment', ecosystem: 'npm', repo: 'moment/moment', rationale: 'CVE was patched in v3.0' }
+  );
+  const res = new MockRes();
+
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 200, 'appeal accepted');
   const body = JSON.parse(res.body);
   eq(body.ok, true, 'ok');
+  eq(body.status, 'pending', 'status is pending (no auto-grant)');
   eq(body.packageName, 'moment', 'packageName');
-  eq(body.newScore, originalScore + 1.0, 'newScore increased by 1.0');
-  eq(body.newVerdict, 'WATCHLIST', 'newVerdict upgraded from RISKY to WATCHLIST');
+  eq(body.verifiedRole, 'admin', 'verifiedRole reflects GitHub permission');
+  ok(typeof body.appealId === 'string' && body.appealId.length > 0, 'appealId is present');
 
-  // Clean up Registry state
-  DEPS_REGISTRY['moment'].score = originalScore;
-  DEPS_REGISTRY['moment'].verdict = originalVerdict;
+  // The row written to Supabase reflects verified maintainership, not claim.
+  ok(insertedRow !== null, 'insert was called');
+  eq(insertedRow.package_name, 'moment', 'row.package_name');
+  eq(insertedRow.ecosystem, 'npm', 'row.ecosystem');
+  eq(insertedRow.source_owner, 'moment', 'row.source_owner');
+  eq(insertedRow.source_repo, 'moment', 'row.source_repo');
+  eq(insertedRow.submitted_by, 'maintainer-bob', 'row.submitted_by from session');
+  eq(insertedRow.submitted_by_role, 'admin', 'row.submitted_by_role is proven, not claimed');
+  eq(insertedRow.status, 'pending', 'row.status starts pending');
+  eq(insertedRow.rationale, 'CVE was patched in v3.0', 'row.rationale stored');
+
+  __setAppealPermissionResolverForTests(null);
+  __setSupabaseClientForTests(null);
 });
 
 console.log(`\nOTS Governor & Gate Integration tests: ${passed} passed, ${failed} failed`);
