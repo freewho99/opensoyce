@@ -17,6 +17,162 @@ hexport type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+        slug: 'soc2-compliance-open-source-exception-logs',
+        primaryProductAction: 'guard',
+        title: "Your Auditor Is About to Ask You a Question You Can't Answer.",
+        subtitle: "SOC 2 CC6.8 and CC8.1 require evidence of supply chain control. OpenSoyce Guard generates it automatically. Here's what that means for your next audit.",
+        category: "DEEP DIVE",
+        emoji: "📋",
+        readTime: '7 min',
+        date: 'MAY 27, 2026',
+        featured: false,
+        metaDescription: "OpenSoyce signed exception logs give enterprise security auditors zero-friction SOC 2 evidence for CC6.8 and CC8.1. Here's exactly what that means, what the criteria require, and how open-source license compliance fits into the same framework.",
+        tags: ['soc2', 'compliance', 'enterprise', 'cc6.8', 'cc8.1', 'exception-logs', 'license-compliance', 'opensoyce', 'guard'],
+        content: `
+        ## The Question That Ends Audits Badly
+        
+        Picture the scene. Your SOC 2 audit is underway. The auditor pulls up their evidence checklist and asks, calmly: *"Can you show me documentation of how your organization controls the introduction of third-party software into your production environment?"*
+        
+        You have a great answer prepared about your internal code review process. You have screenshots of your CI/CD pipeline. You have a lovely slide about your security culture.
+        
+        What you do not have is a signed, timestamped log of every third-party dependency your team evaluated, approved, or flagged for exception — with a written justification attached to each one.
+        
+        That's the log the auditor actually wants. And until recently, almost nobody had it, because nobody had a system that generated it automatically.
+        
+        That's what OpenSoyce Guard does. And this piece explains exactly why it matters for your compliance posture.
+        
+        ---
+        
+        ## What SOC 2 Actually Requires From You
+        
+        SOC 2 is built around Trust Services Criteria. Two of them are directly relevant to anyone managing open-source dependencies at enterprise scale: **CC6.8** and **CC8.1**.
+        
+        ### CC6.8 — Malicious Software Protection
+        
+        CC6.8 requires that an organization implement controls to prevent, detect, and respond to the introduction of unauthorized or malicious software. The operative word is *controls* — plural, documented, and demonstrably operating.
+        
+        This is not satisfied by saying "we use Dependabot." Dependabot tells you about known CVEs in direct dependencies. It does not tell you:
+        
+        - Whether the maintainer of a package you depend on changed six months ago
+        - Whether a package that was clean at adoption has since been compromised upstream
+        - Whether a transitive dependency three levels deep just shipped a binary that wasn't there before
+        - Whether the package you're using has telemetry that violates your data handling commitments
+        
+        CC6.8 requires that you have a *system* for monitoring the supply chain continuously and that you can *prove* the system is running. Log entries with timestamps and reviewer signatures are how you prove it.
+        
+        ### CC8.1 — Change Management
+        
+        CC8.1 requires that changes to software and infrastructure are securely authorized, tested, approved, and implemented. For most enterprise teams, the focus is on internal code changes. But your package.json is also a change surface.
+        
+        Every time a dependency version bumps — whether you triggered it deliberately or Dependabot auto-merged it — that is a change to your production environment. CC8.1 asks: who authorized it? What was evaluated? What was the risk assessment? Where's the record?
+        
+        If your answer is "Dependabot merged it and we didn't think about it," you have a CC8.1 gap.
+        
+        \`\`\`text
+        ┌──────────────────────────────────────────────────────────┐
+        │  SOC 2 EVIDENCE REQUIREMENTS — DEPENDENCY MANAGEMENT    │
+        ├──────────────────────────────────────────────────────────┤
+        │  CC6.8  Malicious Software Protection                   │
+        │         ✓ Continuous monitoring of supply chain         │
+        │         ✓ Detection of compromised/unauthorized pkgs    │
+        │         ✓ Documented response process                   │
+        │                                                          │
+        │  CC8.1  Change Management                               │
+        │         ✓ Authorized approval for dependency changes    │
+        │         ✓ Risk assessment per change                    │
+        │         ✓ Timestamped audit trail                       │
+        └──────────────────────────────────────────────────────────┘
+        \`\`\`
+        
+        ---
+        
+        ## What a Signed Exception Log Actually Is
+        
+        Here's the core mechanism that makes OpenSoyce Guard valuable in an audit context.
+        
+        When your team evaluates a dependency that has a risk signal — a low maintenance score, a flagged license, a CVE, a recent maintainer change — Guard generates a structured exception record. That record contains:
+        
+        - The package name and version
+        - The specific risk signal that triggered review
+        - The date and time of the review
+        - The reviewer identity
+        - A written justification for the exception decision (approve, reject, monitor)
+        - A cryptographic signature tying the record to a specific point in time
+        
+        That record is your evidence artifact. When an auditor asks for CC6.8 or CC8.1 evidence, you hand them a directory of these logs. Each one shows that a human evaluated a risk and made a documented decision. That's not just compliance theater — that's what a controlled change management process actually looks like.
+        
+        The phrase "zero friction evidence packaging" is apt. The logs are structured precisely for auditor consumption. You're not retrofitting evidence after the fact. You're generating it as a byproduct of your normal workflow.
+        
+        [→ See how Guard generates exception logs](https://opensoyce.com/guard)
+        
+        ---
+        
+        ## The License Compliance Dimension
+        
+        SOC 2 isn't the only compliance risk hiding in your dependency graph. There's a parallel track that legal teams worry about more than security teams do, and it's equally well-served by OpenSoyce's scoring system: **open-source license compliance**.
+        
+        Every package you integrate carries a license. Most developers think about this approximately never, because most popular packages use MIT or Apache 2.0 — permissive licenses that let you do almost anything. But not all of them do.
+        
+        The risk profile by license type looks like this:
+        
+        **Permissive (Low Risk):** MIT, Apache 2.0, BSD. You can use, modify, and distribute. No obligation to share your own source code. Standard enterprise-safe licenses.
+        
+        **Weak Copyleft (Moderate Risk):** LGPL, MPL. You can link to these libraries in most cases without triggering source-sharing obligations, but modifications to the library itself may need to be disclosed. Requires case-by-case legal review.
+        
+        **Strong Copyleft (High Risk):** GPL, AGPL. If you distribute software that incorporates GPL code, you may be legally required to release your entire derived codebase under the same license. For a proprietary commercial product, this is potentially catastrophic. AGPL extends this obligation to software accessed over a network — meaning your SaaS product could be affected even if you never distribute a binary.
+        
+        OpenSoyce Scanner surfaces the license of every package in your dependency graph — direct and transitive — and flags anything that deviates from your acceptable license policy. The exception log system applies here too: if your team knowingly accepts a copyleft license for a specific use case, that decision is documented, justified, and signed.
+        
+        \`\`\`text
+        DEPENDENCY LICENSE AUDIT — OPENSOYCE SCANNER
+        
+        Package              License      Risk Flag
+        ─────────────────────────────────────────────
+        react                MIT          ✓ CLEAR
+        lodash               MIT          ✓ CLEAR
+        axios                MIT          ✓ CLEAR
+        some-utility         GPL-3.0      ⚠ REVIEW REQUIRED
+        another-tool         AGPL-3.0     🚨 HIGH RISK — Network copyleft
+        internal-sdk         Apache-2.0   ✓ CLEAR
+        \`\`\`
+        
+        That output is not just developer information. It's a legal audit artifact.
+        
+        ---
+        
+        ## How This Changes the Audit Conversation
+        
+        The traditional enterprise approach to compliance evidence is: do the work, then scramble to document it when the auditor arrives.
+        
+        The OpenSoyce approach inverts that. The documentation is a byproduct of doing the work correctly in the first place. Every exception you evaluate, every license you review, every dependency you approve or reject — the log is written automatically, signed automatically, and ready for auditor review without a fire drill.
+        
+        What this means practically for an enterprise security team:
+        
+        **Before audit season:** No scramble. The logs are already there. You can pull a clean evidence package for any time window the auditor specifies.
+        
+        **During the audit:** When the auditor asks for CC6.8 or CC8.1 evidence related to third-party software, you hand them a structured export. The timestamps are there. The reviewer names are there. The justifications are there. The signatures are there.
+        
+        **After the audit:** The same logs that satisfied last year's auditor satisfy next year's auditor. The process is repeatable because it's systematic, not heroic.
+        
+        ---
+        
+        ## The Threshold Question
+        
+        Here's the question every enterprise security lead should ask before their next audit:
+        
+        *If your auditor asked you to produce evidence that every material change to your dependency graph was reviewed, evaluated for risk, and approved by an authorized person — could you produce it for the last twelve months?*
+        
+        If the answer is anything other than an immediate yes, you have a gap. Not necessarily a finding — gaps can be remediated — but a gap that will require explanation.
+        
+        OpenSoyce Guard closes it. Not with a policy document, not with a slide deck, but with cryptographically signed logs that prove the process ran every time it was supposed to run.
+        
+        That's what auditors want. That's what the criteria require. And now it's what your workflow produces automatically.
+        
+        [→ Set up Guard and start generating SOC 2-ready exception logs](https://opensoyce.com/guard)
+        [→ Scan your full dependency graph including license risk](https://opensoyce.com/scanner)
+        `,
+  },
+  {
         slug: 'software-nutrition-label-revolution',
         primaryProductAction: 'scanner',
         title: "You've Been Eating Mystery Meat. It's Called npm install.",
