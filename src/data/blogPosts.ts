@@ -17,6 +17,143 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+        slug: 'drupal-sql-injection-cve-2026-9082',
+        primaryProductAction: 'lookup',
+        title: "They Patched Drupal. You Had 48 Hours. The Hackers Didn't Wait.",
+        subtitle: "CVE-2026-9082 is a SQL injection flaw that hit 6,000 sites before most admins finished their coffee. OpenSoyce told you it was coming.",
+        category: "SECURITY",
+        emoji: "💉",
+        readTime: '6 min',
+        date: 'MAY 27, 2026',
+        featured: false,
+        metaDescription: "CVE-2026-9082 is a critical SQL injection flaw in Drupal's database sanitation API. Attackers moved within 48 hours of patch release. Here's what happened, who got hit, and how OpenSoyce Guard would have caught it before it caught you.",
+        tags: ['drupal', 'sql-injection', 'cve-2026-9082', 'postgresql', 'supply-chain', 'security', 'opensoyce'],
+        content: `
+        ## Somebody Warned You
+        
+        Let me paint you a picture.
+        
+        May 20th, 2026. Drupal drops a patch and says out loud — in public, in writing — "exploits could surface within hours or days." That's not a security advisory. That's a countdown clock with a warning label on it.
+        
+        Forty-eight hours later? 15,000 attack attempts. Nearly 6,000 sites across 65 countries. Almost 62% of them in the United States. Gaming companies. Financial services. Government portals. Universities.
+        
+        Sixty-five countries. More countries than most people can name sober.
+        
+        That's not a nation-state zero-day. That's not some shadow-realm exploit that costs a million dollars. That's just Tuesday. For people who saw the advisory and kept scrolling.
+        
+        ---
+        
+        ## So What Is CVE-2026-9082
+        
+        Here's the part that's almost poetic in how cruel it is.
+        
+        Drupal has an API. Its whole job — its *one job* — is to sanitize database queries and prevent SQL injection. CVE-2026-9082 is a flaw *in that API*. The bouncer got robbed. The thing that was supposed to stop the injection *was* the injection hole.
+        
+        An unauthenticated attacker — no username, no password, no invite — could send specially crafted requests to a Drupal site running PostgreSQL and inject arbitrary SQL commands. From there: information disclosure, privilege escalation, and in some configurations, full remote code execution. They walk in the front door, read your data, take your keys, and lock you out of your own house. While you're home.
+        
+        Drupal's scoring scale goes up to 25. This one scored a 23.
+        
+        That's not "schedule it for next sprint." That's "wake somebody up."
+        
+        \`\`\`text
+        [UNAUTHENTICATED ATTACKER]
+                 │
+                          ▼
+                          [CRAFTED REQUEST TO DRUPAL API]
+                                   │
+                                            ▼
+                                            [SQL SANITIZATION API — COMPROMISED]
+                                                     │
+                                                              ▼
+                                                              [ARBITRARY SQL INJECTION ON POSTGRESQL]
+                                                                       │
+                                                                                ▼
+                                                                                [DATA THEFT / PRIVILEGE ESCALATION / RCE]
+                                                                                \`\`\`
+                                                                                
+                                                                                ---
+                                                                                
+                                                                                ## Who Actually Got Hit
+                                                                                
+                                                                                Now here's where it gets specific. This flaw only affects Drupal sites running **PostgreSQL** as the database backend. Drupal estimates that's under 5% of all installations. MySQL and MariaDB users were fine.
+                                                                                
+                                                                                Five percent sounds like nothing. Until you remember Drupal powers hundreds of thousands of websites — government portals, university systems, enterprise infrastructure, media organizations. The exact sectors least likely to have a rapid patching culture. Five percent of a very large number is a very large number of exposed sites.
+                                                                                
+                                                                                And Imperva watched the whole thing unfold in real time:
+                                                                                
+                                                                                - **15,000+ attack attempts** in the first 48 hours
+                                                                                - **~6,000 individual sites** targeted
+                                                                                - **65 countries** hit
+                                                                                - Gaming and financial services sites took **nearly half** of all attacks — because credentials and financial data have immediate cash value
+                                                                                - Top targeted countries: **US (61.8%)**, Singapore (6.6%), Australia (6.3%)
+                                                                                
+                                                                                The bulk of that activity was reconnaissance — scanners probing which sites were running vulnerable PostgreSQL-backed Drupal configs. They weren't robbing the bank yet. They were walking the neighborhood, clocking which houses left the lights on.
+                                                                                
+                                                                                The harvesting phase was next. The window between those two phases is not a break. It's a countdown.
+                                                                                
+                                                                                ---
+                                                                                
+                                                                                ## This Is Exactly What OpenSoyce Guard Is For
+                                                                                
+                                                                                Here's where I'm going to be straight with you.
+                                                                                
+                                                                                OpenSoyce Guard exists for moments like this. The moment a CVE drops with a 23/25 score and a public warning that says "exploits incoming" — that's not when you want to be manually checking your dependency stack. That's when you want a system that already knows what you're running and tells you immediately.
+                                                                                
+                                                                                **Guard's Live Score Watchlist** tracks your dependencies in real time. The moment CVE-2026-9082 hit the advisory feeds, any Drupal installation in your watchlist would have triggered an alert. Not in your next weekly scan. Not when Dependabot gets around to it. Right then.
+                                                                                
+                                                                                \`\`\`text
+                                                                                ┌──────────────────────────────────────────────────┐
+                                                                                │  OPENSOYCE GUARD — LIVE WATCHLIST ALERT          │
+                                                                                ├──────────────────────────────────────────────────┤
+                                                                                │  Package: drupal/core                            │
+                                                                                │  CVE: CVE-2026-9082                              │
+                                                                                │  Score: 23/25 — CRITICAL                        │
+                                                                                │  Backend: PostgreSQL ← YOU ARE AFFECTED          │
+                                                                                │  Patch Available: YES (May 20, 2026)             │
+                                                                                │  Exploit Status: ACTIVE IN THE WILD              │
+                                                                                │  Action Required: PATCH IMMEDIATELY              │
+                                                                                └──────────────────────────────────────────────────┘
+                                                                                \`\`\`
+                                                                                
+                                                                                **The Scanner** would have flagged your Drupal installation in your dependency graph before you even saw the tweet about it. Run a scan, see the exposure, apply the patch. That's the workflow.
+                                                                                
+                                                                                And if you're one of the people who *still* isn't sure whether you're running PostgreSQL or MySQL? That's what the **Lookup tool** is for. Search your stack. Know what you're running. Don't assume.
+                                                                                
+                                                                                [→ Run a scan on your Drupal stack now](https://opensoyce.com/scanner)
+                                                                                
+                                                                                ---
+                                                                                
+                                                                                ## The Drupalgeddon Ghost
+                                                                                
+                                                                                Some of you remember Drupalgeddon. Some of you remember Drupalgeddon2. Those were the 2018-2019 flaws that made headlines — tens of thousands of sites compromised, the security community on fire for weeks. They became case studies in what happens when critical CVEs meet slow patching cycles.
+                                                                                
+                                                                                Since 2019, Drupal had been clean. Highly critical vulnerabilities were rare. Widespread exploitation hadn't followed when they did appear. That streak made some admins comfortable in a way that comfort maybe shouldn't have allowed.
+                                                                                
+                                                                                CVE-2026-9082 is the reminder that streaks end. And the attackers who were watching Drupal's advisory feed knew that comfort existed. They moved in 48 hours because they knew most people wouldn't.
+                                                                                
+                                                                                ---
+                                                                                
+                                                                                ## What You Do Right Now
+                                                                                
+                                                                                If you're running Drupal on PostgreSQL and haven't patched: you patch. Today. Not after standup. Not after lunch. Right now.
+                                                                                
+                                                                                Check your logs for unusual database query patterns or failed authentication attempts. If you see them, assume hostile until proven otherwise.
+                                                                                
+                                                                                If you think you're on MySQL or MariaDB but aren't completely sure — you check. Assumption is not a patch strategy.
+                                                                                
+                                                                                And if you want to stop playing this game where you find out about critical CVEs from a tweet two days after the attackers already found out from the advisory — you set up Guard.
+                                                                                
+                                                                                That's the whole lesson. The advisory was public. The countdown was stated out loud. The attackers read it. The only question was whether your defense read it faster.
+                                                                                
+                                                                                [→ Check your dependencies with OpenSoyce Scanner](https://opensoyce.com/scanner)
+                                                                                [→ Set up live CVE alerting with Guard](https://opensoyce.com/guard)
+                                                                                
+                                                                                ---
+                                                                                
+                                                                                *CVE-2026-9082 | CVSS: 23/25 | Affected: Drupal on PostgreSQL | Status: Actively Exploited | Patch: Available*
+                                                                                `,
+  },
+  {
         slug: 'automerge-governor',
         primaryProductAction: 'scanner',
         title: "Blind Trust Is a Production Risk.",
