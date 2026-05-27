@@ -17,6 +17,165 @@ hexport type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+    {
+            slug: 'ots-gate-trust-infrastructure-for-open-source',
+            primaryProductAction: 'scanner',
+            title: "The Gate Is Now Open.",
+            subtitle: "We built a CI/CD enforcement layer that decides what gets in. Not with noise. With trust scores.",
+            category: "PRODUCT",
+            emoji: "🚦",
+            readTime: '6 min',
+            date: 'MAY 27, 2026',
+            featured: true,
+            metaDescription: "OTS Gate is a GitHub Action that blocks risky open-source dependencies before they merge. Powered by OpenSoyce's quantified trust scores — because popularity was never the point.",
+            tags: ['ots-gate', 'ci-cd', 'github-actions', 'trust-score', 'supply-chain', 'devsecops', 'open-source', 'opensoyce'],
+            content: `There is a moment — quiet, unremarkable — when a developer types a dependency name into a terminal and presses Enter.
+
+            No alarm sounds. No warning flashes. The package downloads. The build passes. The PR opens.
+
+            And somewhere, in that silence, a decision was made. Not deliberately. Not with any real understanding of what just entered the codebase. Just... accepted. Because it was popular. Because it had downloads. Because someone, somewhere, used it before.
+
+            That is how Log4Shell happened. That is how SolarWinds happened. Not through sophistication. Through assumption.
+
+            We built OTS Gate because assumption is no longer acceptable.
+
+            ---
+
+            **The Problem Has a Name Now**
+
+            For years, the open-source ecosystem has operated on a borrowed trust system. Stars on GitHub. Download counts. A README that looks well-maintained. These are the signals developers have used — not because they are reliable, but because they were available.
+
+            Popularity is not trust. It never was.
+
+            A package can have ten million weekly downloads and a single maintainer who stopped responding six months ago. It can have a perfect security record and a license that will quietly destroy your enterprise procurement deal. It can be beloved by the community and still carry a dependency tree that looks, upon closer inspection, like a supply chain waiting to fail.
+
+            [OpenSoyce Scanner](/scanner) has been surfacing this reality for a while now — giving teams the visibility to see what they actually have. But visibility, as it turns out, is only half the answer.
+
+            The other half is enforcement.
+
+            ---
+
+            **Introducing OTS Gate**
+
+            OTS Gate is a GitHub Action. It runs in your CI/CD pipeline. When a pull request introduces a new dependency — or updates an existing one — OTS Gate evaluates it before it merges.
+
+            Not after. Before.
+
+            \`\`\`text
+            Developer adds dependency
+                    ↓
+                    PR opens
+                            ↓
+                            OTS Gate evaluates the package
+                                    ↓
+                                    Trust score + risk explanation generated
+                                            ↓
+                                            CI gate: BLOCK or ALLOW
+                                            \`\`\`
+
+                                            The evaluation is not a vulnerability scan. Plenty of tools do vulnerability scans. What OTS Gate produces is a **trust score** — a number between 0 and 100 that compresses what matters:
+
+                                            - Vulnerability history and patch responsiveness
+                                            - Maintainer activity and contributor health
+                                            - Release cadence and dependency churn
+                                            - License risk tier
+                                            - Governance quality
+                                            - Community sustainability signals
+
+                                            These dimensions do not add up. They multiply. Which means a package with strong vulnerability hygiene and a dead maintainer community is not a 7 out of 10. It is a risk. The math reflects the reality.
+
+                                            ---
+
+                                            **What Gets Blocked. What Gets Through.**
+
+                                            OTS Gate does not block everything with a yellow flag. That is how tools earn uninstalls.
+
+                                            The system is calibrated for low false positives — deliberately, carefully, as a non-negotiable design principle. A developer who gets blocked on a legitimate, well-maintained package will distrust the tool forever. We built OTS Gate to be trusted. That means it earns the right to block by being right when it does.
+
+                                            When OTS Gate flags a dependency, it tells you exactly why:
+
+                                            \`\`\`text
+                                            Package: some-utility@2.1.4
+                                            OTS Score: 31/100
+
+                                            ⚠ Risk Dimensions:
+                                              - Maintainer: last commit 14 months ago
+                                                - Contributors: 1 active (down from 7)
+                                                  - License: AGPL-3.0 (copyleft — procurement risk)
+                                                    - Dependency churn: 4 major deps changed in 90 days
+                                                      - Vulnerability: 2 unpatched CVEs > 6 months old
+
+                                                      Confidence: High
+                                                      Recommended: BLOCK
+                                                      \`\`\`
+
+                                                      Not "this package has a CVE." The full picture. The reasoning. The path forward.
+
+                                                      Because a trust score without explanation is just another number. And the industry already has enough of those.
+
+                                                      ---
+
+                                                      **The Merge Moment Is the Decision Point**
+
+                                                      There is a concept at the center of how we designed this product. The merge moment — the instant a PR moves from review to main — is the highest leverage point in a software supply chain. It is the last moment where a decision can be made before a dependency becomes a dependency.
+
+                                                      After merge, the work required to remove something grows. It embeds. It inherits. It replicates across services. What takes five seconds to add takes weeks to untangle.
+
+                                                      OTS Gate lives at that moment. Not as an afterthought. Not as a report you read on Friday afternoon. As a gate, running in real time, before the code lands.
+
+                                                      This is not information delivery. It is behavioral enforcement. And that distinction — between giving developers data and changing what developers do — is the entire thesis.
+
+                                                      ---
+
+                                                      **The Trust Stack Underneath**
+
+                                                      OTS Gate is the front door of something larger.
+
+                                                      Behind the gate is the **Open-source Trust Stack** — the scoring infrastructure, the AI evaluation layer, the data models that generate the numbers the gate acts on. [OpenSoyce Scanner](/scanner) feeds it. [OpenSoyce Lookup](/lookup) exposes it. [OpenSoyce Guard](/guard) enforces it at the policy layer for enterprises that need organization-wide controls and audit packaging.
+
+                                                      The [Leaderboards](/leaderboards) show you which packages in your ecosystem are earning trust — and which ones are coasting on reputation they no longer deserve.
+
+                                                      These are not separate products wearing a shared logo. They are dimensions of one system. A stack built on a single premise: that trust, like credit, can be quantified. And once quantified, acted upon.
+
+                                                      ---
+
+                                                      **On the Moody's Parallel**
+
+                                                      People who read financial history know what Moody's actually built. Not a scoring algorithm. Infrastructure. A shared language for risk that the entire market agreed to speak.
+
+                                                      When a bond gets rated, the rating does not just inform the buyer. It shapes the market. It changes what gets funded. It creates feedback loops that alter issuer behavior. The score becomes real because the system treats it as real.
+
+                                                      That is what we are building for software.
+
+                                                      A trust score that developers, security teams, procurement officers, and compliance frameworks can reference from the same source. A shared language for dependency risk. Infrastructure that sits underneath every engineering decision involving open source — not loudly, not obtrusively, but there. Running. Deciding.
+
+                                                      OTS Gate is how that infrastructure becomes tangible. A real action. A real block. A real record.
+
+                                                      ---
+
+                                                      **Getting Started**
+
+                                                      OTS Gate is available now as a GitHub Action. Zero configuration to start. Drop it into your workflow and it begins evaluating immediately.
+
+                                                      \`\`\`text
+                                                      # .github/workflows/ots-gate.yml
+                                                      - name: OTS Gate
+                                                        uses: opensoyce/ots-gate@v1
+                                                          with:
+                                                              block-below: 40
+                                                                  warn-below: 65
+                                                                  \`\`\`
+
+                                                                  You set the thresholds. We generate the scores. The gate decides.
+
+                                                                  For teams that need organization-wide enforcement, private deployment, audit logs, and enterprise SLA — [OpenSoyce Guard](/guard) is the layer above this. For teams that want to understand what's already in their stack before setting the gate — start with [OpenSoyce Scanner](/scanner).
+
+                                                                  The infrastructure is ready. The question is what you let through.
+
+                                                                  ---
+
+                                                                  *The software supply chain does not fail dramatically. It fails quietly — one trusted dependency at a time. OTS Gate is how that stops.*`,
+  },
         slug: 'soc2-compliance-open-source-exception-logs',
         primaryProductAction: 'guard',
         title: "Your Auditor Is About to Ask You a Question You Can't Answer.",
