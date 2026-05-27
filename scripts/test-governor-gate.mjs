@@ -107,6 +107,98 @@ test('OTS Gate: Allow clean dependencies', async () => {
   eq(body.dependenciesChecked, 2, 'count');
 });
 
+test('OTS Gate: Resolve package details from database registry', async () => {
+  const mockSb = {
+    from: (table) => {
+      eq(table, 'package_registry', 'table accessed');
+      return {
+        select: (cols) => {
+          ok(cols.includes('package_name'), 'select cols');
+          return {
+            in: (col, vals) => {
+              eq(col, 'package_name', 'in column');
+              return {
+                eq: (col2, val2) => {
+                  eq(col2, 'ecosystem', 'eq column');
+                  eq(val2, 'npm', 'ecosystem must be npm');
+                  return Promise.resolve({
+                    data: [
+                      {
+                        package_name: 'custom-db-pkg',
+                        ecosystem: 'npm',
+                        score: 3.5,
+                        license: 'GPL-3.0',
+                        verdict: 'risky',
+                        status: 'AGING',
+                        warn_message: 'OUTDATED',
+                        description: 'Custom DB mock package',
+                        critical: false
+                      }
+                    ],
+                    error: null
+                  });
+                }
+              };
+            }
+          };
+        }
+      };
+    }
+  };
+
+  __setSupabaseClientForTests(mockSb);
+
+  // First check: a package in the DB + a package in DEPS_REGISTRY should result in cache: hit
+  const req1 = new MockReq(
+    'POST',
+    { 'content-type': 'application/json' },
+    { action: 'compliance-gate' },
+    { dependencies: ['custom-db-pkg', 'react'] }
+  );
+  const res1 = new MockRes();
+
+  req1.resume();
+  await exceptionsHandler(req1, res1);
+
+  eq(res1.statusCode, 200, 'gate response status');
+  const body1 = JSON.parse(res1.body);
+  eq(body1.decision, 'ALLOW', 'decision');
+  eq(body1.cache, 'hit', 'cache status should be hit because all pkgs are resolved via registry/db');
+  eq(body1.dependenciesChecked, 2, 'count');
+
+  const customEval = body1.evaluation.find(e => e.package === 'custom-db-pkg');
+  ok(customEval !== undefined, 'custom-db-pkg found in evaluation');
+  eq(customEval.score, 3.5, 'score resolved from DB');
+  eq(customEval.verdict, 'RISKY', 'verdict resolved from DB');
+  eq(customEval.license, 'GPL-3.0', 'license resolved from DB');
+  eq(customEval.action, 'WARN', 'risky verdict triggers WARN by default');
+
+  // Second check: querying a completely unknown package should fall back to defaults and register a cache: miss
+  const req2 = new MockReq(
+    'POST',
+    { 'content-type': 'application/json' },
+    { action: 'compliance-gate' },
+    { dependencies: ['custom-db-pkg', 'completely-unknown-pkg'] }
+  );
+  const res2 = new MockRes();
+
+  req2.resume();
+  await exceptionsHandler(req2, res2);
+
+  eq(res2.statusCode, 200, 'gate response status');
+  const body2 = JSON.parse(res2.body);
+  eq(body2.cache, 'miss', 'cache status should be miss due to unknown package');
+
+  const unknownEval = body2.evaluation.find(e => e.package === 'completely-unknown-pkg');
+  ok(unknownEval !== undefined, 'completely-unknown-pkg found in evaluation');
+  eq(unknownEval.score, 8.0, 'default score');
+  eq(unknownEval.license, 'MIT', 'default license');
+  eq(unknownEval.verdict, 'STABLE', 'default verdict');
+
+  __setSupabaseClientForTests(null);
+});
+
+
 test('OTS Gate: Block critical packages and warn on restricted-license under default policy', async () => {
   // Default policy warn=['graveyard','risky','watchlist'], block=[]. So a
   // restricted-license package whose verdict is 'risky' (agpl-pkg) WARNS

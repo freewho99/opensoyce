@@ -1041,6 +1041,33 @@ async function handleComplianceGate(req, res) {
     console.warn('handleComplianceGate: Supabase not configured, bypassing DB exceptions check.');
   }
 
+  // Fetch package info from the database if available
+  let dbPackages = [];
+  if (sb && dependencies.length > 0) {
+    try {
+      const cleanNames = dependencies
+        .filter(d => typeof d === 'string' && d.trim())
+        .map(d => d.trim().toLowerCase());
+      if (cleanNames.length > 0) {
+        const { data, error } = await sb
+          .from('package_registry')
+          .select('package_name, ecosystem, score, license, verdict, status, warn_message, description, critical')
+          .in('package_name', cleanNames)
+          .eq('ecosystem', 'npm');
+        if (!error && data) {
+          dbPackages = data;
+        }
+      }
+    } catch (err) {
+      console.warn('handleComplianceGate: failed to fetch from package_registry', err.message);
+    }
+  }
+
+  const dbPackageMap = new Map();
+  for (const pkg of dbPackages) {
+    dbPackageMap.set(pkg.package_name.toLowerCase(), pkg);
+  }
+
   const nowIso = new Date().toISOString();
   const evaluation = [];
   let blockedCount = 0;
@@ -1050,12 +1077,22 @@ async function handleComplianceGate(req, res) {
   for (const dep of dependencies) {
     if (typeof dep !== 'string' || !dep.trim()) continue;
     const name = dep.trim();
-    const details = DEPS_REGISTRY[name] || DEPS_REGISTRY[name.toLowerCase()] || {
+    const nameLower = name.toLowerCase();
+    const dbDetails = dbPackageMap.get(nameLower);
+    const details = dbDetails ? {
+      score: Number(dbDetails.score),
+      license: dbDetails.license,
+      verdict: dbDetails.verdict,
+      status: dbDetails.status,
+      warn: dbDetails.warn_message,
+      description: dbDetails.description,
+      critical: dbDetails.critical
+    } : (DEPS_REGISTRY[name] || DEPS_REGISTRY[nameLower] || {
       score: 8.0,
       license: 'MIT',
       verdict: 'stable',
       status: 'FRESH'
-    };
+    });
 
     overallScoreSum += details.score;
     ratedCount++;
@@ -1147,7 +1184,7 @@ async function handleComplianceGate(req, res) {
   const finalScore = ratedCount > 0 ? parseFloat((overallScoreSum / ratedCount).toFixed(1)) : 10.0;
   const decision = blockedCount > 0 ? 'BLOCK' : 'ALLOW';
 
-  const cacheStatus = (body.force_scan || dependencies.some(d => !DEPS_REGISTRY[d])) ? 'miss' : 'hit';
+  const cacheStatus = (body.force_scan || dependencies.some(d => !DEPS_REGISTRY[d] && !dbPackageMap.has(d.toLowerCase()))) ? 'miss' : 'hit';
 
   return sendJson(res, 200, {
     decision,
