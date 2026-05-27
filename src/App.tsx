@@ -42,6 +42,7 @@ import Patterns from './pages/Patterns';
 import PatternDetail from './pages/PatternDetail';
 import IncidentDetail from './pages/IncidentDetail';
 import OtsReplays from './pages/OtsReplays';
+import AppealsReview from './pages/AppealsReview';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
 // while the browser entry uses <BrowserRouter>. Keep this in sync with the
@@ -82,6 +83,7 @@ export function AppRoutes() {
         <Route path="/submit-project" element={<SubmitProject />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/admin/signals" element={<SignalInbox />} />
+        <Route path="/admin/appeals" element={<AppealsReview />} />
         <Route path="/compare/skills-agents" element={<SkillsAgentsCompare />} />
         <Route path="/challenge" element={<Challenge />} />
         <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />

@@ -18,6 +18,7 @@
  * forgery blast radius. Server-signed state is a follow-up.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Github, Shield, Trash2, RefreshCw, AlertTriangle, Plus, LogOut, ChevronRight, Eye, Bell } from 'lucide-react';
 
 type ExceptionRow = {
@@ -161,6 +162,7 @@ export default function Dashboard() {
   // re-auth banner in that state instead of just showing an empty watchlist.
   const [orgs, setOrgs] = useState<string[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
+  const [isReviewer, setIsReviewer] = useState(false);
   const [oauthClientId, setOauthClientId] = useState<string | null>(null);
   const [repos, setRepos] = useState<RepoRef[] | null>(null);
   const [reposLoading, setReposLoading] = useState(false);
@@ -306,7 +308,7 @@ export default function Dashboard() {
     if (path === '/api/exceptions') {
       if (method === 'GET') {
         if (action === 'whoami') {
-          return jsonResponse({ login: 'sarah-cto', orgs: ['acme-corp'] });
+          return jsonResponse({ login: 'sarah-cto', orgs: ['acme-corp'], isReviewer: true });
         }
         if (action === 'my-repos') {
           return jsonResponse({ repos: store.repos });
@@ -443,6 +445,7 @@ export default function Dashboard() {
       if (isSandbox) {
         setLogin('sarah-cto');
         setOrgs(['acme-corp']);
+        setIsReviewer(true);
         setPhase('auth');
         return;
       }
@@ -486,6 +489,7 @@ export default function Dashboard() {
           if (cancelled) return;
           setLogin(body.login || null);
           setOrgs(Array.isArray(body.orgs) ? body.orgs.filter((o: unknown) => typeof o === 'string') : []);
+          setIsReviewer(Boolean(body.isReviewer));
           setPhase('auth');
           return;
         } catch (e: unknown) {
@@ -507,6 +511,7 @@ export default function Dashboard() {
           // backend rolled forward. Treat a missing/non-array field as "stale
           // session" (orgs: []) and let the re-auth banner do the talking.
           setOrgs(Array.isArray(body.orgs) ? body.orgs.filter((o: unknown) => typeof o === 'string') : []);
+          setIsReviewer(Boolean(body.isReviewer));
           setPhase('auth');
         } else {
           setPhase('unauth');
@@ -1256,8 +1261,19 @@ export default function Dashboard() {
           <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-2">
             {selectedRepo ? `OpenSoyce Exceptions Management for ${selectedRepo.owner}/${selectedRepo.repo}` : 'OpenSoyce Exceptions Management Dashboard'}
           </h1>
-          <div className="text-[10px] font-black uppercase tracking-widest opacity-60">
-            SIGNED IN AS <span className="text-soy-red">@{login}</span>
+          <div className="text-[10px] font-black uppercase tracking-widest opacity-60 flex flex-wrap items-center gap-2">
+            <span>SIGNED IN AS <span className="text-soy-red">@{login}</span></span>
+            {isReviewer && (
+              <>
+                <span className="opacity-40">|</span>
+                <Link
+                  to="/admin/appeals"
+                  className="bg-soy-red text-white px-2 py-0.5 text-[9px] font-black uppercase tracking-widest hover:bg-soy-bottle transition-colors border border-black shadow-[2px_2px_0px_#000]"
+                >
+                  🛡️ APPEALS REVIEW PANEL
+                </Link>
+              </>
+            )}
           </div>
         </div>
         <button
