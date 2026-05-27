@@ -80,7 +80,7 @@ export const OTS_PATTERN_DEFINITIONS = [
   {
     id: 'known-vulnerability-exposure',
     name: 'Known Vulnerability Exposure',
-    category: 'vulnerability',
+    category: 'known-vulnerability',
     defaultSeverity: 'critical',
     shortDescription: 'The package or version is referenced by a known CVE, GHSA, or OpenSoyce advisory.',
     whyItMatters: 'Installing a package with a published vulnerability gives attackers a documented exploit path before the project has time to patch — and the advisory itself is often the first thing scanners outside of OpenSoyce pick up.',
@@ -411,56 +411,110 @@ export const OTS_PATTERN_PACKS = [
   }
 ];
 
+// Public proof page (/proof/ots-replays) only renders incidents where
+// sourceConfidence is 'primary' or 'authoritative-secondary'. Entries marked
+// 'unverified' are kept here as research backlog and excluded from the proof
+// surface by scripts/test-ots-replays.mjs.
 export const OTS_INCIDENTS = [
   {
-    id: 'axios-npm-compromise',
-    name: 'Axios npm Compromise Case Study',
-    date: 'October 2021',
-    target: 'axios (npm package)',
-    description: 'An attacker hijacked the publishing credentials of a core Axios contributor, releasing backdoored versions that injected a malicious downloader payload.',
-    context: 'Axios is one of the most widely used HTTP clients in the JavaScript ecosystem, serving millions of applications. Its compromise represents a high-impact supply-chain attack.',
-    whatHappened: 'The attacker gained access to a publisher account and published versions 0.21.2, 0.21.3, and others. The compromised package was updated to include a postinstall script. This script dynamically downloaded an executable from a remote IP address (C2 server) and ran it on the host machine. The backdoor executed password-stealing tools and system reconnaissance.',
+    id: 'xz-utils-backdoor',
+    name: 'xz-utils Backdoor (CVE-2024-3094)',
+    date: 'March 29, 2024',
+    target: 'xz-utils 5.6.0 / 5.6.1 (liblzma)',
+    sourceUrl: 'https://tukaani.org/xz-backdoor/',
+    sourceConfidence: 'primary',
+    description: 'A long-game maintainer infiltration planted a backdoor inside the release tarballs of xz-utils 5.6.0 and 5.6.1, executing inside sshd via a build-time injection that was absent from the upstream git source.',
+    context: 'xz-utils is a foundational compression library shipped in every major Linux distribution, including the build chain for OpenSSH. The compromise targeted release tarballs rather than the git source, exploiting the long-standing convention that tarballs match the tagged source tree.',
+    whatHappened: 'The release tarballs of 5.6.0 and 5.6.1 contained a backdoor introduced by a maintainer (operating under the alias "Jia Tan") who had built trust over a period of ~2 years. The backdoor injected code during the build via build-to-host.m4 that compromised sshd authentication. Andres Freund discovered the backdoor by investigating an unusual ~500ms ssh login latency. CVE-2024-3094 was assigned.',
     triggeredPatternIds: [
-      'hidden-dependency-injection',
-      'install-time-remote-execution',
-      'fresh-release-cooldown-violation',
-      'maintainer-account-compromise-signal',
-      'trusted-publishing-bypass'
+      'known-vulnerability-exposure',
+      'source-package-mismatch'
     ],
-    prepreventionRule: 'Policy template: Block any package release published outside OIDC trusted publishing that instantly adds a preinstall/postinstall execution script and is less than 72 hours old.',
-    preventionStrategy: 'Enforcing a strict cooldown window for dependency updates, blocking install-time scripts via npm config or containerization, and flagging manual publishing bypasses immediately.'
+    preventionStrategy: 'Compile from tagged source commits rather than tarballs when possible; pin distribution package versions and require advisory clearance before bumping; require reproducible-build verification for cryptographic and SSH-adjacent libraries.'
   },
   {
     id: 'tj-actions-changed-files',
-    name: 'tj-actions/changed-files Drift Incident',
-    date: 'Early 2024',
+    name: 'tj-actions/changed-files Compromise (CVE-2025-30066)',
+    date: 'March 14–15, 2025',
     target: 'tj-actions/changed-files (GitHub Action)',
-    description: 'A popular GitHub utility action was configured in workflows with a mutable tag, resulting in risk when tag-drift allowed execution of unvetted runner commands.',
-    context: 'Workflows running on pull requests often reference utility actions to check out file paths. When pinned to a tag rather than a commit SHA, workflows are vulnerable to upstream changes.',
-    whatHappened: 'Developers used @v40 in their workflows. If the publisher repo was compromised or a tag was shifted, a new revision containing exfiltration commands could execute inside private enterprise pipelines. In similar incidents, secrets passed to utility actions were exfiltrated to public log endpoints.',
+    sourceUrl: 'https://github.com/advisories/GHSA-mrrh-fwg8-r2c3',
+    sourceConfidence: 'primary',
+    description: 'Attackers retroactively rewrote multiple version tags of the popular tj-actions/changed-files Action to point to a malicious commit, causing affected workflow runs to dump CI/CD secrets into the GitHub Actions log output.',
+    context: 'tj-actions/changed-files is referenced by tens of thousands of repositories. Because workflows commonly pin to mutable tags (e.g. @v35) rather than to a full commit SHA, retroactive tag drift propagates to every consumer on next run.',
+    whatHappened: 'Per the GitHub Advisory, attackers gained the ability to push to the upstream repository between March 14 and March 15, 2025, and rewrote multiple version tags to a single malicious commit. The injected script extracted secrets from the Runner Worker process memory and printed them in GitHub Actions logs. Over 23,000 repositories were impacted; repositories with public workflow logs faced higher exposure because leaked secrets became publicly readable.',
     triggeredPatternIds: [
       'mutable-ci-tag-drift',
       'ci-secret-exposure-path',
-      'unpinned-action-reference'
+      'unpinned-action-reference',
+      'third-party-action-with-secrets'
     ],
-    preventionStrategy: 'Mandating that all third-party GitHub Actions are pinned to full 40-character commit SHAs. In addition, restrict GITHUB_TOKEN permissions to read-only in the workflow settings.'
+    preventionStrategy: 'Pin every third-party Action to a full 40-character commit SHA; restrict GITHUB_TOKEN to the minimum permission set per job; gate secret-bearing jobs behind explicit allow-listed Actions.'
   },
   {
-    id: 'github-poisoned-vscode-extension',
-    name: 'VS Code Extension Key Theft Attack',
-    date: 'Mid 2024',
-    target: 'VS Code Themes & Linters (Marketplace)',
-    description: 'Attackers uploaded a sequence of themes and markdown formatting tools to the VS Code Marketplace, embedding background processes to scan developer SSH keys.',
-    context: 'IDE marketplaces lack strict static-analysis gates, allowing extensions with large dependency trees to execute in the local user environment.',
-    whatHappened: 'Malicious themes were published with typosquatted names resembling popular color themes. Once installed, the extension activated a local background node process. It scanned the home folder (~/.ssh/id_rsa, ~/.aws/credentials) and sent the keys to a remote logging site using HTTPS. The extension bypassed developer firewalls by hiding as typical editor web traffic.',
+    id: 'polyfill-io-supply-chain',
+    name: 'polyfill.io CDN Supply-Chain Compromise',
+    date: 'June 2024',
+    target: 'polyfill.io (CDN-served JavaScript)',
+    sourceUrl: 'https://sansec.io/research/polyfill-supply-chain-attack',
+    corroboratingSourceUrl: 'https://blog.cloudflare.com/automatically-replacing-polyfill-io-links-with-cloudflares-mirror-for-a-safer-internet/',
+    sourceConfidence: 'authoritative-secondary',
+    description: 'After a change of ownership of the polyfill.io domain, the CDN began injecting malicious JavaScript into responses, redirecting mobile traffic and selectively evading detection in admin/analytics contexts.',
+    context: 'polyfill.io was historically embedded directly into HTML pages of more than 100,000 sites via a <script src="..."> tag. When ownership of the domain changed hands, every downstream consumer became reliant on the new operator\'s trustworthiness.',
+    whatHappened: 'Sansec\'s investigation found that the polyfill.io CDN began injecting malicious payloads that redirected mobile users to attacker-controlled destinations. The payload used fake Google Analytics-looking domains and conditionally suppressed activation in admin and analytics contexts to evade discovery. Cloudflare independently warned that polyfill.io could no longer be trusted and shipped automatic mirror replacement.',
     triggeredPatternIds: [
-      'poisoned-extension-risk',
-      'broad-workspace-access',
-      'credential-path-access',
-      'local-shell-execution',
+      'unknown-remote-endpoint',
+      'publisher-identity-drift'
+    ],
+    preventionStrategy: 'Self-host critical browser polyfills, prefer subresource integrity (SRI) hashes for third-party CDN scripts, and monitor CNAME / WHOIS ownership of any third-party origin in your runtime supply chain.'
+  },
+  {
+    id: 'ua-parser-js-compromise',
+    name: 'ua-parser-js npm Compromise (GHSA-pjwm-rvh2-c87w)',
+    date: 'October 22, 2021',
+    target: 'ua-parser-js 0.7.29 / 0.8.0 / 1.0.0 (npm)',
+    sourceUrl: 'https://github.com/advisories/GHSA-pjwm-rvh2-c87w',
+    sourceConfidence: 'primary',
+    description: 'The npm publishing account of a single maintainer was compromised, and three malicious versions were published that ran an install-time payload to steal credentials and install a cryptocurrency miner across multiple operating systems.',
+    context: 'ua-parser-js is downloaded ~8 million times per week. The advisory and the maintainer\'s public statement instructed affected users to treat any computer that installed the malicious versions as fully compromised and rotate all secrets accessible from that machine.',
+    whatHappened: 'Per GHSA-pjwm-rvh2-c87w, malicious versions 0.7.29, 0.8.0, and 1.0.0 were published to npm. The preinstall lifecycle script fetched and executed a remote payload that varied per OS (Windows credential stealer + miner; Linux miner). Patched versions 0.7.30, 0.8.1, and 1.0.1 were released within ~4 hours of discovery.',
+    triggeredPatternIds: [
+      'known-vulnerability-exposure',
+      'install-time-remote-execution',
+      'maintainer-account-compromise-signal'
+    ],
+    preventionStrategy: 'Disable npm install lifecycle scripts by default in CI (`npm ci --ignore-scripts`), require a cooldown window before bumping critical-path dependencies, and enable 2FA on every publishing account.'
+  },
+  {
+    id: 'event-stream-flatmap-stream',
+    name: 'event-stream / flatmap-stream Hidden Dependency Injection',
+    date: 'November 2018',
+    target: 'event-stream 3.3.6 (npm)',
+    sourceUrl: 'https://blog.npmjs.org/post/180565383195/details-about-the-event-stream-incident',
+    sourceConfidence: 'primary',
+    description: 'A new maintainer of the popular event-stream package added flatmap-stream as a direct dependency; flatmap-stream contained an obfuscated payload that activated only inside Copay cryptocurrency wallet builds.',
+    context: 'event-stream is a heavily-used npm streaming utility. The npm postmortem documents how the original maintainer transferred control to a new contributor who had no prior reputation; the new dependency was added in event-stream 3.3.6.',
+    whatHappened: 'Per npm\'s incident report, flatmap-stream@0.1.1 was added as a direct dependency of event-stream@3.3.6 by the new maintainer. The malicious code decrypted a hidden payload under specific build conditions (Copay wallet builds), then harvested account credentials and private keys. The injection survived initial review because the payload activated conditionally and the obfuscation looked like legitimate compiled output.',
+    triggeredPatternIds: [
+      'hidden-dependency-injection',
+      'maintainer-account-compromise-signal'
+    ],
+    preventionStrategy: 'Treat maintainer-transfer events as high-risk; require lockfile-diff review when a trusted package gains a new direct dependency; analyze conditional code paths in transitive dependencies before adoption.'
+  },
+  {
+    id: 'ledger-connect-kit',
+    name: 'Ledger Connect Kit npm + CDN Compromise',
+    date: 'December 14, 2023',
+    target: '@ledgerhq/connect-kit 1.1.5 / 1.1.6 / 1.1.7 (npm)',
+    sourceUrl: 'https://www.ledger.com/blog/security-incident-report',
+    sourceConfidence: 'primary',
+    description: 'A former Ledger employee\'s npm account was phished, and three malicious versions of @ledgerhq/connect-kit were published; because DApps loaded Connect Kit dynamically via CDN, the drainer payload propagated to every downstream dApp without a new build.',
+    context: 'Connect Kit is the JavaScript library that DApps use to talk to Ledger hardware wallets. Because DApps loaded it via CDN at runtime (not bundled), a single npm publish reached every consumer immediately.',
+    whatHappened: 'Per Ledger\'s incident report, a former employee\'s NPMJS account was compromised via a phishing campaign and used to publish malicious versions 1.1.5, 1.1.6, and 1.1.7. The injected payload was a wallet drainer. DApps loaded the malicious Connect Kit via CDN-style runtime loading, so every downstream consumer was affected within the ~5-hour window before takedown.',
+    triggeredPatternIds: [
+      'maintainer-account-compromise-signal',
       'unknown-remote-endpoint'
     ],
-    preventionStrategy: 'Auditing installed extensions on developer machines, blocking marketplace integrations from untrusted domains, and isolating developer processes from key storage directories.'
+    preventionStrategy: 'Revoke publishing credentials immediately on employee offboarding; treat CDN-loaded runtime libraries as part of the production supply chain (pin to a specific version + verify SRI); require code review on every npm publish for security-critical libraries.'
   }
 ];
 
@@ -538,15 +592,21 @@ export function detectOtsPatternsForRow(row, context = {}) {
   }
 
   // 3. Hidden Dependency Injection
-  if (mockAxios) {
+  // Fires when a release adds a new direct or transitive dependency that
+  // the consumer did not previously trust. Caller provides
+  // row.hiddenDependency = { newDep, reason } when a lockfile diff is
+  // available. mockAxios stays as a sandbox trigger for the demo.
+  if (mockAxios || (row.hiddenDependency && row.hiddenDependency.newDep)) {
+    const newDep = row.hiddenDependency ? row.hiddenDependency.newDep : 'plain-crypto-js';
+    const reason = row.hiddenDependency ? row.hiddenDependency.reason : 'Introduced 1 new unverified sub-dependency';
     patterns.push({
       patternId: 'hidden-dependency-injection',
       severity: 'high',
       policyImpact: 'warn',
       confidence: 0.88,
       evidence: [
-        { label: 'Suspicious dependencies', value: 'plain-crypto-js' },
-        { label: 'Delta', value: 'Introduced 1 new unverified sub-dependency' }
+        { label: 'Suspicious dependency', value: newDep },
+        { label: 'Delta', value: reason }
       ]
     });
   }
@@ -605,17 +665,27 @@ export function detectOtsPatternsForRow(row, context = {}) {
     });
   }
 
-  // 8. Maintainer change & trusted publishing bypass
-  if (mockAxios) {
+  // 8. Maintainer compromise signal
+  // Fires when an upstream signal indicates the publishing account has
+  // changed hands (new maintainer, former employee credential, phishing
+  // disclosure). Caller provides row.maintainerCompromise = true or an
+  // object with a reason. mockAxios stays as a sandbox trigger.
+  if (mockAxios || row.maintainerCompromise) {
+    const reason = typeof row.maintainerCompromise === 'object' && row.maintainerCompromise && row.maintainerCompromise.reason
+      ? row.maintainerCompromise.reason
+      : 'Unusual publisher account change detected';
     patterns.push({
       patternId: 'maintainer-account-compromise-signal',
       severity: 'high',
       policyImpact: 'warn',
       confidence: 0.82,
       evidence: [
-        { label: 'Publisher Account', value: 'Unusual publisher email update detected' }
+        { label: 'Publisher Account', value: reason }
       ]
     });
+  }
+  // 8b. Trusted publishing bypass — sandbox-only for now.
+  if (mockAxios) {
     patterns.push({
       patternId: 'trusted-publishing-bypass',
       severity: 'high',
@@ -651,6 +721,24 @@ export function detectOtsPatternsForRow(row, context = {}) {
       evidence: [
         { label: 'Blast Radius Tier', value: 'HIGH' },
         { label: 'Dependent Count', value: row.blastRadius.reason || 'High downstream dependent references' }
+      ]
+    });
+  }
+
+  // 11. Unknown Remote Endpoint
+  // Generic trigger: a package or its runtime loader contacts a third-party
+  // origin that has not been pre-trusted (CDN runtime loading, telemetry
+  // beacon, install-time download). Caller provides
+  // row.unknownRemoteEndpoint = { host, reason } when such a signal exists.
+  if (row.unknownRemoteEndpoint && row.unknownRemoteEndpoint.host) {
+    patterns.push({
+      patternId: 'unknown-remote-endpoint',
+      severity: 'high',
+      policyImpact: 'warn',
+      confidence: 0.78,
+      evidence: [
+        { label: 'Endpoint', value: row.unknownRemoteEndpoint.host },
+        { label: 'Context', value: row.unknownRemoteEndpoint.reason || 'Runtime contact with non-pre-trusted origin' }
       ]
     });
   }
