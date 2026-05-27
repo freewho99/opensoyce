@@ -1,4 +1,4 @@
-export type BlogPost = {
+hexport type BlogPost = {
   heroImage?: string;
   slug: string;
   title: string;
@@ -20,7 +20,7 @@ export const blogPosts: BlogPost[] = [
         slug: 'badhost-starlette-cve-2026-48710',
         primaryProductAction: 'scanner',
         title: "Your AI Agent Got a Master Key and Gave It to Everybody.",
-        subtitle: "CVE-2026-48710 is one character. One. And it unlocks 325 million downloads worth of AI infrastructure. Pimp Chronicles, open source edition.",
+        subtitle: "CVE-2026-48710 is one character. One. And it unlocks 325 million downloads worth of AI infrastructure. Open source edition.",
         category: "SECURITY",
         emoji: "🎤",
         readTime: '7 min',
