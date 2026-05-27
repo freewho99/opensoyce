@@ -17,6 +17,150 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+        slug: 'badhost-starlette-cve-2026-48710',
+        primaryProductAction: 'scanner',
+        title: "Your AI Agent Got a Master Key and Gave It to Everybody.",
+        subtitle: "CVE-2026-48710 is one character. One. And it unlocks 325 million downloads worth of AI infrastructure. Pimp Chronicles, open source edition.",
+        category: "SECURITY",
+        emoji: "🎤",
+        readTime: '7 min',
+        date: 'MAY 27, 2026',
+        featured: false,
+        metaDescription: "BadHost (CVE-2026-48710) is a single-character HTTP Host header injection in Starlette that bypasses authentication across FastAPI, vLLM, LiteLLM and millions of MCP servers. Here's what happened, why it matters, and how OpenSoyce Scanner catches this before it catches you.",
+        tags: ['starlette', 'fastapi', 'badhost', 'cve-2026-48710', 'mcp', 'ai-agents', 'security', 'opensoyce'],
+        content: `
+        ## Let Me Tell You Something About One Character
+        
+        One. Character.
+        
+        Not a buffer overflow. Not a cryptographic breakthrough. Not some PhD-level exploit that took seventeen hackers six months in a Siberian data center.
+        
+        ONE. CHARACTER.
+        
+        Injected into an HTTP Host header. That's it. That's the whole attack. And with that one character, you can walk right past the authentication of FastAPI, vLLM, LiteLLM, and essentially every MCP server running AI agents that are touching your users' emails, calendars, databases, clinical trial records, and — I need you to really hear this — **face analysis systems**.
+        
+        You built a whole AI empire. You trained the models. You wrote the prompts. You got the funding. And some researcher walked up, typed one character in the wrong field, and your entire operation said "come on in, the door's open."
+        
+        That's not a security vulnerability. That's a character flaw.
+        
+        ---
+        
+        ## BadHost. The Name Alone.
+        
+        CVE-2026-48710. Nicknamed **BadHost** by the researchers at X41 D-Sec who found it. And I want you to appreciate the poetry of that name. Not "Critical Auth Bypass." Not "Remote Code Injection." They called it *BadHost*. Like your server went to a party, invited everybody in, and is now responsible for whatever happened to your couch.
+        
+        Your server is the bad host. Your server did this.
+        
+        Here's the technical reality: Starlette — the open source ASGI framework that FastAPI is built on, the one with **325 million weekly downloads** — does not validate the HTTP Host header. At all. So when Starlette reconstructs the URL for your app, it uses whatever the attacker put in that header. Your routing logic sees one path. Your authentication logic sees a completely different path. They disagree. Authentication loses.
+        
+        \`\`\`text
+        [ATTACKER SENDS REQUEST]
+        Host: evil.com/admin  <-- one injected character/path
+        Path: /public
+        
+        [STARLETTE ROUTING]     [STARLETTE AUTH CHECK]
+        sees: /public           sees: /admin
+        says: allowed           says: also allowed (wrong URL)
+        
+        [RESULT: YOU GOT WALKED]
+        \`\`\`
+        
+        The researchers put it diplomatically: *"It is unexpected for users that request.url.path is different from the actual path requested over HTTP."*
+        
+        Unexpected. That's one word for it. I got some other words.
+        
+        ---
+        
+        ## 325 Million Downloads a Week and Nobody Checked This
+        
+        I want you to sit with that number. 325 million downloads. Per week. That's not a niche package some three-person startup built on a weekend. That is the foundation of a significant portion of Python's AI and web infrastructure.
+        
+        FastAPI — your entire agent framework — built on Starlette. vLLM — running your inference servers at scale — built on Starlette. LiteLLM — the OpenAI proxy shim half the industry uses — built on Starlette. Text Generation Inference. Every OpenAI-shim proxy. MCP servers. Agent harnesses. Eval dashboards. Model management UIs.
+        
+        All of it. Sitting on top of a framework that does not validate the Host header.
+        
+        And what do MCP servers do? They sit in the middle between your AI agents and *everything*. User databases. Email accounts. Calendar accounts. Third-party credentials. That's what MCP is — it's the universal adapter that lets your AI agent reach out and touch external systems. And to do that, MCP servers store the credentials for all of those systems.
+        
+        So BadHost isn't just a web vulnerability. BadHost is a **skeleton key to the credential vault of your entire AI stack**.
+        
+        ---
+        
+        ## What's Currently Exposed Out There
+        
+        The researchers didn't just find the bug. They ran a scanner. And here is a partial list of what is sitting wide open on the public internet right now, accessible via this one-character trick:
+        
+        - **Biopharma AI** — clinical trial databases, M&A data
+        - **Identity Verification systems** — face analysis, KYC data, live PII
+        - **IoT/Industrial** — SSH access to physical devices via bastion hosts, remote code execution
+        - **Email/SaaS** — full mailbox read, send, and *delete*. S3 export. Webhooks.
+        - **HR/Recruitment** — candidate PII, hiring pipeline data
+        - **CMS/Marketing** — subscriber lists, mass email send access
+        - **Cloud Monitoring** — AWS topology, distributed traces
+        - **Personal Health/Finance** — nutrition logs, expenses, subscriptions
+        
+        Someone's cancer trial data is one character away from an attacker. Someone's hiring decisions. Someone's full email inbox with send and delete access. Someone's industrial SSH bastion.
+        
+        And it scored a 7 out of 10. The researchers said that rating "materially understates" the threat. X41 D-Sec called it "critical severity." I'm calling it something they can't print.
+        
+        ---
+        
+        ## This Is What OpenSoyce Scanner Is For
+        
+        Here's where I get serious for a second — well, serious-er.
+        
+        The reason BadHost is this dangerous isn't just the vulnerability itself. It's that **nobody knew Starlette was in their stack at this level of exposure**. FastAPI is in your pyproject.toml. But do you know that FastAPI pulls in Starlette? Do you know which version of Starlette FastAPI is pinned to right now? Do you know if you updated FastAPI last month and got a version of Starlette that's still vulnerable?
+        
+        That's the whole game. That's supply chain security in one paragraph. It's not that you installed something bad. It's that something you installed installed something bad, and you have no visibility into the chain.
+        
+        OpenSoyce Scanner maps your full dependency graph — not just your direct dependencies, but the transitive ones. The ones that don't show up in your requirements.txt but are absolutely running in your production environment. Starlette is a perfect example of a package that millions of developers have in production *without knowing it* because it's three levels deep in their dependency tree.
+        
+        \`\`\`text
+        YOUR PYPROJECT.TOML
+          └── fastapi==0.115.x
+                  └── starlette==0.X.X  <-- are YOU tracking this version?
+                                └── [BadHost lives here]
+                                \`\`\`
+                                
+                                Run the scanner. Find out exactly what version of Starlette is in your environment. If it's anything before **1.0.1** — the patch that dropped Friday — you are currently exposed.
+                                
+                                [→ Scan your Python stack for Starlette exposure now](https://opensoyce.com/scanner)
+                                
+                                ---
+                                
+                                ## The Fix (And Why "Just Update" Is Complicated)
+                                
+                                Starlette 1.0.1 is the patched version. That's your target. But here's the thing about "just update Starlette" — you probably don't *directly* depend on Starlette. You depend on FastAPI, which depends on Starlette. So the actual fix is:
+                                
+                                1. Update FastAPI to a version that pins to Starlette 1.0.1 or later
+                                2. Verify — actually verify, don't assume — that your Starlette transitive dependency resolved to the patched version
+                                3. If you can't update immediately, put a properly configured firewall in front of your MCP servers and ensure Host header validation happens at the proxy layer
+                                
+                                X41 D-Sec and Nemesis have a scanner at their links that will tell you if a given server is vulnerable. Use it. Particularly if you're running FastAPI, vLLM, or LiteLLM in any production capacity.
+                                
+                                And if you want a permanent answer to "what's in my dependency graph and is any of it on fire" — that's what Guard's live watchlist is built for. Set it once. Stop asking the question manually.
+                                
+                                [→ Set up live dependency monitoring with Guard](https://opensoyce.com/guard)
+                                
+                                ---
+                                
+                                ## One Character, Bro
+                                
+                                I keep coming back to it because I need you to feel it.
+                                
+                                The entire AI infrastructure boom. The MCP protocol. The agent frameworks. The billions of dollars of venture capital. The clinical trial data. The email inboxes. The face recognition systems. The industrial SSH bastions.
+                                
+                                One character in an HTTP header.
+                                
+                                Your server was the bad host. Don't let it happen again.
+                                
+                                [→ Check your stack with OpenSoyce Scanner](https://opensoyce.com/scanner)
+                                
+                                ---
+                                
+                                *CVE-2026-48710 "BadHost" | CVSS: 7.0 (understated) | Affected: Starlette < 1.0.1, FastAPI, vLLM, LiteLLM | Status: Patch Available | Patch: Starlette 1.0.1*
+                                `,
+  },
+  {
         slug: 'drupal-sql-injection-cve-2026-9082',
         primaryProductAction: 'lookup',
         title: "They Patched Drupal. You Had 48 Hours. The Hackers Didn't Wait.",
