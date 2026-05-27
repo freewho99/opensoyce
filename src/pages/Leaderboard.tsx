@@ -67,7 +67,7 @@ export default function Leaderboard() {
     scoreTrend: 'up',
     score: {
       overall: r.score,
-      maintenance: r.score * 10,
+      maintenance: r.score,
       security: 85,
       community: 90,
       documentation: 95

@@ -14,7 +14,7 @@ export default function Remix() {
     {
       owner: 'shadcn-ui',
       repo: 'ui',
-      score: 9.0,
+      score: 90.0,
       badge: 'FORKABLE',
       forkIdea: 'THE HEADLESS REVOLUTION',
       whyItMatters: 'It proved that builders want copy-paste CLI convenience over bloated npm packages. The core registry logic is pure gold.',
@@ -26,7 +26,7 @@ export default function Remix() {
     {
       owner: 'openai',
       repo: 'openai-python',
-      score: 8.8,
+      score: 88.0,
       badge: 'STABLE',
       forkIdea: 'CLIENT-SIDE AGENT WRAPPER',
       whyItMatters: 'The internal state management and streaming handling are industry standard. Don\'t reinvent how you talk to LLMs.',
@@ -38,7 +38,7 @@ export default function Remix() {
     {
        owner: 'vercel',
        repo: 'next.js',
-       score: 9.5,
+       score: 95.0,
        badge: 'MASTERPIECE',
        forkIdea: 'STATIC-FIRST MICRO FRAMEWORK',
        whyItMatters: 'Next.js is massive. Strip the complexity and keep the router. Use their server action architecture for a lightweight clone.',
@@ -50,7 +50,7 @@ export default function Remix() {
     {
        owner: 'sindresorhus',
        repo: 'awesome',
-       score: 7.5,
+       score: 75.0,
        badge: 'STALE DATA',
        forkIdea: 'AI-CURATED KNOWLEDGE GRAPH',
        whyItMatters: 'The lists are iconic but unmaintained. Use the same structure but automate the validation via AI signals.',

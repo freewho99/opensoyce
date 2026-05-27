@@ -1,14 +1,17 @@
 /**
- * OpenSoyce — Policy Inheritance (Phase 3).
+ * OTS Gate — Policy Inheritance (Phase 3).
  *
  * Handles three sources of policy truth, merged in priority order:
  *
  *   1. PRESET  — a named preset (soc2, iso27001, strict, permissive) that
  *                maps to a fixed block/warn/allow triple.
- *   2. ORG     — `.opensoyce.yml` from a central policy repo
- *                (e.g. `my-org/opensoyce-policy`). Fetched from its default
- *                branch so PR authors can't weaken it in the PR under review.
- *   3. REPO    — `.opensoyce.yml` from the repo being scanned.
+ *   2. ORG     — `.ots-gate.yml` (or legacy `.opensoyce.yml`) from a central
+ *                policy repo (e.g. `my-org/ots-policy`). Fetched from its
+ *                default branch so PR authors can't weaken it in the PR under
+ *                review. `.ots-gate.yml` is tried first; `.opensoyce.yml`
+ *                is the backward-compat fallback.
+ *   3. REPO    — `.ots-gate.yml` (or legacy `.opensoyce.yml`) from the repo
+ *                being scanned.
  *
  * Merge rules (security-conservative):
  *   block = org.block ∪ repo.block          (either party can block)
@@ -21,7 +24,7 @@
  *
  * All exported functions are failure-isolated: network errors, 404s, YAML
  * parse failures, and missing keys ALL return the safe DEFAULT_POLICY. The
- * Guard Check Run must never fail because a policy file is unreachable.
+ * Gate Check Run must never fail because a policy file is unreachable.
  */
 
 import yaml from 'js-yaml';
@@ -270,33 +273,45 @@ export async function fetchOrgPolicy(githubFetch, orgPolicyRepo) {
     return { source: 'default', policy: { ...DEFAULT_POLICY } };
   }
 
+  // Try .ots-gate.yml first (new canonical name), then fall back to .opensoyce.yml.
+  const candidateFiles = ['.ots-gate.yml', '.opensoyce.yml'];
+
   let raw;
-  try {
-    // No `?ref=` — always reads from the default branch tip.
-    const res = await githubFetch(`/repos/${orgPolicyRepo}/contents/.opensoyce.yml`);
-    if (res.status === 404) {
-      return { source: 'default', policy: { ...DEFAULT_POLICY } };
-    }
-    if (!res.ok) {
-      const text = await res.text().catch(() => '(no body)');
+  for (const filename of candidateFiles) {
+    try {
+      // No `?ref=` — always reads from the default branch tip.
+      const res = await githubFetch(`/repos/${orgPolicyRepo}/contents/${filename}`);
+      if (res.status === 404) {
+        // Try next candidate.
+        continue;
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '(no body)');
+        console.error(
+          `policyInheritance: fetchOrgPolicy non-OK for ${orgPolicyRepo} (${filename}):`,
+          res.status,
+          text.slice(0, 200),
+        );
+        return { source: 'default', policy: { ...DEFAULT_POLICY } };
+      }
+      const json = await res.json();
+      if (!json || typeof json.content !== 'string') {
+        console.error(`policyInheritance: fetchOrgPolicy missing content field (${filename})`);
+        return { source: 'default', policy: { ...DEFAULT_POLICY } };
+      }
+      raw = Buffer.from(json.content, 'base64').toString('utf8');
+      break; // Found a valid file, stop searching.
+    } catch (err) {
       console.error(
-        `policyInheritance: fetchOrgPolicy non-OK for ${orgPolicyRepo}:`,
-        res.status,
-        text.slice(0, 200),
+        `policyInheritance: fetchOrgPolicy threw for ${orgPolicyRepo} (${filename}):`,
+        err && err.message ? err.message : err,
       );
       return { source: 'default', policy: { ...DEFAULT_POLICY } };
     }
-    const json = await res.json();
-    if (!json || typeof json.content !== 'string') {
-      console.error('policyInheritance: fetchOrgPolicy missing content field');
-      return { source: 'default', policy: { ...DEFAULT_POLICY } };
-    }
-    raw = Buffer.from(json.content, 'base64').toString('utf8');
-  } catch (err) {
-    console.error(
-      `policyInheritance: fetchOrgPolicy threw for ${orgPolicyRepo}:`,
-      err && err.message ? err.message : err,
-    );
+  }
+
+  if (!raw) {
+    // Neither .ots-gate.yml nor .opensoyce.yml found — use safe default.
     return { source: 'default', policy: { ...DEFAULT_POLICY } };
   }
 

@@ -46,21 +46,21 @@ export default function HeatCheck() {
           {
             name: "next.js",
             owner: "vercel",
-            score: 9.5,
+            score: 95.0,
             comment: "Commit velocity sustained. App Router is production-proven.",
             url: "/projects/vercel/next.js"
           },
           {
             name: "astro",
             owner: "withastro",
-            score: 9.1,
+            score: 91.0,
             comment: "V5 content collections. Edge-first by default.",
             url: "/projects/withastro/astro"
           },
           {
             name: "biome",
             owner: "biomejs",
-            score: 8.8,
+            score: 88.0,
             comment: "Linting + formatting unified. Fast adoption curve.",
             url: "/projects/biomejs/biome"
           }
@@ -76,21 +76,21 @@ export default function HeatCheck() {
           {
             name: "ui",
             owner: "shadcn-ui",
-            score: 9.0,
+            score: 90.0,
             comment: "CLI-based code gen. Radix primitives. Port to any framework.",
             url: "/projects/shadcn-ui/ui"
           },
           {
             name: "awesome",
             owner: "sindresorhus",
-            score: 7.9,
+            score: 79.0,
             comment: "The atomic unit of community knowledge. Clone the format.",
             url: "/projects/sindresorhus/awesome"
           },
           {
             name: "react",
             owner: "facebook",
-            score: 9.5,
+            score: 95.0,
             comment: "Compiler-era React is shipping. Most forkable renderer architecture.",
             url: "/projects/facebook/react"
           }
@@ -106,7 +106,7 @@ export default function HeatCheck() {
           {
             name: "archon",
             owner: "archon-labs",
-            score: 9.3,
+            score: 93.0,
             badge: "EARLY BREAKOUT",
             comment: "Multi-agent orchestration with swarm intelligence. Moving fast.",
             url: "/projects/archon-labs/archon"
@@ -114,7 +114,7 @@ export default function HeatCheck() {
           {
             name: "aura",
             owner: "aura-ai",
-            score: 8.3,
+            score: 83.0,
             comment: "Observability-first AI harness. Enterprise signal.",
             url: "/projects/aura-ai/aura"
           }
@@ -131,7 +131,7 @@ export default function HeatCheck() {
           {
             name: "moment.js",
             owner: "moment",
-            score: 4.2,
+            score: 42.0,
             badge: "STALE SINCE SEPT 2020",
             comment: "Superseded by date-fns, Day.js, and Temporal.",
             url: "/graveyard"
@@ -139,7 +139,7 @@ export default function HeatCheck() {
           {
             name: "request",
             owner: "request",
-            score: 3.5,
+            score: 35.0,
             badge: "STALE SINCE FEB 2020",
             comment: "Deprecated by its own maintainers.",
             url: "/graveyard"
