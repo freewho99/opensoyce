@@ -3,15 +3,16 @@
  * Automerge Governor & Dependency Firewall Policy Tests
  *
  * Plain Node, PASS/FAIL per case, non-zero exit on any failure.
+ * All assessAutomergePolicy calls are now async (awaited).
  */
 import { classifyDependency, assessAutomergePolicy } from '../src/shared/governor.js';
 
 let passed = 0;
 let failed = 0;
 
-function test(name, fn) {
+async function test(name, fn) {
   try {
-    fn();
+    await fn();
     console.log(`PASS  ${name}`);
     passed += 1;
   } catch (e) {
@@ -28,52 +29,52 @@ function eq(a, b, msg) {
 
 // --- Risk Tiering Classification Tests ---
 
-test('classifyDependency("@types/react") -> Tier 0 (Safe-ish)', () => {
+await test('classifyDependency("@types/react") -> Tier 0 (Safe-ish)', () => {
   const result = classifyDependency('@types/react');
   eq(result.tier, 0, 'React types tier');
   eq(result.name, 'Tier 0: Safe-ish Auto-merge', 'React types name');
 });
 
-test('classifyDependency("eslint-config-airbnb") -> Tier 0 (Safe-ish)', () => {
+await test('classifyDependency("eslint-config-airbnb") -> Tier 0 (Safe-ish)', () => {
   const result = classifyDependency('eslint-config-airbnb');
   eq(result.tier, 0, 'eslint config tier');
 });
 
-test('classifyDependency("lodash") -> Tier 1 (Normal app dependency)', () => {
+await test('classifyDependency("lodash") -> Tier 1 (Normal app dependency)', () => {
   const result = classifyDependency('lodash');
   eq(result.tier, 1, 'lodash tier');
   eq(result.name, 'Tier 1: Normal App Dependency', 'lodash name');
 });
 
-test('classifyDependency("vite") -> Tier 2 (Build-chain)', () => {
+await test('classifyDependency("vite") -> Tier 2 (Build-chain)', () => {
   const result = classifyDependency('vite');
   eq(result.tier, 2, 'vite tier');
   eq(result.name, 'Tier 2: Build-chain', 'vite name');
 });
 
-test('classifyDependency("typescript") -> Tier 2 (Build-chain)', () => {
+await test('classifyDependency("typescript") -> Tier 2 (Build-chain)', () => {
   const result = classifyDependency('typescript');
   eq(result.tier, 2, 'typescript tier');
 });
 
-test('classifyDependency("aws-cli") -> Tier 3 (Privileged dev tool)', () => {
+await test('classifyDependency("aws-cli") -> Tier 3 (Privileged dev tool)', () => {
   const result = classifyDependency('aws-cli');
   eq(result.tier, 3, 'aws-cli tier');
   eq(result.name, 'Tier 3: Privileged Dev Tool', 'aws-cli name');
 });
 
-test('classifyDependency("firebase-tools") -> Tier 3 (Privileged dev tool)', () => {
+await test('classifyDependency("firebase-tools") -> Tier 3 (Privileged dev tool)', () => {
   const result = classifyDependency('firebase-tools');
   eq(result.tier, 3, 'firebase-tools tier');
 });
 
-test('classifyDependency("jsonwebtoken") -> Tier 4 (Never blind auto-merge)', () => {
+await test('classifyDependency("jsonwebtoken") -> Tier 4 (Never blind auto-merge)', () => {
   const result = classifyDependency('jsonwebtoken');
   eq(result.tier, 4, 'jsonwebtoken tier');
   eq(result.name, 'Tier 4: Never Blind Auto-merge', 'jsonwebtoken name');
 });
 
-test('classifyDependency("stripe") -> Tier 4 (Never blind auto-merge)', () => {
+await test('classifyDependency("stripe") -> Tier 4 (Never blind auto-merge)', () => {
   const result = classifyDependency('stripe');
   eq(result.tier, 4, 'stripe tier');
 });
@@ -99,14 +100,14 @@ const baseCleanUpdate = {
   lockfileDiffSize: 'small'
 };
 
-test('assessAutomergePolicy -> ALLOWED (clean patch update on Tier 1)', () => {
-  const result = assessAutomergePolicy(baseCleanUpdate);
+await test('assessAutomergePolicy -> ALLOWED (clean patch update on Tier 1)', async () => {
+  const result = await assessAutomergePolicy(baseCleanUpdate);
   eq(result.decision, 'AUTO-MERGE ALLOWED', 'Clean patch update should be allowed');
   eq(result.reasons.length, 0, 'No reasons should be present');
 });
 
-test('assessAutomergePolicy -> DELAYED (published < 24h ago for Tier 1)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> DELAYED (published < 24h ago for Tier 1)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     publishAgeHours: 12
   });
@@ -114,8 +115,8 @@ test('assessAutomergePolicy -> DELAYED (published < 24h ago for Tier 1)', () => 
   eq(result.reasons[0].severity, 'DELAYED', 'Reason should be DELAYED');
 });
 
-test('assessAutomergePolicy -> BLOCKED (CI failures)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> BLOCKED (CI failures)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     ciPasses: false
   });
@@ -123,8 +124,8 @@ test('assessAutomergePolicy -> BLOCKED (CI failures)', () => {
   eq(result.reasons.some(r => r.message.includes('CI validation')), true, 'Should specify CI failure reason');
 });
 
-test('assessAutomergePolicy -> BLOCKED (known vulnerabilities)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> BLOCKED (known vulnerabilities)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     vulnerabilityAuditPass: false
   });
@@ -132,8 +133,8 @@ test('assessAutomergePolicy -> BLOCKED (known vulnerabilities)', () => {
   eq(result.reasons.some(r => r.message.includes('vulnerabilities')), true, 'Should specify vulnerability reason');
 });
 
-test('assessAutomergePolicy -> BLOCKED (adds lifecycle script)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> BLOCKED (adds lifecycle script)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     addsLifecycleScript: true
   });
@@ -141,8 +142,8 @@ test('assessAutomergePolicy -> BLOCKED (adds lifecycle script)', () => {
   eq(result.reasons.some(r => r.message.includes('lifecycle script')), true, 'Should specify lifecycle script reason');
 });
 
-test('assessAutomergePolicy -> BLOCKED (adds native binary)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> BLOCKED (adds native binary)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     addsNativeBinary: true
   });
@@ -150,8 +151,8 @@ test('assessAutomergePolicy -> BLOCKED (adds native binary)', () => {
   eq(result.reasons.some(r => r.message.includes('native platform binary')), true, 'Should specify binary reason');
 });
 
-test('assessAutomergePolicy -> BLOCKED (registry signature verification fails)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> BLOCKED (registry signature verification fails)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     registrySignatureVerified: false
   });
@@ -159,8 +160,8 @@ test('assessAutomergePolicy -> BLOCKED (registry signature verification fails)',
   eq(result.reasons.some(r => r.message.includes('signature verification failed')), true, 'Should specify signature reason');
 });
 
-test('assessAutomergePolicy -> NEEDS REVIEW (unstable maintainer profile)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> NEEDS REVIEW (unstable maintainer profile)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     maintainerIdentityStable: false
   });
@@ -168,8 +169,8 @@ test('assessAutomergePolicy -> NEEDS REVIEW (unstable maintainer profile)', () =
   eq(result.reasons.some(r => r.message.includes('maintainer profile')), true, 'Should specify maintainer reason');
 });
 
-test('assessAutomergePolicy -> NEEDS REVIEW (high quantity of transitive deps)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> NEEDS REVIEW (high quantity of transitive deps)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     newTransitiveDepsCount: 15
   });
@@ -177,8 +178,8 @@ test('assessAutomergePolicy -> NEEDS REVIEW (high quantity of transitive deps)',
   eq(result.reasons.some(r => r.message.includes('transitive dependencies')), true, 'Should specify transitive reason');
 });
 
-test('assessAutomergePolicy -> NEEDS REVIEW (missing provenance on Tier 2 vite)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> NEEDS REVIEW (missing provenance on Tier 2 vite)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     packageName: 'vite',
     provenancePresent: false
@@ -187,8 +188,8 @@ test('assessAutomergePolicy -> NEEDS REVIEW (missing provenance on Tier 2 vite)'
   eq(result.reasons.some(r => r.message.includes('provenance')), true, 'Should specify provenance reason');
 });
 
-test('assessAutomergePolicy -> BLOCKED (Tier 4 stripe requires manual security owner approval)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> BLOCKED (Tier 4 stripe requires manual security owner approval)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     packageName: 'stripe',
     changeType: 'patch'
@@ -197,13 +198,58 @@ test('assessAutomergePolicy -> BLOCKED (Tier 4 stripe requires manual security o
   eq(result.reasons.some(r => r.message.includes('security owner approval')), true, 'Should specify Tier 4 reason');
 });
 
-test('assessAutomergePolicy -> NEEDS REVIEW (Tier 3 privileged tool requires manual review)', () => {
-  const result = assessAutomergePolicy({
+await test('assessAutomergePolicy -> NEEDS REVIEW (Tier 3 privileged tool requires manual review)', async () => {
+  const result = await assessAutomergePolicy({
     ...baseCleanUpdate,
     packageName: 'firebase-tools'
   });
   eq(result.decision, 'AUTO-MERGE NEEDS REVIEW', 'Tier 3 always requires review');
   eq(result.reasons.some(r => r.message.includes('Privileged developer tool')), true, 'Should specify Tier 3 reason');
+});
+
+// --- Exception injection tests ---
+
+await test('EXCEPTION_ACTIVE returned when exceptionLookup finds active exception', async () => {
+  const mockException = {
+    id: 'OTS-EXC-2026-0001',
+    package: 'stripe',
+    version: '5.0.1',
+    status: 'APPROVED',
+    reviewedBy: 'bob',
+    expiresAt: '2026-06-10T00:00:00Z',
+    gateDecisionRef: { topReason: 'Auth/Crypto requires approval' },
+  };
+  const result = await assessAutomergePolicy(
+    { ...baseCleanUpdate, packageName: 'stripe', toVersion: '5.0.1' },
+    {},
+    { exceptionLookup: async () => mockException },
+  );
+  eq(result.decision, 'EXCEPTION_ACTIVE', 'should be EXCEPTION_ACTIVE');
+  eq(result.exception.id, 'OTS-EXC-2026-0001', 'exception id present');
+  eq(result.reasons.length, 0, 'no block reasons when exception active');
+});
+
+await test('BLOCKED when exceptionLookup returns null (no active exception)', async () => {
+  const result = await assessAutomergePolicy(
+    { ...baseCleanUpdate, packageName: 'stripe', toVersion: '5.0.1' },
+    {},
+    { exceptionLookup: async () => null },
+  );
+  eq(result.decision, 'AUTO-MERGE BLOCKED', 'null lookup falls through to block');
+});
+
+await test('BLOCKED when exceptionLookup throws (fail-closed safety)', async () => {
+  const result = await assessAutomergePolicy(
+    { ...baseCleanUpdate, packageName: 'stripe', toVersion: '5.0.1' },
+    {},
+    { exceptionLookup: async () => { throw new Error('DB unavailable'); } },
+  );
+  eq(result.decision, 'AUTO-MERGE BLOCKED', 'lookup failure must fail closed');
+});
+
+await test('ALLOWED (no opts) still works — backward compat', async () => {
+  const result = await assessAutomergePolicy(baseCleanUpdate);
+  eq(result.decision, 'AUTO-MERGE ALLOWED', 'backward compat: no opts still works');
 });
 
 console.log('');
