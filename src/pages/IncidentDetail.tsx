@@ -1,11 +1,25 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, ShieldAlert, Cpu, Terminal, ArrowRight, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BookOpen, ShieldAlert, Cpu, Terminal, ArrowRight, ShieldCheck, ExternalLink, FlaskConical } from 'lucide-react';
 import { getOtsIncident, getOtsPatternDefinition } from '../data/patterns';
+import { getOtsIncidentReplay } from '../data/otsIncidentReplays';
+
+const confidenceBadgeClass: Record<string, string> = {
+  primary: 'bg-emerald-600 text-white',
+  'authoritative-secondary': 'bg-yellow-500 text-soy-bottle',
+  unverified: 'bg-soy-bottle/40 text-white',
+};
+
+const confidenceBadgeLabel: Record<string, string> = {
+  primary: 'PRIMARY SOURCE',
+  'authoritative-secondary': 'AUTHORITATIVE SECONDARY',
+  unverified: 'UNVERIFIED',
+};
 
 export default function IncidentDetail() {
   const { incidentId } = useParams<{ incidentId: string }>();
   const incident = incidentId ? getOtsIncident(incidentId) : undefined;
+  const hasReplay = incidentId ? !!getOtsIncidentReplay(incidentId) : false;
 
   if (!incident) {
     return (
@@ -44,6 +58,9 @@ export default function IncidentDetail() {
             <span className="bg-soy-red text-white px-3 py-1 border-2 border-soy-bottle">
               INCIDENT LOG
             </span>
+            <span className={`px-3 py-1 border-2 border-soy-bottle ${confidenceBadgeClass[incident.sourceConfidence] || 'bg-white/10'}`}>
+              {confidenceBadgeLabel[incident.sourceConfidence] || incident.sourceConfidence?.toUpperCase()}
+            </span>
             <span className="border-2 border-white/20 px-3 py-1 bg-white/10">
               DATE: {incident.date}
             </span>
@@ -54,9 +71,32 @@ export default function IncidentDetail() {
           <h1 className="text-4xl md:text-5xl font-black uppercase italic tracking-tight mb-4">
             {incident.name}
           </h1>
-          <p className="text-lg font-bold text-white/80 max-w-3xl leading-relaxed uppercase">
+          <p className="text-lg font-bold text-white/80 max-w-3xl leading-relaxed mb-4">
             {incident.description}
           </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+            <span className="font-black uppercase tracking-widest text-white/60">SOURCE</span>
+            <a
+              href={incident.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold underline decoration-2 underline-offset-2 hover:text-yellow-300 break-all inline-flex items-center gap-1"
+            >
+              {incident.sourceUrl}
+              <ExternalLink size={12} />
+            </a>
+          </div>
+          {hasReplay && (
+            <div className="mt-6">
+              <Link
+                to={`/proof/ots-replays#${incident.id}`}
+                className="inline-flex items-center gap-2 bg-soy-red text-white px-6 py-3 border-4 border-soy-bottle font-black uppercase italic tracking-widest text-sm shadow-[4px_4px_0px_#302C26] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
+              >
+                <FlaskConical size={16} /> REPLAY WITH OTS
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Case Study Body */}

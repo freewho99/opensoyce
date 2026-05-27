@@ -40,11 +40,16 @@ export interface OtsPatternPack {
   readonly patternIds: readonly string[];
 }
 
+export type OtsSourceConfidence = 'primary' | 'authoritative-secondary' | 'unverified';
+
 export interface OtsIncidentCaseStudy {
   readonly id: string;
   readonly name: string;
   readonly date: string;
   readonly target: string;
+  readonly sourceUrl: string;
+  readonly corroboratingSourceUrl?: string;
+  readonly sourceConfidence: OtsSourceConfidence;
   readonly description: string;
   readonly context: string;
   readonly whatHappened: string;

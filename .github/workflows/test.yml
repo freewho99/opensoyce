@@ -43,6 +43,8 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        # npm test = lint (tsc --noEmit) + governor-gate (10 cases) +
-        # ots-patterns (5 cases). All in-process, no network.
-        run: npm test
+        # npm run test:ci = lint (tsc --noEmit) + governor-gate +
+        # ots-patterns + ots-replays. All in-process, no network.
+        # test:ci is the explicit CI gate; `npm test` stays lighter for
+        # local use (skips ots-replays).
+        run: npm run test:ci

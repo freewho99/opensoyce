@@ -60,23 +60,56 @@ test.describe('OTS Pattern Library & Case Studies E2E Tests', () => {
   });
 
   test('3. Navigates to Incident Case Study page and verifies breakdown', async ({ page }) => {
-    await page.goto('http://localhost:3000/incidents/axios-npm-compromise');
-    
+    // Uses event-stream / flatmap-stream — a primary-source incident
+    // that triggers Hidden Dependency Injection (the pattern this test
+    // asserts is linked from the breakdown). Replaces the retired
+    // axios-npm-compromise fixture.
+    await page.goto('http://localhost:3000/incidents/event-stream-flatmap-stream');
+
     // Verify title
     const heading = page.locator('h1');
-    await expect(heading).toContainText('Axios npm Compromise Case Study');
-    
+    await expect(heading).toContainText('event-stream / flatmap-stream Hidden Dependency Injection');
+
     // Verify technical breakdown is present
     const breakdownTitle = page.locator('h2:has-text("TECHNICAL BREAKDOWN")');
     await expect(breakdownTitle).toBeVisible();
-    
+
     // Verify triggered patterns list
     const patternTitle = page.locator('h3:has-text("TRIGGERED OTS RISK PATTERNS")');
     await expect(patternTitle).toBeVisible();
-    
+
     // Check link to pattern detail
     const patternLink = page.locator('a:has-text("Hidden Dependency Injection")').first();
     await expect(patternLink).toBeVisible();
+
+    // Verify the source citation block is present
+    const sourceLink = page.locator('a[href*="blog.npmjs.org"]').first();
+    await expect(sourceLink).toBeVisible();
+
+    // Verify "REPLAY WITH OTS" CTA appears for incidents with a replay
+    const replayCta = page.locator('a:has-text("REPLAY WITH OTS")');
+    await expect(replayCta).toBeVisible();
+  });
+
+  test('5. /proof/ots-replays renders live detector output for cited incidents', async ({ page }) => {
+    await page.goto('http://localhost:3000/proof/ots-replays');
+
+    // Header indicates the proof layer
+    const heading = page.locator('h1');
+    await expect(heading).toContainText('OTS Incident Replay Lab');
+
+    // The 4 live-detector incidents are present
+    await expect(page.locator('text=xz-utils Backdoor')).toBeVisible();
+    await expect(page.locator('text=ua-parser-js npm Compromise')).toBeVisible();
+    await expect(page.locator('text=event-stream / flatmap-stream')).toBeVisible();
+    await expect(page.locator('text=Ledger Connect Kit')).toBeVisible();
+
+    // The 2 catalog-mapping incidents are present
+    await expect(page.locator('text=tj-actions/changed-files Compromise')).toBeVisible();
+    await expect(page.locator('text=polyfill.io CDN Supply-Chain Compromise')).toBeVisible();
+
+    // Detector Coverage Roadmap is shown
+    await expect(page.locator('text=Detector Coverage Roadmap')).toBeVisible();
   });
 
   test('4. Navigates to Project Detail and checks risk patterns panel', async ({ page }) => {
