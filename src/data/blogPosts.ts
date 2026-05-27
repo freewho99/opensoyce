@@ -1,4 +1,4 @@
-hexport type BlogPost = {
+export type BlogPost = {
   heroImage?: string;
   slug: string;
   title: string;
@@ -17,7 +17,6 @@ hexport type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
-    {
             slug: 'ots-gate-trust-infrastructure-for-open-source',
             primaryProductAction: 'scanner',
             title: "The Gate Is Now Open.",
@@ -176,6 +175,7 @@ export const blogPosts: BlogPost[] = [
 
                                                                   *The software supply chain does not fail dramatically. It fails quietly — one trusted dependency at a time. OTS Gate is how that stops.*`,
   },
+  {
         slug: 'soc2-compliance-open-source-exception-logs',
         primaryProductAction: 'guard',
         title: "Your Auditor Is About to Ask You a Question You Can't Answer.",
