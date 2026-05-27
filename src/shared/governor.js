@@ -1,8 +1,11 @@
 /**
- * Automerge Governor & Dependency Firewall Engine
- * 
- * Implements a risk-tiered policy governor for package auto-updates.
+ * OTS Gate — Dependency Firewall Engine
+ *
+ * Implements a risk-tiered policy gate for package auto-updates.
  * Dictates whether a dependency update PR can be safely merged.
+ *
+ * Part of the Open-source Trust Stack (OTS).
+ * Legacy name: Automerge Governor (preserved as backward-compat aliases below).
  */
 
 /**
@@ -82,11 +85,44 @@ export function classifyDependency(name) {
  * @param {boolean} updatePRData.ciPasses
  * @param {'small' | 'large'} updatePRData.lockfileDiffSize
  * @param {any} [repoData]
- * @returns {{ decision: string, tier: number, tierName: string, reasons: Array<{ severity: string, message: string }>, recommendedAction: string }}
+ * @param {{
+ *   exceptionLookup?: (packageName: string, version: string) => Promise<any|null>,
+ * }} [opts]  Injectable options. `exceptionLookup` is called before any block
+ *   decision — if it returns an active exception, the gate returns
+ *   EXCEPTION_ACTIVE without evaluating tier rules. This keeps the module
+ *   pure: no filesystem I/O lives here.
+ * @returns {{ decision: string, tier: number, tierName: string, reasons: Array<{ severity: string, message: string }>, recommendedAction: string, exception?: any }}
  */
-export function assessAutomergePolicy(updatePRData, repoData = {}) {
+export async function assessAutomergePolicy(updatePRData, repoData = {}, opts = {}) {
   const { tier, name: tierName } = classifyDependency(updatePRData.packageName);
   const reasons = [];
+
+  // --- Exception check (before any block logic) ----------------------------
+  // If an active exception exists for this exact package@version, short-circuit
+  // and return EXCEPTION_ACTIVE. The exceptionLookup is injected by the caller
+  // (CLI, CI runner) so this function stays pure and synchronous-compatible.
+  if (typeof opts.exceptionLookup === 'function') {
+    let activeException = null;
+    try {
+      activeException = await opts.exceptionLookup(updatePRData.packageName, updatePRData.toVersion);
+    } catch (e) {
+      // Lookup failure must NEVER unblock a dependency — fail closed.
+      // The gate proceeds as if no exception exists.
+      console.warn(`OTS Gate: exceptionLookup threw — proceeding without exception: ${e.message}`);
+    }
+    if (activeException) {
+      const topReason = activeException.gateDecisionRef?.topReason
+        || 'Exception approved for this version';
+      return {
+        decision: 'EXCEPTION_ACTIVE',
+        tier,
+        tierName,
+        reasons: [],
+        recommendedAction: `Exception ${activeException.id} active until ${activeException.expiresAt?.slice(0, 10) || 'unknown'}. Approved by @${activeException.reviewedBy || 'unknown'}.`,
+        exception: activeException,
+      };
+    }
+  }
 
   // 1. Critical Execution & Verification Gates (Always Block)
   if (updatePRData.ciPasses === false) {
@@ -213,3 +249,26 @@ export function assessAutomergePolicy(updatePRData, repoData = {}) {
     recommendedAction
   };
 }
+
+// ---------------------------------------------------------------------------
+// OTS-branded aliases (new code should use these)
+// ---------------------------------------------------------------------------
+
+/**
+ * OTS Gate — classify a dependency into a Risk Tier (0-4).
+ * Alias of `classifyDependency` for code following the OTS naming convention.
+ *
+ * @param {string} name - Package name
+ * @returns {{ tier: number, name: string }}
+ */
+export const classifyOtsDependency = classifyDependency;
+
+/**
+ * OTS Gate — assess a dependency update PR against the gate policy.
+ * Alias of `assessAutomergePolicy` for code following the OTS naming convention.
+ *
+ * @param {object} updatePRData
+ * @param {any} [repoData]
+ * @returns {{ decision: string, tier: number, tierName: string, reasons: Array<{ severity: string, message: string }>, recommendedAction: string }}
+ */
+export const assessOtsGatePolicy = assessAutomergePolicy;
