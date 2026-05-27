@@ -826,7 +826,11 @@ async function handleWhoami(req, res, session) {
   // first-add to a fresh org is impossible. `|| []` defaults to empty for old
   // session tokens that predate Sprint+6 (verifySessionToken already coerces
   // missing payload.orgs to []; this fallback is belt-and-suspenders).
-  return sendJson(res, 200, { login: session.login, orgs: session.orgs || [] });
+  return sendJson(res, 200, {
+    login: session.login,
+    orgs: session.orgs || [],
+    isReviewer: isReviewer(session.login)
+  });
 }
 
 async function handleLogout(req, res) {
@@ -1238,6 +1242,116 @@ async function handleSubmitAppeal(req, res, session) {
     verifiedRole: perm,
     message: `Appeal filed for ${packageName}. A reviewer will examine your verified maintainership claim before any score change is applied.`,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Appeals reviewer authorization and operations (Sprint+6 Appeals Review)
+// ---------------------------------------------------------------------------
+
+function isReviewer(login) {
+  if (!login || typeof login !== 'string') return false;
+  const reviewers = new Set(
+    (process.env.OPENSOYCE_REVIEWERS || 'freewho99')
+      .split(',')
+      .map(u => u.trim().toLowerCase())
+  );
+  return reviewers.has(login.toLowerCase());
+}
+
+async function handleAppealsList(req, res, session) {
+  if (!isReviewer(session.login)) {
+    return err(res, 403, 'FORBIDDEN', 'You are not authorized to review appeals');
+  }
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions appeals-list: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const { data, error } = await sb
+    .from('appeals')
+    .select('id, package_name, ecosystem, source_owner, source_repo, submitted_by, submitted_by_role, rationale, status, reviewed_by, reviewed_at, review_notes, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('exceptions appeals-list query failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+
+  return sendJson(res, 200, { appeals: data || [] });
+}
+
+async function handleAppealReview(req, res, session) {
+  if (!isReviewer(session.login)) {
+    return err(res, 403, 'FORBIDDEN', 'You are not authorized to review appeals');
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  const status = typeof body.status === 'string' ? body.status.trim() : '';
+  const reviewNotes = typeof body.review_notes === 'string' ? body.review_notes.trim() : '';
+
+  if (!id || !status) {
+    return err(res, 400, 'BAD_REQUEST', 'id and status are required');
+  }
+  if (status !== 'approved' && status !== 'rejected') {
+    return err(res, 400, 'BAD_REQUEST', 'status must be approved or rejected');
+  }
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions appeal-review: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  // Fetch the appeal row to verify it is pending
+  const { data: appeal, error: getErr } = await sb
+    .from('appeals')
+    .select('id, status')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (getErr) {
+    console.error('exceptions appeal-review: select failed', getErr.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+  if (!appeal) {
+    return err(res, 404, 'NOT_FOUND', 'appeal not found');
+  }
+  if (appeal.status !== 'pending') {
+    return err(res, 400, 'BAD_REQUEST', `appeal is already in status: ${appeal.status}`);
+  }
+
+  const nowStr = new Date().toISOString();
+  const { data: updated, error: upErr } = await sb
+    .from('appeals')
+    .update({
+      status,
+      reviewed_by: session.login,
+      reviewed_at: nowStr,
+      review_notes: reviewNotes || null,
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (upErr) {
+    console.error('exceptions appeal-review: update failed', upErr.message);
+    return err(res, 500, 'DB_ERROR', 'database update failed');
+  }
+
+  return sendJson(res, 200, { ok: true, appeal: updated });
 }
 
 // ---------------------------------------------------------------------------
@@ -2196,6 +2310,8 @@ export default async function handler(req, res) {
 
     if (method === 'POST' && action === 'compliance-token-mint') return await handleComplianceTokenMint(req, res, session);
     if (method === 'POST' && action === 'submit-appeal') return await handleSubmitAppeal(req, res, session);
+    if (method === 'GET' && action === 'appeals-list') return await handleAppealsList(req, res, session);
+    if (method === 'POST' && action === 'appeal-review') return await handleAppealReview(req, res, session);
     if (method === 'GET' && action === 'compliance-report') return await handleComplianceReport(req, res, session);
     if (method === 'GET' && action === 'whoami') return await handleWhoami(req, res, session);
     if (method === 'GET' && action === 'my-repos') return await handleMyRepos(req, res, session);

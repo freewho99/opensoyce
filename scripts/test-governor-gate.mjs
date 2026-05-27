@@ -419,6 +419,154 @@ test('Appeals: file pending review when caller is verified maintainer', async ()
   __setSupabaseClientForTests(null);
 });
 
+test('Appeals Review: list returns 403 when caller is not a reviewer', async () => {
+  const req = new MockReq(
+    'GET',
+    { cookie: mintSessionCookie('maintainer-bob') },
+    { action: 'appeals-list' }
+  );
+  const res = new MockRes();
+
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 403, 'non-reviewer gets 403 on list');
+  const body = JSON.parse(res.body);
+  eq(body.error, 'FORBIDDEN', 'error code');
+});
+
+test('Appeals Review: list returns all appeals when caller is a reviewer', async () => {
+  const mockAppeals = [
+    { id: '1', package_name: 'moment', ecosystem: 'npm', status: 'pending' },
+    { id: '2', package_name: 'react', ecosystem: 'npm', status: 'approved' },
+  ];
+
+  const mockSb = {
+    from: (table) => {
+      eq(table, 'appeals', 'appeals table accessed');
+      return {
+        select: (cols) => {
+          ok(cols.includes('package_name'), 'select checks columns');
+          return {
+            order: (col, opts) => {
+              eq(col, 'created_at', 'ordered by created_at');
+              eq(opts.ascending, false, 'descending');
+              return { data: mockAppeals, error: null };
+            }
+          };
+        }
+      };
+    }
+  };
+  __setSupabaseClientForTests(mockSb);
+
+  const req = new MockReq(
+    'GET',
+    { cookie: mintSessionCookie('freewho99') },
+    { action: 'appeals-list' }
+  );
+  const res = new MockRes();
+
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 200, 'reviewer gets 200 on list');
+  const body = JSON.parse(res.body);
+  eq(body.appeals.length, 2, 'returns 2 appeals');
+  eq(body.appeals[0].package_name, 'moment', 'first is moment');
+
+  __setSupabaseClientForTests(null);
+});
+
+test('Appeals Review: review returns 403 when caller is not a reviewer', async () => {
+  const req = new MockReq(
+    'POST',
+    { cookie: mintSessionCookie('maintainer-bob') },
+    { action: 'appeal-review' },
+    { id: '1', status: 'approved', review_notes: 'Looks good' }
+  );
+  const res = new MockRes();
+
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 403, 'non-reviewer gets 403 on review');
+  const body = JSON.parse(res.body);
+  eq(body.error, 'FORBIDDEN', 'error');
+});
+
+test('Appeals Review: review updates status and notes when caller is a reviewer', async () => {
+  const appealId = '777de210-9b48-4cb2-87ff-4fa50645c777';
+  
+  const mockSelect = {
+    eq: (col, val) => ({
+      maybeSingle: () => {
+        eq(col, 'id', 'id lookup');
+        eq(val, appealId, 'appealId value');
+        return {
+          data: { id: appealId, status: 'pending', package_name: 'moment', ecosystem: 'npm' },
+          error: null
+        };
+      }
+    })
+  };
+
+  let updatedRow = null;
+  const mockUpdate = (payload) => {
+    updatedRow = payload;
+    return {
+      eq: (col, val) => {
+        eq(col, 'id', 'update filter col');
+        eq(val, appealId, 'update filter val');
+        return {
+          select: () => ({
+            single: () => ({
+              data: { id: appealId, ...payload },
+              error: null
+            })
+          })
+        };
+      }
+    };
+  };
+
+  const mockSb = {
+    from: (table) => {
+      eq(table, 'appeals', 'appeals table accessed');
+      return {
+        select: () => mockSelect,
+        update: mockUpdate
+      };
+    }
+  };
+  __setSupabaseClientForTests(mockSb);
+
+  const req = new MockReq(
+    'POST',
+    { cookie: mintSessionCookie('freewho99') },
+    { action: 'appeal-review' },
+    { id: appealId, status: 'approved', review_notes: 'Appealing reasons look solid.' }
+  );
+  const res = new MockRes();
+
+  req.resume();
+  await exceptionsHandler(req, res);
+
+  eq(res.statusCode, 200, 'review status ok');
+  const body = JSON.parse(res.body);
+  eq(body.ok, true, 'ok');
+  eq(body.appeal.status, 'approved', 'approved');
+  eq(body.appeal.reviewed_by, 'freewho99', 'reviewed_by');
+  eq(body.appeal.review_notes, 'Appealing reasons look solid.', 'notes stored');
+
+  ok(updatedRow !== null, 'update was called');
+  eq(updatedRow.status, 'approved', 'updated status');
+  eq(updatedRow.reviewed_by, 'freewho99', 'updated reviewer');
+  eq(updatedRow.review_notes, 'Appealing reasons look solid.', 'updated notes');
+
+  __setSupabaseClientForTests(null);
+});
+
 await runAll();
 console.log(`\nOTS Governor & Gate Integration tests: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
