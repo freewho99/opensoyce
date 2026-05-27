@@ -699,7 +699,11 @@ export function detectOtsPatternsForRow(row, context = {}) {
 
   // 9. CI Secret Exposure Path
   const isCiWithSecrets = context.ci === true && context.hasSecrets === true;
-  if ((isCiWithSecrets && row.hasInstallScript === true) || (isCiWithSecrets && mockAxios)) {
+  if (
+    (isCiWithSecrets && row.hasInstallScript === true) ||
+    (isCiWithSecrets && mockAxios) ||
+    (isCiWithSecrets && row.isWorkflowAction === true && row.hasSecretsAccess === true)
+  ) {
     patterns.push({
       patternId: 'ci-secret-exposure-path',
       severity: 'critical',
@@ -739,6 +743,64 @@ export function detectOtsPatternsForRow(row, context = {}) {
       evidence: [
         { label: 'Endpoint', value: row.unknownRemoteEndpoint.host },
         { label: 'Context', value: row.unknownRemoteEndpoint.reason || 'Runtime contact with non-pre-trusted origin' }
+      ]
+    });
+  }
+
+  // 12. Mutable CI Tag Drift
+  if (row.isWorkflowAction === true && row.tagDrift === true) {
+    patterns.push({
+      patternId: 'mutable-ci-tag-drift',
+      severity: 'medium',
+      policyImpact: 'warn',
+      confidence: 0.85,
+      evidence: [
+        { label: 'Workflow Action', value: row.package || 'unnamed-action' },
+        { label: 'Version Ref', value: row.version || 'mutable tag' },
+        { label: 'Drift Signal', value: 'Tag points to mutable release tag, not immutable SHA' }
+      ]
+    });
+  }
+
+  // 13. Unpinned Action Reference
+  if (row.isWorkflowAction === true && row.unpinnedReference === true) {
+    patterns.push({
+      patternId: 'unpinned-action-reference',
+      severity: 'low',
+      policyImpact: 'warn',
+      confidence: 0.8,
+      evidence: [
+        { label: 'Workflow Action', value: row.package || 'unnamed-action' },
+        { label: 'Reference Hook', value: 'Action references branch head or unpinned version' }
+      ]
+    });
+  }
+
+  // 14. Third-Party Action with Secrets Access
+  if (row.isWorkflowAction === true && row.hasSecretsAccess === true && row.publisherVerified === false) {
+    patterns.push({
+      patternId: 'third-party-action-with-secrets',
+      severity: 'medium',
+      policyImpact: 'warn',
+      confidence: 0.82,
+      evidence: [
+        { label: 'Workflow Action', value: row.package || 'unnamed-action' },
+        { label: 'Access Level', value: 'Direct access to workflow secrets' },
+        { label: 'Publisher Status', value: 'Unverified GitHub Action publisher' }
+      ]
+    });
+  }
+
+  // 15. Publisher Identity Drift
+  if (row.publisherIdentityDrift && row.publisherIdentityDrift.drifted === true) {
+    patterns.push({
+      patternId: 'publisher-identity-drift',
+      severity: 'medium',
+      policyImpact: 'warn',
+      confidence: 0.8,
+      evidence: [
+        { label: 'Publisher Domain', value: row.package || 'unnamed-publisher' },
+        { label: 'Identity Status', value: row.publisherIdentityDrift.reason || 'Domain owner change or publisher namespace drift' }
       ]
     });
   }

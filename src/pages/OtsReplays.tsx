@@ -361,24 +361,24 @@ export default function OtsReplays() {
         </React.Fragment>
       ))}
 
-      {/* Detector Coverage Roadmap */}
+      {/* Detector Coverage Architecture */}
       <section className="border-4 border-soy-bottle bg-white p-6 shadow-[6px_6px_0px_#302C26] mb-8">
         <h2 className="text-sm font-black uppercase tracking-widest text-soy-bottle mb-3 flex items-center gap-2">
-          <AlertTriangle size={16} className="text-yellow-600" /> Detector Coverage Roadmap
+          <ShieldCheck size={16} className="text-emerald-600" /> Detector v2 Signal Support
         </h2>
         <p className="text-xs font-bold text-soy-bottle/80 leading-relaxed mb-3">
-          OTS Detector v1 is package-row shaped. The two catalog-mapping replays on this page document signal shapes the detector does not yet cover natively:
+          OTS Detector v2 extends static package-row scanning to natively support non-standard repository and deployment signals:
         </p>
         <ul className="space-y-2 text-xs font-bold text-soy-bottle/80 leading-relaxed">
           <li>
-            <span className="text-soy-red font-black">▪</span> <strong>Workflow rows</strong> (tj-actions shape) — mutable tag drift, third-party action references, secret-bearing CI jobs. Queued for Detector v2.
+            <span className="text-emerald-600 font-black">▪</span> <strong>CI/CD Workflow Steps</strong> (e.g. tj-actions) — Scans for unpinned action references, mutable release tag drift, and unauthorized access to environment secrets.
           </li>
           <li>
-            <span className="text-soy-red font-black">▪</span> <strong>CDN / runtime-script rows</strong> (polyfill.io shape) — third-party origin trust, runtime payload inspection. Queued for Detector v2.
+            <span className="text-emerald-600 font-black">▪</span> <strong>CDN & Runtime Scripts</strong> (e.g. polyfill.io) — Scans references to external CDN hosts and tracks publisher identity/ownership drift anomalies.
           </li>
         </ul>
         <p className="text-[10px] font-bold text-soy-bottle/50 uppercase tracking-wider mt-4">
-          We surface this gap on the proof page rather than hide it. Honesty about coverage is part of the trust story.
+          All incident replays on this page are now executed live through the pattern engine.
         </p>
       </section>
     </div>

@@ -121,20 +121,30 @@ export const OTS_INCIDENT_REPLAYS = [
   },
 
   // ------------------------------------------------------------------
-  // Catalog-mapping replays — detector v1 lacks the signal shape;
-  // patterns are matched honestly against the catalog. Detector v2
-  // will add workflow-row + CDN-runtime branches.
+  // Live-detector replays - transitioned in Detector v2
   // ------------------------------------------------------------------
   {
     incidentId: 'tj-actions-changed-files',
-    replayMode: 'catalog-mapping',
-    detectorGap: 'OTS Detector v1 is package-row shaped. GitHub Actions workflow rows (mutable tags, third-party action references, CI secret context) are queued for Detector v2.',
+    replayMode: 'live-detector',
     observedFacts: [
       'GitHub Advisory GHSA-mrrh-fwg8-r2c3: attackers retroactively rewrote multiple version tags of tj-actions/changed-files to point to a single malicious commit.',
       'Injected script extracted secrets from Runner Worker process memory and printed them into GitHub Actions logs.',
       'Active window: 2025-03-14 to 2025-03-15.',
       'Over 23,000 repositories impacted; public-log repos faced higher exposure because leaked secrets became publicly readable.'
     ],
+    fixtureRow: {
+      package: 'tj-actions/changed-files',
+      version: 'v35',
+      isWorkflowAction: true,
+      tagDrift: true,
+      unpinnedReference: true,
+      hasSecretsAccess: true,
+      publisherVerified: false
+    },
+    fixtureContext: {
+      ci: true,
+      hasSecrets: true
+    },
     expectedPatternIds: [
       'mutable-ci-tag-drift',
       'ci-secret-exposure-path',
@@ -144,14 +154,26 @@ export const OTS_INCIDENT_REPLAYS = [
   },
   {
     incidentId: 'polyfill-io-supply-chain',
-    replayMode: 'catalog-mapping',
-    detectorGap: 'OTS Detector v1 does not yet inspect runtime-loaded CDN scripts referenced from HTML. CDN/runtime-trust branches are queued for Detector v2.',
+    replayMode: 'live-detector',
     observedFacts: [
       'Sansec investigation: after domain ownership change, polyfill.io began injecting malicious JavaScript that redirected mobile users.',
       'Payload used fake Google-Analytics-looking domains and conditionally evaded admin/analytics contexts.',
       'Cloudflare independently warned polyfill.io could no longer be trusted and shipped automatic mirror replacement.',
       'Embedded directly into HTML of 100,000+ sites via <script src="..."> tags.'
     ],
+    fixtureRow: {
+      package: 'polyfill.io',
+      isHtmlScriptTag: true,
+      unknownRemoteEndpoint: {
+        host: 'cdn.polyfill.io',
+        reason: 'HTML script tag references polyfill.io CDN domain'
+      },
+      publisherIdentityDrift: {
+        drifted: true,
+        reason: 'Domain registration and ownership changed hands'
+      }
+    },
+    fixtureContext: {},
     expectedPatternIds: [
       'unknown-remote-endpoint',
       'publisher-identity-drift'

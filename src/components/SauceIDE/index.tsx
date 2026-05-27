@@ -157,23 +157,58 @@ export default function SauceIDE({ result, viewMode, setViewMode, onSearchNew }:
     hasSast: simSast,
   });
 
-  const automergeResult = assessAutomergePolicy({
-    packageName: depPackageName,
-    fromVersion: depChangeType === 'major' ? '3.0.0' : depChangeType === 'minor' ? '4.17.0' : '4.17.21',
-    toVersion: depChangeType === 'major' ? '4.0.0' : depChangeType === 'minor' ? '4.18.0' : '4.17.22',
-    changeType: depChangeType,
-    addsLifecycleScript: depAddsLifecycleScript,
-    addsNativeBinary: depAddsNativeBinary,
-    newTransitiveDepsCount: depNewTransitiveDepsCount,
-    publishAgeHours: depPublishAgeHours,
-    provenancePresent: depProvenancePresent,
-    registrySignatureVerified: depRegistrySignatureVerified,
-    maintainerIdentityStable: depMaintainerIdentityStable,
-    sastUpstream: depSastUpstream,
-    vulnerabilityAuditPass: depVulnerabilityAuditPass,
-    ciPasses: depCiPasses,
-    lockfileDiffSize: depLockfileDiffSize
-  }, result);
+  const [automergeResult, setAutomergeResult] = useState<any>({
+    decision: 'AUTO-MERGE ALLOWED',
+    tier: 1,
+    tierName: 'Tier 1: Normal App Dependency',
+    reasons: [],
+    recommendedAction: 'Merge auto-allowed after CI checks pass.'
+  });
+
+  React.useEffect(() => {
+    let active = true;
+    (assessAutomergePolicy({
+      packageName: depPackageName,
+      fromVersion: depChangeType === 'major' ? '3.0.0' : depChangeType === 'minor' ? '4.17.0' : '4.17.21',
+      toVersion: depChangeType === 'major' ? '4.0.0' : depChangeType === 'minor' ? '4.18.0' : '4.17.22',
+      changeType: depChangeType,
+      addsLifecycleScript: depAddsLifecycleScript,
+      addsNativeBinary: depAddsNativeBinary,
+      newTransitiveDepsCount: depNewTransitiveDepsCount,
+      publishAgeHours: depPublishAgeHours,
+      provenancePresent: depProvenancePresent,
+      registrySignatureVerified: depRegistrySignatureVerified,
+      maintainerIdentityStable: depMaintainerIdentityStable,
+      sastUpstream: depSastUpstream,
+      vulnerabilityAuditPass: depVulnerabilityAuditPass,
+      ciPasses: depCiPasses,
+      lockfileDiffSize: depLockfileDiffSize
+    }, result) as any).then((res: any) => {
+      if (active) {
+        setAutomergeResult(res);
+      }
+    }).catch((err: any) => {
+      console.error('Failed to assess automerge policy', err);
+    });
+    return () => {
+      active = false;
+    };
+  }, [
+    depPackageName,
+    depChangeType,
+    depAddsLifecycleScript,
+    depAddsNativeBinary,
+    depNewTransitiveDepsCount,
+    depPublishAgeHours,
+    depProvenancePresent,
+    depRegistrySignatureVerified,
+    depMaintainerIdentityStable,
+    depSastUpstream,
+    depVulnerabilityAuditPass,
+    depCiPasses,
+    depLockfileDiffSize,
+    result
+  ]);
 
   const meta = {
     totalStars: result.stars,

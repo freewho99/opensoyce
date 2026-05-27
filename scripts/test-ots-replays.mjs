@@ -115,11 +115,11 @@ test('every replay mode is recognized', () => {
   }
 });
 
-test('replay coverage: at least 4 live-detector + 2 catalog-mapping in v0', () => {
+test('replay coverage: all 6 are live-detector in Detector v2', () => {
   const live = OTS_INCIDENT_REPLAYS.filter((r) => r.replayMode === 'live-detector');
   const map = OTS_INCIDENT_REPLAYS.filter((r) => r.replayMode === 'catalog-mapping');
-  ok(live.length >= 4, `v0 needs at least 4 live-detector replays, found ${live.length}`);
-  ok(map.length >= 2, `v0 needs at least 2 catalog-mapping replays, found ${map.length}`);
+  ok(live.length === 6, `Detector v2 expects all 6 replays to be live-detector, found ${live.length}`);
+  ok(map.length === 0, `Detector v2 expects 0 catalog-mapping replays, found ${map.length}`);
 });
 
 if (failed > 0) {

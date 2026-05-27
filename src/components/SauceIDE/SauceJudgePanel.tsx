@@ -791,7 +791,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
             </div>
             <div className="text-right">
               <span className="bg-[#1c120c] text-amber-500 border border-amber-500/30 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-sm">
-                {automergeResult.tierName}
+                {automergeResult?.tierName || ''}
               </span>
             </div>
           </div>
@@ -799,7 +799,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
           {/* Automerge Decision Badge */}
           <div className="mb-3">
             {(() => {
-              const decision = automergeResult.decision;
+              const decision = automergeResult?.decision || 'CALCULATING';
               let badgeColorClass = "";
               if (decision.includes("ALLOWED")) {
                 badgeColorClass = "text-emerald-500 border-emerald-500 bg-emerald-500/10";
@@ -807,6 +807,8 @@ The Automerge Governor checks dependency updates against live compliance rules. 
                 badgeColorClass = "text-amber-500 border-amber-500 bg-amber-500/10";
               } else if (decision.includes("NEEDS REVIEW")) {
                 badgeColorClass = "text-sky-500 border-sky-500 bg-sky-500/10";
+              } else if (decision === 'CALCULATING') {
+                badgeColorClass = "text-amber-500/60 border-amber-500/30 bg-amber-500/5 animate-pulse";
               } else {
                 badgeColorClass = "text-rose-500 border-rose-500 bg-rose-500/10";
               }
@@ -894,7 +896,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
 
           {/* Action / Explanation */}
           <div className="border-t border-[#3a3028] pt-2 mt-2">
-            {automergeResult.reasons && automergeResult.reasons.length > 0 && (
+            {automergeResult?.reasons && automergeResult.reasons.length > 0 && (
               <div className="mb-2 space-y-1">
                 <span className="text-[8px] font-black uppercase text-soy-red tracking-wider">Gate Failures ({automergeResult.reasons.length})</span>
                 <div className="space-y-1">
@@ -913,7 +915,7 @@ The Automerge Governor checks dependency updates against live compliance rules. 
             <div className="bg-[#100d0b] p-2 border border-[#3a3028] rounded-sm">
               <div className="text-[8px] font-black text-soy-label/40 uppercase tracking-widest">Recommended Action</div>
               <p className="text-[10px] text-soy-label font-bold leading-normal mt-0.5">
-                {automergeResult.recommendedAction}
+                {automergeResult?.recommendedAction || ''}
               </p>
             </div>
             {!simulatorActive && (
