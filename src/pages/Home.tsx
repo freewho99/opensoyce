@@ -38,9 +38,9 @@ const CATEGORY_USE_CASES: Record<string, { use: string; fork: string; grow: stri
 };
 
 const STALE_PROJECTS = [
-  { repo: 'moment', owner: 'moment', stars: '47K', stale: '18MO', score: 4.2, note: "STILL USED IN LEGACY CODE. NOT RECOMMENDED FOR NEW PROJECTS." },
-  { repo: 'left-pad', owner: 'leftpad', stars: '8K', stale: '36MO', score: 1.1, note: "THE INCIDENT THAT BROKE THE INTERNET. NOW A MUSEUM PIECE." },
-  { repo: 'request', owner: 'request', stars: '26K', stale: '24MO', score: 3.5, note: "DEPRECATED BY ITS OWN MAINTAINERS. MILLIONS STILL DEPEND ON IT." },
+  { repo: 'moment', owner: 'moment', stars: '47K', stale: '18MO', score: 42, note: "STILL USED IN LEGACY CODE. NOT RECOMMENDED FOR NEW PROJECTS." },
+  { repo: 'left-pad', owner: 'leftpad', stars: '8K', stale: '36MO', score: 11, note: "THE INCIDENT THAT BROKE THE INTERNET. NOW A MUSEUM PIECE." },
+  { repo: 'request', owner: 'request', stars: '26K', stale: '24MO', score: 35, note: "DEPRECATED BY ITS OWN MAINTAINERS. MILLIONS STILL DEPEND ON IT." },
 ];
 
 const REMIX_PROJECTS = [

@@ -38,14 +38,25 @@
  * @property {boolean}  busFactorHealthy
  * @property {number | null} avgResolutionDays
  *
+ * @typedef {Object} OtsTrustModifiers
+ * @property {number} dataQuality  0.0 – 1.0. Reflects confidence in data completeness:
+ *   1.0 = all signals present
+ *   0.8 = README or issue-triage data missing
+ *   0.0 = repo identity unresolved (IDENTITY_NONE)
+ * @property {number} trustQuality  0.0 – 1.0. Reflects inherent trust signals:
+ *   1.0 = no critical concerns
+ *   0.5 = risky or watchlist tier
+ *   0.0 = critical vulnerabilities present or graveyard
+ *
  * @typedef {Object} ScoreResult
- * @property {number}          total      0.0 - 100.0, sum of all pillars × 10, rounded to 1 decimal
+ * @property {number}          total      0.0 - 100.0, (baseSum × 10 × dataQuality × trustQuality), rounded to 1 decimal
  * @property {ScoreBreakdown}  breakdown
  * @property {ScoreMeta}       meta
+ * @property {OtsTrustModifiers} modifiers  OTS multiplicative modifier values (for UI transparency)
  */
 
 /**
- * Compute the OpenSoyce score for a repository.
+ * Compute the OTS Trust Score for a repository.
  *
  * Inputs are raw GitHub REST payloads. The function is pure: it does no I/O
  * and mutates none of its arguments.
@@ -60,9 +71,15 @@
  * @param {any[] | null} [recentIssues]    GET /repos/{owner}/{repo}/issues?state=all&since=<90d>&per_page=100 (null on fetch failure, [] when quiet). Caller supplies the `since` cutoff — the scorer is pure.
  * @param {any | null} [workflows]         GET /repos/{owner}/{repo}/actions/workflows (may be null)
  * @param {boolean} [hasDependabot]        Whether dependabot/renovate configuration exists
+ * @param {object} [otsMeta]              Optional OTS context for modifier computation
+ * @param {'IDENTITY_NONE' | 'IDENTITY_PARTIAL' | 'IDENTITY_FULL'} [otsMeta.identityStatus]  Resolved dep identity confidence
+ * @param {boolean} [otsMeta.hasReadme]   False when README fetch returned null
+ * @param {boolean} [otsMeta.hasIssueTriage]  False when recent-issues fetch failed
+ * @param {'graveyard' | 'risky' | 'watchlist' | null} [otsMeta.riskTier]  Pre-classified OTS risk tier
+ * @param {boolean} [otsMeta.hasCriticalVulns]  True when critical CVEs are open
  * @returns {ScoreResult}
  */
-export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues, workflows, hasDependabot) {
+export function calculateSoyceScore(repoData, commits, contributors, readme, communityProfile, latestRelease, repoAdvisories, recentIssues, workflows, hasDependabot, otsMeta = {}) {
   const now = new Date();
   const safeCommits = Array.isArray(commits) ? commits : [];
   const safeContributors = Array.isArray(contributors) ? contributors : [];
@@ -203,10 +220,36 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
   else if (last30DaysCommits >= 1) activity = 0.4;
   else activity = 0.0;
 
-  // Multiply by 10 to convert from the 0–10 internal range to the 0–100 public scale.
-  // The sub-score breakdown stays on its raw pillar ranges (0–3, 0–2.5, etc.) so
-  // downstream progress bars (value / max * 100) continue to work without change.
-  const total = round1((maintenance + community + security + documentation + activity) * 10);
+  // OTS multiplicative modifiers
+  // dataQuality: confidence in data completeness
+  //   1.0 = all signals available
+  //   0.8 = README or issue-triage data missing (can't fully assess documentation / maintenance)
+  //   0.0 = repo identity unresolved (IDENTITY_NONE) — score would be meaningless
+  let dataQuality = 1.0;
+  if (otsMeta.identityStatus === 'IDENTITY_NONE') {
+    dataQuality = 0.0;
+  } else {
+    const readmeMissing = otsMeta.hasReadme === false;
+    const triageMissing = otsMeta.hasIssueTriage === false;
+    if (readmeMissing || triageMissing) dataQuality = 0.8;
+  }
+
+  // trustQuality: inherent risk classification
+  //   1.0 = no critical concerns
+  //   0.5 = risky or watchlist tier (real concerns, not yet fatal)
+  //   0.0 = critical vulnerabilities present OR graveyard (trust collapses)
+  let trustQuality = 1.0;
+  if (otsMeta.hasCriticalVulns === true || otsMeta.riskTier === 'graveyard') {
+    trustQuality = 0.0;
+  } else if (otsMeta.riskTier === 'risky' || otsMeta.riskTier === 'watchlist') {
+    trustQuality = 0.5;
+  }
+
+  // Apply the OTS multiplicative formula.
+  // baseSum is the raw pillar sum on the 0-10 internal scale.
+  // Multiply by 10 to get 0-100, then apply modifiers.
+  const baseSum = maintenance + community + security + documentation + activity;
+  const total = round1(baseSum * 10 * dataQuality * trustQuality);
 
   return {
     total,
@@ -237,6 +280,10 @@ export function calculateSoyceScore(repoData, commits, contributors, readme, com
       hasSast,
       busFactorHealthy,
       avgResolutionDays: avgResolutionDays !== null ? round1(avgResolutionDays) : null,
+    },
+    modifiers: {
+      dataQuality,
+      trustQuality,
     },
   };
 }

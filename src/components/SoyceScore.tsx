@@ -147,7 +147,7 @@ export default function SoyceScore({
   const inner = (
     <div className={`inline-flex flex-col items-center leading-none ${className}`}>
       <div className={`inline-flex flex-col items-center leading-none ${s.padding} bg-soy-red text-white`}>
-        <span className={`${s.number} font-black italic tracking-tighter`} aria-label={`Soyce Score ${score.toFixed(1)} of 100`}>
+        <span className={`${s.number} font-black italic tracking-tighter`} aria-label={`OTS Score ${score.toFixed(1)} of 100`}>
           {score.toFixed(1)}
         </span>
         {showVerdict && (
@@ -199,13 +199,13 @@ export default function SoyceScore({
   if (link) {
     let title: string;
     if (showAdvisoryChip && maintainerCapFired) {
-      title = `Soyce Score ${score.toFixed(1)} / 100 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL + single-maintainer drift). Click for methodology.`;
+      title = `OTS Score ${score.toFixed(1)} / 100 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL + single-maintainer drift). Click for methodology.`;
     } else if (showAdvisoryChip) {
-      title = `Soyce Score ${score.toFixed(1)} / 100 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL ${seriousOpen === 1 ? 'advisory' : 'advisories'}). Click for methodology.`;
+      title = `OTS Score ${score.toFixed(1)} / 100 — ${verdict} (capped from ${uncappedVerdict}; ${seriousOpen} open HIGH/CRITICAL ${seriousOpen === 1 ? 'advisory' : 'advisories'}). Click for methodology.`;
     } else if (maintainerCapFired) {
-      title = `Soyce Score ${score.toFixed(1)} / 100 — ${verdict} (capped from ${verdictWithoutMaintainerCap}; single-maintainer drift). Click for methodology.`;
+      title = `OTS Score ${score.toFixed(1)} / 100 — ${verdict} (capped from ${verdictWithoutMaintainerCap}; single-maintainer drift). Click for methodology.`;
     } else {
-      title = `Soyce Score ${score.toFixed(1)} / 100 — ${verdict}. Click for methodology.`;
+      title = `OTS Score ${score.toFixed(1)} / 100 — ${verdict}. Click for methodology.`;
     }
     return (
       <Link to="/methodology" title={title} className="hover:opacity-90 transition-opacity">
@@ -216,3 +216,7 @@ export default function SoyceScore({
 
   return inner;
 }
+
+// OTS-branded alias — new code should use OtsScore.
+// The underlying implementation and all props are identical.
+export { default as OtsScore } from './SoyceScore';

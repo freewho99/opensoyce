@@ -22,11 +22,11 @@ export default function Watchlist() {
   const [hasToken, setHasToken] = useState<boolean | null>(null);
 
   const PRESETS = [
-    { owner: 'facebook', repo: 'react', score: 8.8, desc: 'Web UI Standard' },
-    { owner: 'vercel', repo: 'next.js', score: 8.5, desc: 'Full-stack React Framework' },
-    { owner: 'tiangolo', repo: 'fastapi', score: 9.2, desc: 'Python API Framework' },
-    { owner: 'expressjs', repo: 'express', score: 7.8, desc: 'Node.js Web Server' },
-    { owner: 'lodash', repo: 'lodash', score: 8.0, desc: 'Utility Toolkit' },
+    { owner: 'facebook', repo: 'react', score: 88, desc: 'Web UI Standard' },
+    { owner: 'vercel', repo: 'next.js', score: 85, desc: 'Full-stack React Framework' },
+    { owner: 'tiangolo', repo: 'fastapi', score: 92, desc: 'Python API Framework' },
+    { owner: 'expressjs', repo: 'express', score: 78, desc: 'Node.js Web Server' },
+    { owner: 'lodash', repo: 'lodash', score: 80, desc: 'Utility Toolkit' },
   ];
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export default function Watchlist() {
     category: 'Simulation',
     scoreTrend: 'flat',
     score: {
-      overall: 8.5,
+      overall: 85.0,
       maintenance: 90,
       security: 80,
       community: 85,

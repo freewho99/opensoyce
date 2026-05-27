@@ -8,7 +8,7 @@ const DEAD_REPOS = [
   {
     name: "MOMENT.JS",
     owner: "moment",
-    score: 3.5,
+    score: 35.0,
     staleSince: "SEPT 2020",
     whyItMattered: "The industry standard for date manipulation for nearly a decade.",
     replacedBy: [
@@ -22,7 +22,7 @@ const DEAD_REPOS = [
   {
     name: "REQUEST",
     owner: "request",
-    score: 2.1,
+    score: 21.0,
     staleSince: "FEB 2020",
     whyItMattered: "Made HTTP requests readable before fetch() exist.",
     replacedBy: [
@@ -35,7 +35,7 @@ const DEAD_REPOS = [
   {
     name: "GRUNT",
     owner: "gruntjs",
-    score: 2.8,
+    score: 28.0,
     staleSince: "2018 (DE FACTO)",
     whyItMattered: "The first true JavaScript task runner.",
     replacedBy: [
@@ -48,7 +48,7 @@ const DEAD_REPOS = [
   {
     name: "BOWER",
     owner: "bower",
-    score: 1.5,
+    score: 15.0,
     staleSince: "2017",
     whyItMattered: "Managed frontend dependencies when npm couldn't.",
     replacedBy: [

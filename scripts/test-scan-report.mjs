@@ -33,7 +33,7 @@ function vuln({ pkg = 'p', version = '1.0.0', severity = 'high', fixedIn, repoHe
   out.repoHealthError = repoHealthError;
   return out;
 }
-function health(verdict, score = 7.0) {
+function health(verdict, score = 70) {
   return { soyceScore: score, verdict, signals: { maintenance: 2, security: 1.5, activity: 0.5 } };
 }
 function inv({ packages = [], directCount = 0, totalPackages = 0, duplicateCount = 0 } = {}) {
@@ -79,7 +79,7 @@ test('PATCH_AVAILABLE: decision/dimensions/coverage/action present', () => {
       package: `s${i}`, version: '1.0', direct: true, scope: 'prod',
       primaryReason: 'DIRECT_PROD', secondaryReasons: [],
       resolvedRepo: 'x/y', confidence: 'HIGH',
-      soyceScore: 8, verdict: 'STABLE', signals: { maintenance: 1, security: 1, activity: 1 },
+      soyceScore: 80, verdict: 'STABLE', signals: { maintenance: 1, security: 1, activity: 1 },
       status: 'SCORED',
     })),
     qualifyingTotal: 4,
@@ -101,7 +101,7 @@ test('PATCH_AVAILABLE: decision/dimensions/coverage/action present', () => {
 // 2. REVIEW_REQUIRED + weak-health
 test('REVIEW_REQUIRED weak-health: maintainerTrust cites minimist, action says reassess minimist', () => {
   const vulns = [
-    vuln({ pkg: 'minimist', severity: 'high', fixedIn: '1.2.6', repoHealth: health('RISKY', 3.0) }),
+    vuln({ pkg: 'minimist', severity: 'high', fixedIn: '1.2.6', repoHealth: health('RISKY', 30) }),
   ];
   const inventory = inv({
     packages: [
@@ -194,7 +194,7 @@ test('CLEAN: no Uncertainty header, action is "No known vulnerabilities found"',
       package: 'a', version: '1.0.0', direct: true, scope: 'prod',
       primaryReason: 'DIRECT_PROD', secondaryReasons: [],
       resolvedRepo: 'x/y', confidence: 'HIGH',
-      soyceScore: 9, verdict: 'STABLE', signals: { maintenance: 1, security: 1, activity: 1 },
+      soyceScore: 90, verdict: 'STABLE', signals: { maintenance: 1, security: 1, activity: 1 },
       status: 'SCORED',
     }],
     qualifyingTotal: 1,
@@ -243,7 +243,7 @@ test('Coverage math: 25 SCORED + 5 SCORE_UNAVAILABLE → "scored 25 of 842"', ()
       package: `s${i}`, version: '1.0', direct: true, scope: 'prod',
       primaryReason: 'DIRECT_PROD', secondaryReasons: [],
       resolvedRepo: 'x/y', confidence: 'HIGH',
-      soyceScore: 7, verdict: 'FORKABLE', signals: { maintenance: 1, security: 1, activity: 1 },
+      soyceScore: 70, verdict: 'FORKABLE', signals: { maintenance: 1, security: 1, activity: 1 },
       status: 'SCORED',
     })),
     ...Array.from({ length: 5 }, (_, i) => ({
