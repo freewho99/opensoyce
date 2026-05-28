@@ -15,6 +15,18 @@ import {
   __resetSupabaseClientForTests,
   __setSupabaseClientForTests,
 } from '../api/_supabase.js';
+import {
+  __setLiveFetcherForTests as __setRegistryLiveFetcherForTests,
+  __resetInflightForTests as __resetRegistryInflightForTests,
+} from '../src/shared/packageRegistryQuery.js';
+
+// Phase 2: the compliance-gate handler internally calls resolvePackages,
+// which by default invokes resolveDepIdentity + analyzeRepo (real HTTP).
+// These are unit tests — never let the resolver hit the network. Returning
+// null forces the gate handler to fall through to DEPS_REGISTRY backward
+// compat for demo packages (axios, malicious-pkg, agpl-pkg, etc.) and to
+// the hardcoded fallback for everything else.
+__setRegistryLiveFetcherForTests(async () => null);
 
 let passed = 0;
 let failed = 0;

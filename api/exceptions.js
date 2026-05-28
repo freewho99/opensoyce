@@ -42,8 +42,7 @@ import { signReport } from '../src/shared/reportSigning.js';
 import { resolvePolicy, extractPolicyMetadata, parseYamlPolicy, DEFAULT_POLICY } from '../src/shared/policyInheritance.js';
 import { detectOtsPatternsForRow } from '../src/shared/otsPatterns.js';
 import { npmHighImpact } from 'npm-high-impact';
-import { resolveDepIdentity } from '../src/shared/resolveDepIdentity.js';
-import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
+import { resolvePackages, liveFetchPackage } from '../src/shared/packageRegistryQuery.js';
 
 
 // Vercel serverless configuration: disable automatic body parser so we can read the raw stream for signature verification
@@ -1044,58 +1043,63 @@ async function handleComplianceGate(req, res) {
     console.warn('handleComplianceGate: Supabase not configured, bypassing DB exceptions check.');
   }
 
-  // Fetch package info from the database if available
-  let dbPackages = [];
-  if (sb && dependencies.length > 0) {
-    try {
-      const cleanNames = dependencies
-        .filter(d => typeof d === 'string' && d.trim())
-        .map(d => d.trim().toLowerCase());
-      if (cleanNames.length > 0) {
-        const { data, error } = await sb
-          .from('package_registry')
-          .select('package_name, ecosystem, score, license, verdict, status, warn_message, description, critical')
-          .in('package_name', cleanNames)
-          .eq('ecosystem', 'npm');
-        if (!error && data) {
-          dbPackages = data;
-        }
-      }
-    } catch (err) {
-      console.warn('handleComplianceGate: failed to fetch from package_registry', err.message);
-    }
-  }
-
-  const dbPackageMap = new Map();
-  for (const pkg of dbPackages) {
-    dbPackageMap.set(pkg.package_name.toLowerCase(), pkg);
-  }
+  // Phase 2: long-tail live-query resolver. Returns details for every
+  // package via snapshot (preferred, when fresh per verdict-tiered TTL)
+  // → snapshot-stale (served as-is; cron handles refresh) → live-query
+  // (with 1500ms timeout + in-flight coalescing) → hardcoded fallback.
+  // DEPS_REGISTRY remains the demo-package fixture path used by tests and
+  // by the in-repo dogfood gate; we consult it as a final tier when the
+  // resolver returned `fallback`.
+  const cleanNames = dependencies
+    .filter(d => typeof d === 'string' && d.trim())
+    .map(d => d.trim().toLowerCase());
+  const resolverMap = await resolvePackages(sb, cleanNames, {
+    githubToken: process.env.GITHUB_TOKEN || '',
+  });
 
   const nowIso = new Date().toISOString();
   const evaluation = [];
   let blockedCount = 0;
   let overallScoreSum = 0;
   let ratedCount = 0;
+  let anyFallbackUsed = false;
 
   for (const dep of dependencies) {
     if (typeof dep !== 'string' || !dep.trim()) continue;
     const name = dep.trim();
     const nameLower = name.toLowerCase();
-    const dbDetails = dbPackageMap.get(nameLower);
-    const details = dbDetails ? {
-      score: Number(dbDetails.score),
-      license: dbDetails.license,
-      verdict: dbDetails.verdict,
-      status: dbDetails.status,
-      warn: dbDetails.warn_message,
-      description: dbDetails.description,
-      critical: dbDetails.critical
-    } : (DEPS_REGISTRY[name] || DEPS_REGISTRY[nameLower] || {
+    let resolved = resolverMap.get(nameLower) || {
       score: 8.0,
       license: 'MIT',
       verdict: 'stable',
-      status: 'FRESH'
-    });
+      status: 'FRESH',
+      critical: false,
+      source: 'fallback',
+    };
+
+    // DEPS_REGISTRY backward-compat: when the resolver couldn't find or
+    // live-fetch the package, fall back to the in-repo fixture. Demo
+    // packages (axios, malicious-pkg, agpl-pkg) and the seeded baseline
+    // remain authoritative for tests + dogfood. Tag the result so the
+    // cache field still reflects "we had real data" vs "we returned 8.0".
+    if (resolved.source === 'fallback') {
+      const demoEntry = DEPS_REGISTRY[name] || DEPS_REGISTRY[nameLower];
+      if (demoEntry) {
+        resolved = {
+          score: demoEntry.score,
+          license: demoEntry.license,
+          verdict: demoEntry.verdict,
+          status: demoEntry.status,
+          warn: demoEntry.warn || null,
+          description: demoEntry.description || null,
+          critical: !!demoEntry.critical,
+          source: 'deps-registry-demo',
+        };
+      } else {
+        anyFallbackUsed = true;
+      }
+    }
+    const details = resolved;
 
     overallScoreSum += details.score;
     ratedCount++;
@@ -1187,7 +1191,12 @@ async function handleComplianceGate(req, res) {
   const finalScore = ratedCount > 0 ? parseFloat((overallScoreSum / ratedCount).toFixed(1)) : 10.0;
   const decision = blockedCount > 0 ? 'BLOCK' : 'ALLOW';
 
-  const cacheStatus = (body.force_scan || dependencies.some(d => !DEPS_REGISTRY[d] && !dbPackageMap.has(d.toLowerCase()))) ? 'miss' : 'hit';
+  // Phase 2 cache semantics: `hit` means every package had real data
+  // (fresh snapshot, stale snapshot, live-query, or DEPS_REGISTRY demo).
+  // `miss` means at least one package fell to the hardcoded 8.0 default
+  // because both the resolver and DEPS_REGISTRY came up empty. `force_scan`
+  // still labels the response as `miss` to preserve client-side semantics.
+  const cacheStatus = (body.force_scan || anyFallbackUsed) ? 'miss' : 'hit';
 
   return sendJson(res, 200, {
     decision,
@@ -1209,14 +1218,6 @@ async function handleComplianceGate(req, res) {
 // ---------------------------------------------------------------------------
 
 const REGISTRY_BATCH_SIZE = 50;
-
-function registryStatusFromCommit(lastCommitIso) {
-  if (!lastCommitIso) return 'STALE';
-  const ageDays = (Date.now() - Date.parse(lastCommitIso)) / (24 * 60 * 60 * 1000);
-  if (ageDays <= 90) return 'FRESH';
-  if (ageDays <= 180) return 'AGING';
-  return 'STALE';
-}
 
 async function handleCronUpdateRegistry(req, res) {
   if (req.method !== 'GET') {
@@ -1286,52 +1287,45 @@ async function handleCronUpdateRegistry(req, res) {
     return sendJson(res, 200, { ok: true, message: 'no packages to scan' });
   }
 
-  // 3. Re-score each via the same calculateSoyceScore pipeline the UI uses.
-  const headers = githubHeaders(process.env.GITHUB_TOKEN || '');
+  // 3. Force-refresh each package via the shared liveFetchPackage primitive
+  // from src/shared/packageRegistryQuery.js. The cron deliberately bypasses
+  // the resolver's TTL/snapshot logic — it WANTS fresh data regardless of
+  // age, that's its job. The gate handler uses resolvePackages instead,
+  // which respects TTLs.
+  const githubToken = process.env.GITHUB_TOKEN || '';
   const tally = { success: 0, failed: 0, nonGithub: 0 };
   const details = [];
   for (const item of batch) {
     const pkgName = item.package_name;
     try {
-      const identity = await resolveDepIdentity(pkgName);
-      if (identity && identity.resolvedRepo) {
-        const [owner, repo] = identity.resolvedRepo.split('/');
-        const result = await analyzeRepo(owner, repo, headers);
-        if (result) {
-          const { error: upErr } = await sb
-            .from('package_registry')
-            .update({
-              score: result.total,
-              license: (result.meta && result.meta.license) || 'MIT',
-              verdict: result.verdict.toLowerCase(),
-              status: registryStatusFromCommit(result.meta && result.meta.lastCommit),
-              critical: !!((result.meta && result.meta.advisories && result.meta.advisories.critical > 0)
-                || (result.extensionExploitRisk && result.extensionExploitRisk.status === 'HIJACK RISK')),
-              description: (result.repo && result.repo.description) || null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('package_name', pkgName)
-            .eq('ecosystem', 'npm');
-          if (upErr) throw upErr;
-          tally.success += 1;
-          details.push({ package: pkgName, status: 'updated', score: result.total });
-        } else {
-          await sb
-            .from('package_registry')
-            .update({ updated_at: new Date().toISOString() })
-            .eq('package_name', pkgName)
-            .eq('ecosystem', 'npm');
-          tally.failed += 1;
-          details.push({ package: pkgName, status: 'failed_repo_missing' });
-        }
+      const fetched = await liveFetchPackage(pkgName, { githubToken, timeoutMs: 30000 });
+      if (fetched) {
+        const { error: upErr } = await sb
+          .from('package_registry')
+          .update({
+            score: fetched.score,
+            license: fetched.license,
+            verdict: fetched.verdict,
+            status: fetched.status,
+            critical: !!fetched.critical,
+            description: fetched.description || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('package_name', pkgName)
+          .eq('ecosystem', 'npm');
+        if (upErr) throw upErr;
+        tally.success += 1;
+        details.push({ package: pkgName, status: 'updated', score: fetched.score });
       } else {
+        // No GitHub repo OR upstream returned null. Bump timestamp so this
+        // package moves to the back of the oldest-updated queue.
         await sb
           .from('package_registry')
           .update({ updated_at: new Date().toISOString() })
           .eq('package_name', pkgName)
           .eq('ecosystem', 'npm');
         tally.nonGithub += 1;
-        details.push({ package: pkgName, status: 'non_github' });
+        details.push({ package: pkgName, status: 'no_upstream_data' });
       }
     } catch (e) {
       console.warn(`cron-update-registry: ${pkgName} failed:`, e && e.message);
