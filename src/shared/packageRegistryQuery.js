@@ -174,6 +174,24 @@ function statusFromCommit(lastCommitIso) {
   return 'STALE';
 }
 
+/**
+ * Force-refresh a single package via the upstream live-fetch pipeline.
+ * Used by the snapshot cron's batch step (which wants fresh data
+ * regardless of TTL). Returns the raw upstream-shaped object (with
+ * `warn_message`/`updated_at` style fields the cron can persist
+ * directly), or `null` on timeout / no GitHub repo / upstream failure.
+ *
+ * The cron is expected to write the result back itself; this function
+ * does not touch Supabase.
+ */
+export async function liveFetchPackage(packageName, opts = {}) {
+  const name = String(packageName || '').trim().toLowerCase();
+  if (!name) return null;
+  const timeoutMs = typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 30000;
+  const githubToken = opts.githubToken || '';
+  return liveQueryOne(name, { timeoutMs, githubToken });
+}
+
 async function liveQueryOne(packageName, opts) {
   if (inflight.has(packageName)) return inflight.get(packageName);
   const fetcher = __liveFetcherOverride || realLiveFetch;
