@@ -1,0 +1,239 @@
+#!/usr/bin/env node
+/**
+ * Unit tests for src/shared/osvFastPath.js
+ *
+ * Covers:
+ *   - Empty input returns empty map
+ *   - Clean response with no vulns maps name → null
+ *   - Critical vuln → hasVulns, critical, ids, summary populated
+ *   - Multiple vulns → highestSeverity is max
+ *   - Severity normalization from database_specific
+ *   - Severity normalization from CVSS string fallback
+ *   - Upstream null / failure → all names map to null (no crash)
+ *   - Cache hit: second call doesn't refetch
+ *   - Cache expiry: TTL-based purge
+ *   - Names deduplicated + lowercased
+ *   - detailPatchFromOsv shape
+ */
+
+import {
+  queryOsvBatch,
+  detailPatchFromOsv,
+  __setOsvClientForTests,
+  __resetOsvCacheForTests,
+  __setClockForTests,
+} from '../src/shared/osvFastPath.js';
+
+let passed = 0;
+let failed = 0;
+const pending = [];
+
+function test(name, fn) {
+  pending.push(async () => {
+    __resetOsvCacheForTests();
+    __setOsvClientForTests(null);
+    __setClockForTests(null);
+    try {
+      await fn();
+      console.log(`PASS  ${name}`);
+      passed += 1;
+    } catch (e) {
+      console.log(`FAIL  ${name} -- ${e.message}\n${e.stack}`);
+      failed += 1;
+    }
+  });
+}
+
+function ok(c, msg) {
+  if (!c) throw new Error(msg || 'assertion failed');
+}
+function eq(a, b, msg) {
+  if (a !== b) throw new Error(`${msg}: expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+
+// ---------------------------------------------------------------------------
+
+test('empty input returns empty map', async () => {
+  const m = await queryOsvBatch([]);
+  eq(m.size, 0, 'size');
+});
+
+test('clean response with no vulns maps name → null', async () => {
+  __setOsvClientForTests(async (names) => ({
+    results: names.map(() => ({})),
+  }));
+  const m = await queryOsvBatch(['react', 'express']);
+  eq(m.size, 2, 'size');
+  eq(m.get('react'), null, 'react no vulns');
+  eq(m.get('express'), null, 'express no vulns');
+});
+
+test('critical vuln populates ids + severity + summary', async () => {
+  __setOsvClientForTests(async () => ({
+    results: [
+      {
+        vulns: [
+          {
+            id: 'CVE-2021-23337',
+            summary: 'Command injection in lodash',
+            database_specific: { severity: 'CRITICAL' },
+          },
+        ],
+      },
+    ],
+  }));
+  const m = await queryOsvBatch(['lodash']);
+  const summary = m.get('lodash');
+  ok(summary !== null, 'summary not null');
+  eq(summary.hasVulns, true, 'hasVulns');
+  eq(summary.critical, true, 'critical');
+  eq(summary.highestSeverity, 'critical', 'severity');
+  ok(summary.ids.includes('CVE-2021-23337'), 'id in list');
+  ok(summary.summary.includes('Command injection'), 'summary populated');
+});
+
+test('multiple vulns pick highest severity', async () => {
+  __setOsvClientForTests(async () => ({
+    results: [
+      {
+        vulns: [
+          { id: 'GHSA-aaa', database_specific: { severity: 'LOW' } },
+          { id: 'GHSA-bbb', database_specific: { severity: 'HIGH' } },
+          { id: 'GHSA-ccc', database_specific: { severity: 'MODERATE' } },
+        ],
+      },
+    ],
+  }));
+  const m = await queryOsvBatch(['multi-vuln-pkg']);
+  const summary = m.get('multi-vuln-pkg');
+  eq(summary.highestSeverity, 'high', 'highest is HIGH');
+  eq(summary.critical, false, 'not critical (no CRITICAL vuln)');
+  eq(summary.ids.length, 3, 'all ids preserved');
+});
+
+test('CVSS string fallback when database_specific missing', async () => {
+  __setOsvClientForTests(async () => ({
+    results: [
+      {
+        vulns: [
+          {
+            id: 'CVE-9999-1111',
+            severity: [{ type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' }],
+          },
+        ],
+      },
+    ],
+  }));
+  const m = await queryOsvBatch(['cvss-only-pkg']);
+  const summary = m.get('cvss-only-pkg');
+  eq(summary.highestSeverity, 'critical', 'CVSS C:H I:H A:H → critical');
+});
+
+test('upstream null / failure → all names map to null (degrades gracefully)', async () => {
+  __setOsvClientForTests(async () => null);
+  const m = await queryOsvBatch(['react', 'express']);
+  eq(m.get('react'), null, 'react null');
+  eq(m.get('express'), null, 'express null');
+});
+
+test('cache hit: second call does not refetch', async () => {
+  let fetchCount = 0;
+  __setOsvClientForTests(async (names) => {
+    fetchCount += 1;
+    return { results: names.map(() => ({ vulns: [{ id: 'GHSA-cached', database_specific: { severity: 'HIGH' } }] })) };
+  });
+
+  const m1 = await queryOsvBatch(['cached-pkg']);
+  const m2 = await queryOsvBatch(['cached-pkg']);
+  const m3 = await queryOsvBatch(['cached-pkg']);
+
+  eq(fetchCount, 1, 'fetched once');
+  ok(m1.get('cached-pkg').hasVulns, 'first call has vulns');
+  ok(m2.get('cached-pkg').hasVulns, 'second call has vulns');
+  ok(m3.get('cached-pkg').hasVulns, 'third call has vulns');
+});
+
+test('cache TTL: expired entries refetched', async () => {
+  let now = 1_000_000;
+  __setClockForTests(() => now);
+  let fetchCount = 0;
+  __setOsvClientForTests(async (names) => {
+    fetchCount += 1;
+    return { results: names.map(() => ({ vulns: [{ id: 'GHSA-ttl', database_specific: { severity: 'CRITICAL' } }] })) };
+  });
+
+  await queryOsvBatch(['ttl-pkg']);
+  eq(fetchCount, 1, 'first fetch');
+
+  // Advance just under 10 min — still cached.
+  now += 9 * 60 * 1000;
+  await queryOsvBatch(['ttl-pkg']);
+  eq(fetchCount, 1, 'still cached at 9 min');
+
+  // Advance past 10 min — should refetch.
+  now += 2 * 60 * 1000;
+  await queryOsvBatch(['ttl-pkg']);
+  eq(fetchCount, 2, 'refetched after TTL');
+});
+
+test('names deduplicated and lowercased', async () => {
+  let received = null;
+  __setOsvClientForTests(async (names) => {
+    received = names;
+    return { results: names.map(() => ({})) };
+  });
+  await queryOsvBatch(['React', 'react', 'REACT', '  react  ']);
+  eq(received.length, 1, 'dedup + normalize → 1 name');
+  eq(received[0], 'react', 'lowercased');
+});
+
+test('null and blank entries filtered out', async () => {
+  let received = null;
+  __setOsvClientForTests(async (names) => {
+    received = names;
+    return { results: names.map(() => ({})) };
+  });
+  const m = await queryOsvBatch([null, '', '   ', undefined, 'real-pkg']);
+  eq(received.length, 1, 'only real-pkg sent');
+  eq(m.size, 1, 'only real-pkg in result');
+});
+
+test('detailPatchFromOsv returns null on null / no-vuln summaries', () => {
+  eq(detailPatchFromOsv(null), null, 'null input');
+  eq(detailPatchFromOsv({ hasVulns: false, ids: [] }), null, 'hasVulns false');
+});
+
+test('detailPatchFromOsv exposes critical + osvIds + osvSeverity + osvSummary', () => {
+  const summary = {
+    hasVulns: true,
+    critical: true,
+    highestSeverity: 'critical',
+    ids: ['CVE-1', 'GHSA-2'],
+    summary: 'A nasty bug',
+  };
+  const patch = detailPatchFromOsv(summary);
+  eq(patch.critical, true, 'critical');
+  eq(patch.osvSeverity, 'critical', 'severity');
+  eq(patch.osvSummary, 'A nasty bug', 'summary');
+  eq(patch.osvIds.length, 2, 'ids length');
+});
+
+test('partial response: mixed vulns and no-vulns in one batch', async () => {
+  __setOsvClientForTests(async (names) => ({
+    results: names.map((n) =>
+      n === 'safe'
+        ? {}
+        : { vulns: [{ id: 'GHSA-bad', database_specific: { severity: 'CRITICAL' } }] },
+    ),
+  }));
+  const m = await queryOsvBatch(['safe', 'risky']);
+  eq(m.get('safe'), null, 'safe → null');
+  ok(m.get('risky').hasVulns, 'risky → hasVulns');
+  eq(m.get('risky').critical, true, 'risky → critical');
+});
+
+(async () => {
+  for (const fn of pending) await fn();
+  console.log(`\nOSV Fast-Path tests: ${passed} passed, ${failed} failed`);
+  process.exit(failed > 0 ? 1 : 0);
+})();
