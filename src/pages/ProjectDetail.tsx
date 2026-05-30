@@ -102,7 +102,16 @@ export default function ProjectDetail() {
     extensionExploitRisk: project.extensionExploitRisk
   } : null;
   
-  const detectedPatterns = rowForPatterns ? detectOtsPatternsForRow(rowForPatterns) : [];
+  // Project Detail is the in-product dogfood demo — it deliberately
+  // synthesizes mockVersion='1.14.1' and the hardcoded hasInstallScript
+  // for axios/malicious-pkg to drive the visible pattern cloud. After
+  // the coverage-honesty pass the detector requires `allowDemoFixtures:
+  // true` to fire those synthetic paths; we opt in explicitly here so
+  // the marketing demo keeps working. Production gate paths never set
+  // this flag.
+  const detectedPatterns = rowForPatterns
+    ? detectOtsPatternsForRow(rowForPatterns, { allowDemoFixtures: true })
+    : [];
 
   const getHistory = () => {
     if (!project) return [];

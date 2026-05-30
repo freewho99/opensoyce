@@ -1196,23 +1196,36 @@ async function handleComplianceGate(req, res) {
       pkgNameForPatterns = name.substring(0, idx);
     }
 
-    // Phase 3: OSV-found IDs feed the pattern detector. The
-    // `known-vulnerability-exposure` pattern fires on row.ids containing
-    // CVE-/GHSA-/SOYCE- prefixes (see otsPatterns.js:detectOtsPatternsForRow).
-    // OSV gives us real advisory IDs; we fall back to the demo 'CVE-MOCK'
-    // only when there's no OSV signal AND the package is critical via
-    // some other path (e.g. DEPS_REGISTRY fixture).
+    // Production gate row. Honesty pass: removed the hardcoded
+    // demo synthesis (axios → '1.14.1', hasInstallScript:axios|malicious-pkg,
+    // ids: 'CVE-MOCK'). The detector now sees only real signal sources:
+    // user-supplied version, OSV-found advisory IDs, OSV-derived severity.
+    // The Project Detail demo page (src/pages/ProjectDetail.tsx) opts into
+    // allowDemoFixtures explicitly when it wants the synthetic axios cloud
+    // for marketing.
     const osvIds = osvSummary && Array.isArray(osvSummary.ids) ? osvSummary.ids : [];
+    // Prefer OSV's observed severity over the score-derived heuristic
+    // when we have it. Falls back to critical when DEPS_REGISTRY marks
+    // the entry critical, then the score-ladder.
+    const observedSeverity = (osvSummary && osvSummary.highestSeverity && osvSummary.highestSeverity !== 'unknown')
+      ? osvSummary.highestSeverity
+      : (isCritical ? 'critical' : (details.score < 6 ? 'high' : 'medium'));
     const rowForPatterns = {
       package: pkgNameForPatterns,
-      version: pkgVersionForPatterns || (pkgNameForPatterns.toLowerCase() === 'axios' ? '1.14.1' : '1.0.0'),
-      severity: isCritical ? 'critical' : (details.score < 6 ? 'high' : 'medium'),
-      ids: osvIds.length > 0 ? osvIds : (isCritical ? ['CVE-MOCK'] : []),
-      hasInstallScript: pkgNameForPatterns.toLowerCase() === 'axios' || pkgNameForPatterns.toLowerCase() === 'malicious-pkg',
+      version: pkgVersionForPatterns,
+      severity: observedSeverity,
+      ids: osvIds,
       verified: details.verdict !== 'graveyard' && details.verdict !== 'risky' ? true : 'unverified',
       license: details.license,
     };
-    const patterns = detectOtsPatternsForRow(rowForPatterns, { ci: true, hasSecrets: true });
+    // Production gate must not fire demo-only detector branches. The
+    // detector defaults to allowDemoFixtures:false; we pass it explicitly
+    // here to make the intent visible.
+    const patterns = detectOtsPatternsForRow(rowForPatterns, {
+      ci: true,
+      hasSecrets: true,
+      allowDemoFixtures: false,
+    });
 
     evaluation.push({
       package: name,

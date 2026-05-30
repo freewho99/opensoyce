@@ -559,16 +559,29 @@ export function getOtsIncident(id) {
 
 /**
  * Quantify/detect OTS patterns matching a scanned dependency package row.
- * Maps signals (vulnerability fields, threat fields, capability profiles, installation scripts) to pattern rules.
- * Supports special mock detection for axios@1.14.1 and malicious-pkg to enable deterministic local testing.
+ * Maps signals (vulnerability fields, threat fields, capability profiles,
+ * installation scripts) to pattern rules.
+ *
+ * Demo fixtures: certain literal package names (`axios@1.14.1`,
+ * `malicious-pkg`, `@internal/payments`) historically fired patterns to
+ * drive the in-product demos. As of the coverage-honesty pass, these are
+ * gated behind `context.allowDemoFixtures` (default `false`) so production
+ * gate paths never emit synthetic signals — only real OSV/lockfile/repo
+ * data triggers patterns. Tests, the incident replay engine, and the
+ * Project Detail demo page opt-in explicitly.
  */
 export function detectOtsPatternsForRow(row, context = {}) {
   const patterns = [];
   const name = String(row.package || row.name || '').toLowerCase();
   const version = String(row.version || '').toLowerCase();
   const severity = String(row.severity || '').toLowerCase();
+  const allowDemoFixtures = context.allowDemoFixtures === true;
 
-  const mockAxios = (name === 'axios' && (version === '1.14.1' || version === '1.14.1-style'));
+  const mockAxios = allowDemoFixtures
+    && name === 'axios'
+    && (version === '1.14.1' || version === '1.14.1-style');
+  const demoMaliciousPkg = allowDemoFixtures && name === 'malicious-pkg';
+  const demoInternalPayments = allowDemoFixtures && name === '@internal/payments';
 
   // 1. Known Vulnerability Exposure
   if (
@@ -579,24 +592,32 @@ export function detectOtsPatternsForRow(row, context = {}) {
       row.ids.some(id => String(id).startsWith('SOYCE-'))
     )) ||
     mockAxios ||
-    name === 'malicious-pkg'
+    demoMaliciousPkg
   ) {
+    // Catalog severity for this pattern is critical (worst-case risk
+    // class). Observed severity comes from the upstream signal — OSV
+    // returns CRITICAL/HIGH/MODERATE/LOW per vuln; the gate threads
+    // that into row.severity. When observed differs from catalog,
+    // policy still BLOCKs because the pattern itself is critical-class,
+    // but the evidence card surfaces the real per-match severity.
+    const observedSeverityForVuln = severity || 'critical';
     patterns.push({
       patternId: 'known-vulnerability-exposure',
-      severity: 'critical',
+      severity: observedSeverityForVuln,
+      catalogSeverity: 'critical',
       policyImpact: 'block',
       confidence: 0.95,
       evidence: [
-        { label: 'Signal Source', value: mockAxios ? 'Sandbox simulation' : (row.ids ? row.ids.join(', ') : 'Threat DB') },
-        { label: 'Severity Tier', value: 'Critical' }
+        { label: 'Signal Source', value: mockAxios ? 'Sandbox simulation' : (row.ids && row.ids.length > 0 ? row.ids.join(', ') : 'Threat DB') },
+        { label: 'Severity Tier', value: observedSeverityForVuln.charAt(0).toUpperCase() + observedSeverityForVuln.slice(1) }
       ]
     });
   }
 
   // 2. Install-Time execution
-  if (row.hasInstallScript === true || mockAxios || name === 'malicious-pkg') {
+  if (row.hasInstallScript === true || mockAxios || demoMaliciousPkg) {
     const cap = row.capabilityProfile || {};
-    const hasRemote = cap.remoteExecution === true || cap.networkAccess === true || cap.downloadsRemoteCode === true || mockAxios || name === 'malicious-pkg';
+    const hasRemote = cap.remoteExecution === true || cap.networkAccess === true || cap.downloadsRemoteCode === true || mockAxios || demoMaliciousPkg;
     
     if (hasRemote) {
       patterns.push({
@@ -656,7 +677,7 @@ export function detectOtsPatternsForRow(row, context = {}) {
   }
 
   // 5. Dependency Confusion Risk
-  if (row.dependencyConfusion || name === '@internal/payments') {
+  if (row.dependencyConfusion || demoInternalPayments) {
     const isHigh = row.dependencyConfusion && row.dependencyConfusion.confidence === 'HIGH';
     patterns.push({
       patternId: 'dependency-confusion-risk',

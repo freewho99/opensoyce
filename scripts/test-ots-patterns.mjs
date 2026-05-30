@@ -203,6 +203,56 @@ test('detector emissions match the gate-active label', () => {
   ok(wrongStatus.length === 0, `mislabeled patterns: ${wrongStatus.join(', ') || '(none)'}`);
 });
 
+test('production mode (allowDemoFixtures NOT set) does not fire on demo names alone', () => {
+  // Honesty invariant. Demo names (axios@1.14.1, malicious-pkg,
+  // @internal/payments) used to fire pattern clouds in production gate
+  // responses, which made non-demo packages look indistinguishable from
+  // synthetic ones. After the coverage-honesty pass, demo paths require
+  // an explicit allowDemoFixtures: true opt-in. Production gate paths
+  // never set the flag.
+  const demoNames = [
+    { row: { package: 'axios', version: '1.14.1' } },
+    { row: { package: 'malicious-pkg' } },
+    { row: { package: '@internal/payments' } },
+  ];
+  for (const { row } of demoNames) {
+    const patterns = detectOtsPatternsForRow(row, {});
+    ok(
+      patterns.length === 0,
+      `production mode emitted ${patterns.length} patterns for "${row.package}" (${patterns.map((p) => p.patternId).join(', ')}) — demo paths must be gated`,
+    );
+  }
+});
+
+test('allowDemoFixtures: true unlocks the demo-name pattern clouds', () => {
+  // Companion to the production invariant above. The demo paths still
+  // work for marketing surfaces (ProjectDetail dogfood page) and the
+  // incident replay engine when callers opt in explicitly.
+  const patterns = detectOtsPatternsForRow(
+    { package: 'axios', version: '1.14.1', hasInstallScript: true },
+    { allowDemoFixtures: true, ci: true, hasSecrets: true },
+  );
+  ok(patterns.length >= 3, `demo opt-in fired ${patterns.length} patterns; expected 3+`);
+  const ids = patterns.map((p) => p.patternId);
+  ok(ids.includes('known-vulnerability-exposure'), 'demo axios fires known-vulnerability-exposure');
+  ok(ids.includes('install-time-remote-execution'), 'demo axios fires install-time-remote-execution');
+});
+
+test('known-vulnerability-exposure emission carries both severity and catalogSeverity', () => {
+  // Honesty for severity display: the UI/evidence card should show the
+  // observed per-match severity (e.g. OSV said HIGH) AND the catalog
+  // default class (CRITICAL). Today only known-vulnerability-exposure
+  // varies; other patterns can be enriched in future PRs.
+  const high = detectOtsPatternsForRow(
+    { package: 'somepkg', severity: 'high', ids: ['GHSA-fake-1234'] },
+    {},
+  );
+  const vulnHigh = high.find((p) => p.patternId === 'known-vulnerability-exposure');
+  ok(vulnHigh, 'pattern fires on GHSA id');
+  eq(vulnHigh.severity, 'high', 'observed severity from row.severity');
+  eq(vulnHigh.catalogSeverity, 'critical', 'catalog default preserved');
+});
+
 test('every catalog patternId appears in exactly one pack', () => {
   // Structural invariant. Orphaned definitions (no pack) won't appear in
   // /patterns filter UI; duplicated definitions across packs would show
