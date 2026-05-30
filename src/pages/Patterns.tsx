@@ -12,6 +12,20 @@ const severityBadgeClass: Record<string, string> = {
   info: 'bg-soy-label text-soy-bottle border-soy-bottle',
 };
 
+const coverageBadgeClass: Record<string, string> = {
+  'gate-active': 'bg-emerald-600 text-white border-soy-bottle',
+  'catalog-only': 'bg-yellow-400 text-soy-bottle border-soy-bottle',
+  'roadmap': 'bg-slate-400 text-white border-soy-bottle',
+  'fixture-only': 'bg-purple-500 text-white border-soy-bottle',
+};
+
+const coverageBadgeLabel: Record<string, string> = {
+  'gate-active': 'GATE ACTIVE',
+  'catalog-only': 'CATALOG ONLY',
+  'roadmap': 'ROADMAP',
+  'fixture-only': 'FIXTURE ONLY',
+};
+
 const packIcons: Record<string, React.ReactNode> = {
   'npm-supply-chain': <Layers className="text-soy-red" size={20} />,
   'github-actions': <Terminal className="text-soy-red" size={20} />,
@@ -55,6 +69,29 @@ export default function Patterns() {
         <p className="text-xl md:text-2xl font-bold max-w-4xl leading-relaxed text-soy-bottle/80 uppercase">
           OpenSoyce does not stop at simple database CVE lookups. We maintain a living library of recurring exploit patterns behind real-world software supply-chain attacks, mapping them directly to evidence and CI policies.
         </p>
+        {/* Coverage doctrine */}
+        <div className="mt-8 border-4 border-soy-bottle bg-soy-label p-6 shadow-[6px_6px_0px_#302C26]">
+          <h2 className="text-xs font-black uppercase tracking-widest text-soy-bottle mb-3">Coverage Status</h2>
+          <p className="text-sm font-bold text-soy-bottle/80 leading-relaxed mb-4">
+            {(() => {
+              const gateActive = OTS_PATTERN_DEFINITIONS.filter((p) => p.coverageStatus === 'gate-active').length;
+              const total = OTS_PATTERN_DEFINITIONS.length;
+              return `${gateActive} of ${total} OTS patterns are enforced by the gate today. ${total - gateActive} are catalog-only or roadmap patterns used to document known attack shapes and guide detector expansion. A pattern can be educational before it is enforceable — the product always says which is which.`;
+            })()}
+          </p>
+          <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase">
+            <span className="border-2 border-soy-bottle bg-emerald-600 text-white px-2 py-0.5">GATE ACTIVE</span>
+            <span className="text-soy-bottle/60 font-bold normal-case">— detector emits in normal gate mode</span>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase mt-1.5">
+            <span className="border-2 border-soy-bottle bg-yellow-400 text-soy-bottle px-2 py-0.5">CATALOG ONLY</span>
+            <span className="text-soy-bottle/60 font-bold normal-case">— documented, signal source exists, branch not yet wired</span>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase mt-1.5">
+            <span className="border-2 border-soy-bottle bg-slate-400 text-white px-2 py-0.5">ROADMAP</span>
+            <span className="text-soy-bottle/60 font-bold normal-case">— needs new signal-source infrastructure before enforcement</span>
+          </div>
+        </div>
       </header>
 
       {/* Grid Layout: Left Column = Packs & Incidents, Right Column = Patterns List */}
@@ -195,6 +232,18 @@ export default function Patterns() {
                   <div>
                     {/* Tags */}
                     <div className="flex flex-wrap items-center gap-2 mb-4">
+                      <span
+                        className={`text-[10px] font-black uppercase border-2 px-2 py-0.5 ${coverageBadgeClass[pattern.coverageStatus] || coverageBadgeClass['roadmap']}`}
+                        title={pattern.coverageStatus === 'gate-active'
+                          ? 'The detector emits this pattern in normal gate execution.'
+                          : pattern.coverageStatus === 'catalog-only'
+                          ? 'Documented + incident-backed. Signal source exists; detector branch not wired yet.'
+                          : pattern.coverageStatus === 'fixture-only'
+                          ? 'Emitted only when allowDemoFixtures is passed explicitly (replays / demos / tests).'
+                          : 'Needs new signal-source infrastructure before enforcement.'}
+                      >
+                        {coverageBadgeLabel[pattern.coverageStatus] || pattern.coverageStatus}
+                      </span>
                       <span className={`text-[10px] font-black uppercase border-2 px-2 py-0.5 ${severityBadgeClass[pattern.defaultSeverity]}`}>
                         {pattern.defaultSeverity}
                       </span>
