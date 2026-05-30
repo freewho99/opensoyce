@@ -21,6 +21,21 @@ export type OtsPatternCategory =
 
 export type OtsPolicyImpact = 'none' | 'warn' | 'block' | 'requires-approval';
 
+/**
+ * Where a pattern stands in OpenSoyce's enforcement story.
+ *
+ *   gate-active   — the detector emits this pattern in normal gate mode.
+ *   catalog-only  — documented, incident-backed, signal source exists,
+ *                   but detector branch not wired yet (e.g. GitHub
+ *                   Actions workflow patterns we could parse from .yml).
+ *   roadmap       — needs new signal-source infrastructure before
+ *                   enforcement (e.g. AI agent workflow patterns, dev
+ *                   tool extension manifest scanners).
+ *   fixture-only  — emitted only when allowDemoFixtures is passed
+ *                   explicitly. Used for demo/replay/test paths.
+ */
+export type OtsCoverageStatus = 'gate-active' | 'catalog-only' | 'roadmap' | 'fixture-only';
+
 export interface OtsPatternDefinition {
   readonly id: string;
   readonly name: string;
@@ -31,6 +46,7 @@ export interface OtsPatternDefinition {
   readonly defaultPolicyImpact: OtsPolicyImpact;
   readonly recommendedAction: string;
   readonly realWorldExamples?: readonly string[];
+  readonly coverageStatus: OtsCoverageStatus;
 }
 
 export interface OtsPatternPack {

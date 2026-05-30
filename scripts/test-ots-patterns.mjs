@@ -149,6 +149,110 @@ test('every patternId emitted by the detector resolves to a catalog entry', () =
   ok(missing.length === 0, `detector emits IDs not in catalog: ${missing.join(', ') || '(none)'}`);
 });
 
+test('every catalog entry declares a coverageStatus', () => {
+  const allowed = new Set(['gate-active', 'catalog-only', 'roadmap', 'fixture-only']);
+  const missing = [];
+  const invalid = [];
+  for (const def of OTS_PATTERN_DEFINITIONS) {
+    if (!def.coverageStatus) {
+      missing.push(def.id);
+    } else if (!allowed.has(def.coverageStatus)) {
+      invalid.push(`${def.id}=${def.coverageStatus}`);
+    }
+  }
+  ok(missing.length === 0, `entries missing coverageStatus: ${missing.join(', ') || '(none)'}`);
+  ok(invalid.length === 0, `entries with invalid coverageStatus: ${invalid.join(', ') || '(none)'}`);
+});
+
+test('detector emissions match the gate-active label', () => {
+  // Structural invariant. Every patternId emitted by the detector
+  // (default mode, no demo fixtures) MUST be marked gate-active in the
+  // catalog. Conversely, no pattern marked roadmap / catalog-only should
+  // ever fire from the detector in default mode. This catches drift in
+  // either direction at commit time.
+  const defByPatternId = new Map(OTS_PATTERN_DEFINITIONS.map((d) => [d.id, d]));
+  const fixtures = [
+    { row: { package: 'badpkg', severity: 'critical', ids: ['CVE-X'] } },
+    { row: { package: 'native-helper', hasInstallScript: true, capabilityProfile: { remoteExecution: true } } },
+    { row: { package: 'native-local', hasInstallScript: true } },
+    { row: { package: 'reqeust' } },
+    { row: { package: '@scope/x', dependencyConfusion: { confidence: 'HIGH' } } },
+    { row: { package: 'mystery', verified: false } },
+    { row: { package: 'fresh', publishAgeHours: 4 } },
+    { row: { package: 'compromised', maintainerCompromise: true } },
+    { row: { package: 'with-dep', hiddenDependency: { newDep: 'x' } } },
+    { row: { package: 'cdn-shape', unknownRemoteEndpoint: { host: 'x' } } },
+    { row: { package: 'react', blastRadius: { tier: 'high' } } },
+    // Detector v2 workflow signals
+    { row: { package: 'tj-actions/changed-files', isWorkflowAction: true, tagDrift: true, hasSecretsAccess: true, publisherVerified: false, unpinnedReference: true } },
+    { row: { package: 'polyfill.io', publisherIdentityDrift: { drifted: true } } },
+    // CI-with-secrets context
+    { row: { package: 'risky-installer', hasInstallScript: true }, ctx: { ci: true, hasSecrets: true } },
+  ];
+  const emitted = new Set();
+  for (const { row, ctx } of fixtures) {
+    for (const p of detectOtsPatternsForRow(row, ctx || {})) emitted.add(p.patternId);
+  }
+  const wrongStatus = [];
+  for (const id of emitted) {
+    const def = defByPatternId.get(id);
+    if (def && def.coverageStatus !== 'gate-active') {
+      wrongStatus.push(`${id} emits but is labeled ${def.coverageStatus}`);
+    }
+  }
+  ok(wrongStatus.length === 0, `mislabeled patterns: ${wrongStatus.join(', ') || '(none)'}`);
+});
+
+test('production mode (allowDemoFixtures NOT set) does not fire on demo names alone', () => {
+  // Honesty invariant. Demo names (axios@1.14.1, malicious-pkg,
+  // @internal/payments) used to fire pattern clouds in production gate
+  // responses, which made non-demo packages look indistinguishable from
+  // synthetic ones. After the coverage-honesty pass, demo paths require
+  // an explicit allowDemoFixtures: true opt-in. Production gate paths
+  // never set the flag.
+  const demoNames = [
+    { row: { package: 'axios', version: '1.14.1' } },
+    { row: { package: 'malicious-pkg' } },
+    { row: { package: '@internal/payments' } },
+  ];
+  for (const { row } of demoNames) {
+    const patterns = detectOtsPatternsForRow(row, {});
+    ok(
+      patterns.length === 0,
+      `production mode emitted ${patterns.length} patterns for "${row.package}" (${patterns.map((p) => p.patternId).join(', ')}) — demo paths must be gated`,
+    );
+  }
+});
+
+test('allowDemoFixtures: true unlocks the demo-name pattern clouds', () => {
+  // Companion to the production invariant above. The demo paths still
+  // work for marketing surfaces (ProjectDetail dogfood page) and the
+  // incident replay engine when callers opt in explicitly.
+  const patterns = detectOtsPatternsForRow(
+    { package: 'axios', version: '1.14.1', hasInstallScript: true },
+    { allowDemoFixtures: true, ci: true, hasSecrets: true },
+  );
+  ok(patterns.length >= 3, `demo opt-in fired ${patterns.length} patterns; expected 3+`);
+  const ids = patterns.map((p) => p.patternId);
+  ok(ids.includes('known-vulnerability-exposure'), 'demo axios fires known-vulnerability-exposure');
+  ok(ids.includes('install-time-remote-execution'), 'demo axios fires install-time-remote-execution');
+});
+
+test('known-vulnerability-exposure emission carries both severity and catalogSeverity', () => {
+  // Honesty for severity display: the UI/evidence card should show the
+  // observed per-match severity (e.g. OSV said HIGH) AND the catalog
+  // default class (CRITICAL). Today only known-vulnerability-exposure
+  // varies; other patterns can be enriched in future PRs.
+  const high = detectOtsPatternsForRow(
+    { package: 'somepkg', severity: 'high', ids: ['GHSA-fake-1234'] },
+    {},
+  );
+  const vulnHigh = high.find((p) => p.patternId === 'known-vulnerability-exposure');
+  ok(vulnHigh, 'pattern fires on GHSA id');
+  eq(vulnHigh.severity, 'high', 'observed severity from row.severity');
+  eq(vulnHigh.catalogSeverity, 'critical', 'catalog default preserved');
+});
+
 test('every catalog patternId appears in exactly one pack', () => {
   // Structural invariant. Orphaned definitions (no pack) won't appear in
   // /patterns filter UI; duplicated definitions across packs would show

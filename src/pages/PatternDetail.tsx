@@ -63,6 +63,22 @@ export default function PatternDetail() {
         <div className="bg-soy-bottle text-white p-8 md:p-12 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b-4 border-soy-bottle">
           <div>
             <div className="flex flex-wrap items-center gap-3 mb-4">
+              {(() => {
+                const cs = pattern.coverageStatus;
+                const cls = cs === 'gate-active' ? 'bg-emerald-600 text-white border-white'
+                  : cs === 'catalog-only' ? 'bg-yellow-400 text-soy-bottle border-white'
+                  : cs === 'fixture-only' ? 'bg-purple-500 text-white border-white'
+                  : 'bg-slate-400 text-white border-white';
+                const label = cs === 'gate-active' ? 'GATE ACTIVE'
+                  : cs === 'catalog-only' ? 'CATALOG ONLY'
+                  : cs === 'fixture-only' ? 'FIXTURE ONLY'
+                  : 'ROADMAP';
+                return (
+                  <span className={`text-[10px] font-black uppercase border-2 px-3 py-1 ${cls}`}>
+                    {label}
+                  </span>
+                );
+              })()}
               <span className={`text-[10px] font-black uppercase border-2 px-3 py-1 ${severityClass[pattern.defaultSeverity]}`}>
                 SEVERITY: {pattern.defaultSeverity}
               </span>
@@ -157,6 +173,24 @@ export default function PatternDetail() {
                 <span className="text-3xl font-black uppercase tracking-tighter leading-none italic block">
                   {pattern.defaultPolicyImpact}
                 </span>
+              </div>
+            </section>
+
+            {/* Coverage status explainer */}
+            <section>
+              <h3 className="text-xs font-black uppercase tracking-widest text-soy-bottle/40 mb-3">
+                ENFORCEMENT STATUS
+              </h3>
+              <div className="border-4 border-soy-bottle bg-white p-4 shadow-[4px_4px_0px_#302C26]">
+                <p className="text-xs font-bold text-soy-bottle/80 leading-relaxed">
+                  {pattern.coverageStatus === 'gate-active'
+                    ? 'The OpenSoyce OTS Gate emits this pattern in normal execution. When the detector observes the underlying signals (CVE IDs, install scripts, workflow tag drift, etc.), the gate fires this pattern and applies its policy impact.'
+                    : pattern.coverageStatus === 'catalog-only'
+                    ? 'This pattern is documented and incident-backed. The signal source exists today (e.g. parseable .github/workflows/*.yml content), but the detector branch is not yet wired. Enforcement is queued.'
+                    : pattern.coverageStatus === 'fixture-only'
+                    ? 'This pattern is emitted only when the detector is invoked with `allowDemoFixtures: true` — used by replay fixtures, demos, and tests. Production gate paths never fire it.'
+                    : 'This pattern is part of the OTS model but requires new signal-source infrastructure before enforcement. For example, AI agent workflow patterns need agent config scanning; some developer tool patterns need extension manifest parsers. Documented here so consumers can understand the attack class.'}
+                </p>
               </div>
             </section>
 

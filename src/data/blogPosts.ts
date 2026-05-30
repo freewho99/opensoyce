@@ -78,6 +78,7 @@ export const blogPosts: BlogPost[] = [
             readTime: '6 min',
             date: 'MAY 27, 2026',
             featured: true,
+            heroImage: '/blog/pomelli_bdna_image_0530.png',
             metaDescription: "OTS Gate is a GitHub Action that blocks risky open-source dependencies before they merge. Powered by OpenSoyce's quantified trust scores — because popularity was never the point.",
             tags: ['ots-gate', 'ci-cd', 'github-actions', 'trust-score', 'supply-chain', 'devsecops', 'open-source', 'opensoyce'],
             content: `There is a moment — quiet, unremarkable — when a developer types a dependency name into a terminal and presses Enter.
@@ -124,6 +125,8 @@ export const blogPosts: BlogPost[] = [
                                             CI gate: BLOCK or ALLOW
                                             \`\`\`
 
+                                            [img:/blog/pomelli_bdna_image_0530_1.png:OTS Gate resolving chain — Snapshot, Live Query, OSV Overlay, and Gate Decision]
+
                                             The evaluation is not a vulnerability scan. Plenty of tools do vulnerability scans. What OTS Gate produces is a **trust score** — a number between 0 and 100 that compresses what matters:
 
                                             - Vulnerability history and patch responsiveness
@@ -159,6 +162,8 @@ export const blogPosts: BlogPost[] = [
                                                       Confidence: High
                                                       Recommended: BLOCK
                                                       \`\`\`
+
+                                                      [img:/blog/pomelli_photoshoot_image_1_1_0530.png:OTS Gate evidence panel — event-stream WARN verdict card with risk dimensions]
 
                                                       Not "this package has a CVE." The full picture. The reasoning. The path forward.
 
