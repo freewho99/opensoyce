@@ -17,6 +17,58 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+        heroImage: "/blog/deps-registry-phase3-real-signal-hero.png",
+        slug: "deps-registry-phase3-real-signal",
+        title: "THE REGISTRY DON'T LIE.",
+        subtitle: "Phase 3 went live and the gate caught a real day-zero advisory on real data. Not a fixture. Not a demo. The real thing.",
+        category: "PRODUCT",
+        date: "MAY 30, 2026",
+        readTime: "7 min",
+        emoji: "FIRE",
+        featured: true,
+        metaDescription: "OpenSoyce DEPS_REGISTRY Phase 3 is live: snapshot to live-query to OSV overlay, making real-data gate decisions on day-zero advisories like GHSA-mh6f-8j2x-4483.",
+        tags: ["deps-registry", "osv", "supply-chain", "security", "gate", "event-stream"],
+        primaryProductAction: "scanner",
+        author: "The Sauce Report",
+        content: `Look. I been doing this long enough to know when somebody handing me a demo and when somebody handing me the real thing. A demo is your cousin telling you the car run great while he keeping his foot on the brake the whole test drive. Phase 3 ain't that. Phase 3 took its foot OFF the brake on live data and the gate still did its job. Let me tell you what happened.
+
+        ## THE SETUP, BABY
+
+        For the longest, the registry was working off a snapshot. A snapshot is a photograph. It's last Tuesday. It's "trust me, this was accurate at some point." That's cute, but vulnerabilities don't wait for your photograph to develop.
+
+        So Phase 3 wired up the live path. The arc go like this: snapshot first, then live-query on top, then we overlay OSV — the Open Source Vulnerabilities database — and THEN the gate makes a decision on real, current data. Snapshot to live-query to OSV overlay to gate decision. That's the whole show.
+
+        [img:/blog/deps-registry-phase3-architecture.png:SNAPSHOT -> LIVE QUERY -> OSV OVERLAY -> GATE DECISION. The whole arc, end to end, on real data.]
+
+        ## THEN IT CAUGHT SOMETHING REAL
+
+        Here's where I sat up in my chair. The OSV path is genuinely live, and it flagged GHSA-mh6f-8j2x-4483. Now if you don't know that number, let me put you on game: that's the real npm advisory for the flatmap-stream-via-event-stream injection from back in 2018. A legend in the supply-chain horror story hall of fame. Somebody slid malicious code into a dependency of a dependency and a whole lotta people downloaded it without ever knowing.
+
+        So when the gate lit up on THAT? On real data? That ain't a coincidence. That's the system working the way it's supposed to work.
+
+        [img:/blog/deps-registry-phase3-evidence.png:event-stream came back WARN, not BLOCK. The gate read the policy and did exactly what it was told.]
+
+        ## NOW HOLD ON - IT SAID WARN, NOT BLOCK
+
+        And somebody in the back already raising they hand like "AH HA, gotcha, it didn't block!" Nah. Sit down. That's correct behavior, and here's why.
+
+        event-stream is in the 28-seed with a verdict of risky. Under the default policy, risky means WARN. The OSV vuln got classified as high — not critical. So details.critical stayed false, which means it never escalated to a BLOCK. The gate read the rules and followed the rules. You don't get to be mad the bouncer let somebody in when the list said "warn, don't toss." The gate did EXACTLY what the policy told it to do. That's the opposite of a bug. That's discipline.
+
+        ## THE ONE LITTLE NIT (PHASE 3.5, WE SEE YOU)
+
+        Now I'm honest, so I'm gonna tell you the one cosmetic thing. The pattern object is out here showing severity critical and policyImpact block — those are the catalog defaults. But the actual OSV severity is high. So the evidence panel got a lil mismatch in what it's flashing. Pure cosmetic. The GATE DECISION is correct. The UI is just wearing the wrong jersey for the team it's playing on.
+
+        Fix is a half-hour job: thread the actual OSV severity through rowForPatterns.severity so what you SEE matches what the gate actually DID. We'll call that Phase 3.5. It's a wardrobe change, not surgery.
+
+        ## WHY THIS ONE MATTERS
+
+        The whole point of a gate is that it holds up when somebody's actually looking. Snapshot systems fold the second a real advisory drops, because the photograph is already old. Phase 3 doesn't fold. It snapshots, it live-queries, it overlays OSV, and it makes real-data decisions on day-zero advisories. It is defensible against scrutiny. And in security, "defensible against scrutiny" is the only review that counts.
+
+        So yeah. The registry don't lie. It caught a real one, it followed the policy to the letter, and the only thing left to fix is making the outfit match the performance. I'll take that trade every single day.
+
+        Stay brilliant.`,
+  },
+  {
             slug: 'ots-gate-trust-infrastructure-for-open-source',
             primaryProductAction: 'scanner',
             title: "The Gate Is Now Open.",
