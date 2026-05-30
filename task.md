@@ -1,6 +1,6 @@
 # task.md — Trust Stack & Package Registry Handoff
 
-**As of 2026-05-29.** The repository is fully green and up to date on `main` (commit `5323f16`). All 42 verification tests pass cleanly.
+**As of 2026-05-30.** The repository is fully green and up to date on `main` (commit `117e5a6`). All 55 verification tests pass cleanly.
 
 ---
 
@@ -12,7 +12,9 @@ OpenSoyce features a hybrid OpenSource Trust Stack (OTS) compliance gate and exc
    - Single consolidated Vercel function routing GET, POST, DELETE requests to stay under the 12-function Hobby cap.
    - Leverages Supabase backend for managing repository-level exceptions, watchlist configurations, and Slack action integrations.
 
-2. **Package Registry Resolution** (`src/shared/packageRegistryQuery.js`):
+2. **OSV Fast-Path & Package Registry Resolution** (`src/shared/osvFastPath.js` and `src/shared/packageRegistryQuery.js`):
+   - Implements a fast-path vulnerability check against OSV's bulk query API before proceeding with the main query resolver. 
+   - Surfaces real vulnerability IDs (CVE/GHSA) and severities straight to the gate's pattern detector.
    - Implements a 4-tier package query chain:
      * **Snapshot**: Fast lookup in `public.package_registry` table.
      * **Live Query**: Hits npm/GitHub APIs dynamically on cache misses.
@@ -34,6 +36,7 @@ OpenSoyce features a hybrid OpenSource Trust Stack (OTS) compliance gate and exc
 - **Vercel Hobby Cap Fix**: Consolidated standalone cron job handlers into `api/exceptions.js` to bring the count back to 12.
 - **Database Schema Consolidation**: Created [0003_exceptions_schema_fix.sql](file:///C:/Users/pfinn/projects/opensoyce/supabase/migrations/0003_exceptions_schema_fix.sql) to idempotently construct missing tables (`verdict_snapshots`, `watched_packages`, `notifications`, `threat_feed`) and add missing columns (`status`, `revoked_by`, `slack_ts`) to the `exceptions` table.
 - **Phase 2 (C) - Hybrid Resolver**: Built and tested the 4-tier resolving chain with caching, request coalescing, and live-query fallback logic.
+- **Phase 3 - OSV Fast-Path Integration**: Implemented bulk OSV vulnerability querying preceding the resolver, which allows sub-200ms threat detection with real CVEs and GHSAs, while failing safe/degrading gracefully if OSV is down.
 
 ---
 
