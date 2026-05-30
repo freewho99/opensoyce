@@ -19,6 +19,7 @@ import {
   __setLiveFetcherForTests as __setRegistryLiveFetcherForTests,
   __resetInflightForTests as __resetRegistryInflightForTests,
 } from '../src/shared/packageRegistryQuery.js';
+import { __setOsvClientForTests as __setOsvClientForGovernorTests } from '../src/shared/osvFastPath.js';
 
 // Phase 2: the compliance-gate handler internally calls resolvePackages,
 // which by default invokes resolveDepIdentity + analyzeRepo (real HTTP).
@@ -27,6 +28,15 @@ import {
 // compat for demo packages (axios, malicious-pkg, agpl-pkg, etc.) and to
 // the hardcoded fallback for everything else.
 __setRegistryLiveFetcherForTests(async () => null);
+
+// Phase 3: the gate handler also calls queryOsvBatch (api.osv.dev). Same
+// rule — unit tests must not hit the network. Stub returns a clean "no
+// vulns known" response for every dep, preserving existing test behavior:
+// known-vulnerability-exposure pattern firing in existing tests still
+// relies on the `CVE-MOCK` fallback path (DEPS_REGISTRY critical fixture).
+__setOsvClientForGovernorTests(async (names) => ({
+  results: names.map(() => ({})),
+}));
 
 let passed = 0;
 let failed = 0;

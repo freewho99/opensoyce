@@ -43,6 +43,7 @@ import { resolvePolicy, extractPolicyMetadata, parseYamlPolicy, DEFAULT_POLICY }
 import { detectOtsPatternsForRow } from '../src/shared/otsPatterns.js';
 import { npmHighImpact } from 'npm-high-impact';
 import { resolvePackages, liveFetchPackage } from '../src/shared/packageRegistryQuery.js';
+import { queryOsvBatch, detailPatchFromOsv } from '../src/shared/osvFastPath.js';
 
 
 // Vercel serverless configuration: disable automatic body parser so we can read the raw stream for signature verification
@@ -1052,7 +1053,27 @@ async function handleComplianceGate(req, res) {
   // resolver returned `fallback`.
   const cleanNames = dependencies
     .filter(d => typeof d === 'string' && d.trim())
-    .map(d => d.trim().toLowerCase());
+    .map(d => {
+      const trimmed = d.trim().toLowerCase();
+      // For OSV/resolver lookups, strip an inline @version suffix
+      // (`lodash@4.17.20` → `lodash`). The version is still used downstream
+      // for pattern detection (rowForPatterns).
+      if (trimmed.startsWith('@')) {
+        const atIdx = trimmed.indexOf('@', 1);
+        return atIdx === -1 ? trimmed : trimmed.substring(0, atIdx);
+      }
+      const atIdx = trimmed.indexOf('@');
+      return atIdx === -1 ? trimmed : trimmed.substring(0, atIdx);
+    });
+
+  // Phase 3: OSV fast-path. One bulk query (api.osv.dev) covers the
+  // worst cold-path failure mode: a brand-new malicious package with
+  // no GitHub repo would otherwise return the resolver's hardcoded
+  // fallback. OSV gives us a sub-200ms BLOCK signal on known
+  // advisories. Failure / timeout → empty Map, gate degrades to
+  // Phase 2 behavior gracefully.
+  const osvMap = await queryOsvBatch(cleanNames);
+
   const resolverMap = await resolvePackages(sb, cleanNames, {
     githubToken: process.env.GITHUB_TOKEN || '',
   });
@@ -1099,7 +1120,20 @@ async function handleComplianceGate(req, res) {
         anyFallbackUsed = true;
       }
     }
-    const details = resolved;
+    // Phase 3: OSV fast-path overlay. If OSV found published advisories
+    // for this package, mark it critical (so policy BLOCKs even when
+    // resolver returned fallback) and surface the IDs to the pattern row
+    // below. OSV does NOT affect the cache field: it's an enrichment
+    // layer, not a verdict source for license/score/freshness.
+    const osvSummary = osvMap.get(nameLower);
+    const osvPatch = detailPatchFromOsv(osvSummary);
+    const details = osvPatch
+      ? {
+          ...resolved,
+          critical: resolved.critical || osvPatch.critical,
+          description: resolved.description || osvPatch.osvSummary,
+        }
+      : resolved;
 
     overallScoreSum += details.score;
     ratedCount++;
@@ -1162,11 +1196,18 @@ async function handleComplianceGate(req, res) {
       pkgNameForPatterns = name.substring(0, idx);
     }
 
+    // Phase 3: OSV-found IDs feed the pattern detector. The
+    // `known-vulnerability-exposure` pattern fires on row.ids containing
+    // CVE-/GHSA-/SOYCE- prefixes (see otsPatterns.js:detectOtsPatternsForRow).
+    // OSV gives us real advisory IDs; we fall back to the demo 'CVE-MOCK'
+    // only when there's no OSV signal AND the package is critical via
+    // some other path (e.g. DEPS_REGISTRY fixture).
+    const osvIds = osvSummary && Array.isArray(osvSummary.ids) ? osvSummary.ids : [];
     const rowForPatterns = {
       package: pkgNameForPatterns,
       version: pkgVersionForPatterns || (pkgNameForPatterns.toLowerCase() === 'axios' ? '1.14.1' : '1.0.0'),
       severity: isCritical ? 'critical' : (details.score < 6 ? 'high' : 'medium'),
-      ids: isCritical ? ['CVE-MOCK'] : [],
+      ids: osvIds.length > 0 ? osvIds : (isCritical ? ['CVE-MOCK'] : []),
       hasInstallScript: pkgNameForPatterns.toLowerCase() === 'axios' || pkgNameForPatterns.toLowerCase() === 'malicious-pkg',
       verified: details.verdict !== 'graveyard' && details.verdict !== 'risky' ? true : 'unverified',
       license: details.license,
