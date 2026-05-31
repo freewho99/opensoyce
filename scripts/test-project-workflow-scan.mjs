@@ -12,6 +12,7 @@
 import {
   scanRepoWorkflows,
   __setHttpClientForTests,
+  buildContentsPath,
 } from '../src/shared/repoWorkflowScan.js';
 
 let passed = 0;
@@ -282,6 +283,29 @@ test('missing owner or repo returns scanned: false + error: INVALID_REPO without
   eq(r2.scanned, false, 'r2 scanned false');
   eq(r2.error, 'INVALID_REPO', 'r2 error');
   eq(httpCalled, false, 'http never called');
+});
+
+test('buildContentsPath: segment-wise encoding preserves `/` separators (GitHub contents API contract)', () => {
+  // encodeURIComponent('.github/workflows/ci.yml') would emit
+  // '.github%2Fworkflows%2Fci.yml' which the contents API rejects as
+  // path-not-found. The fix is to encode segments, not the whole path.
+  eq(
+    buildContentsPath('.github/workflows/ci.yml'),
+    '.github/workflows/ci.yml',
+    'plain ASCII path round-trips identically'
+  );
+  eq(
+    buildContentsPath('.github/workflows/build & deploy.yml'),
+    '.github/workflows/build%20%26%20deploy.yml',
+    'unsafe chars in a segment are percent-encoded; slashes are not'
+  );
+  eq(buildContentsPath(''), '', 'empty path → empty');
+  // Defensive: encodeURIComponent does NOT encode `.` so a leading dot
+  // segment stays literal — this is what the GitHub API expects.
+  ok(
+    buildContentsPath('.github/workflows/release.yaml').startsWith('.github/'),
+    'leading-dot directory preserved'
+  );
 });
 
 test('patterns from production scan never carry demo-fixture firings', async () => {

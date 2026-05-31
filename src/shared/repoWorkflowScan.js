@@ -108,7 +108,13 @@ async function defaultFetchWorkflowFile(owner, repo, path, headers) {
   // `Accept: application/vnd.github.raw` returns the file body directly,
   // bypassing the base64-wrapped contents JSON. Works for both public and
   // private repos with the same auth headers.
-  const url = `${GH}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+  //
+  // Encoding: encode each path segment but preserve the `/` separators.
+  // `encodeURIComponent('.github/workflows/ci.yml')` would emit
+  // `.github%2Fworkflows%2Fci.yml`, which the GitHub contents API rejects
+  // as path-not-found. Segment-wise encoding is the contract.
+  const encodedPath = buildContentsPath(path);
+  const url = `${GH}/repos/${owner}/${repo}/contents/${encodedPath}`;
   const rawHeaders = { ...headers, Accept: 'application/vnd.github.raw' };
   let res;
   try {
@@ -118,6 +124,17 @@ async function defaultFetchWorkflowFile(owner, repo, path, headers) {
   }
   if (!res.ok) throw structured('UPSTREAM_ERROR');
   return res.text();
+}
+
+/**
+ * Encode a path for the GitHub contents API. Encodes each `/`-separated
+ * segment with `encodeURIComponent`, then rejoins with literal `/`.
+ * Exposed for test coverage — the URL builder is the only thing we can
+ * lock without making a live HTTP call.
+ */
+export function buildContentsPath(path) {
+  if (typeof path !== 'string' || path.length === 0) return '';
+  return path.split('/').map(encodeURIComponent).join('/');
 }
 
 function structured(code) {
