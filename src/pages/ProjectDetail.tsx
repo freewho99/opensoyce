@@ -316,6 +316,9 @@ export default function ProjectDetail() {
                         {statusLabel === 'UPSTREAM ERROR' && (
                           <>Could not reach GitHub to fetch workflows — patterns shown below may be incomplete.</>
                         )}
+                        {statusLabel === 'UNKNOWN' && (
+                          <>Workflow scan status is unavailable.</>
+                        )}
                       </p>
                       <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-soy-bottle/50">
                         Source: .github/workflows/*.yml
