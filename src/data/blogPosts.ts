@@ -17,6 +17,75 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+        slug: 'real-data-kills-the-zombie-code',
+        primaryProductAction: 'scanner',
+        title: "Real Data Kills the Zombie Code.",
+        subtitle: "Stillness isn't safety. It's just a dependency that hasn't had a reason to move yet.",
+        category: "SECURITY",
+        emoji: "🧟",
+        readTime: '7 min',
+        date: 'MAY 31, 2026',
+        featured: false,
+        heroImage: '/blog/zombie-code-hero.png',
+        metaDescription: "Lockfiles are photographs of a moment that is already gone. Live registry and OSV signals find the dead dependencies still haunting your build and gate them out before production.",
+        tags: ['zombie-dependencies', 'osv', 'live-query', 'supply-chain', 'ci-cd', 'dependency-health', 'devsecops', 'opensoyce'],
+        content: `They were never really gone. They just stopped moving.
+
+        Every codebase has its dead. You can feel them if you go looking — a package pinned three years ago, last released before a maintainer quietly disappeared, still imported in two files nobody opens anymore. The build is green. The tests pass. The dashboard glows a reassuring shade of fine. That is the first lie a zombie tells you: stillness looks an awful lot like safety.
+
+        But a zombie isn't gone. It is just waiting. And the thing about waiting is that it costs you nothing — right up until the night it costs you everything.
+
+        ## THE HOUSE ALWAYS LOOKS FINE IN THE DAYLIGHT
+
+        Think about how a dependency actually enters your project. Someone needed a thing. They found a library that did the thing. They installed it, it worked, the PR merged, everyone moved on. That is not negligence — that is just Tuesday. Multiply it by every engineer who has ever touched the repo, across every deadline, and you do not have a dependency list anymore. You have a neighborhood. And neighborhoods have histories nobody fully remembers.
+
+        Most of those houses are occupied. Lights on, maintainers home, releases shipping, issues getting answered. But somewhere in there are the ones where the lights went out and nobody noticed, because the porch light is still on a timer and the lawn somehow still gets mowed. From the street, at a glance, in the daylight of a passing CI run — it all looks fine. That is the trap. Your tooling, by default, only ever sees the neighborhood at a glance, from the street. It never knocks on the doors.
+
+        ## THE SNAPSHOT IS A PHOTOGRAPH OF A CORPSE
+
+        Here is the quiet horror of the lockfile. It tells you what was true once. It is a photograph taken at a single instant — confident, precise, exhaustively detailed, and increasingly a lie with every day that passes after the shutter clicks.
+
+        The version you froze last spring had no known vulnerabilities last spring. The maintainer was active last spring. The download counts were climbing last spring. Every fact in that lockfile was accurate at the moment it was recorded, and a snapshot has no mechanism — none — to learn that any of it has since stopped being true.
+
+        A snapshot can't tell you the lights went out months ago. It can't hear the advisory that dropped on a Tuesday afternoon while you were in standup. It can't notice that the repository went read-only, or feel the slow tidal drift as the rest of the ecosystem packed up and moved to the successor library and left this one alone in the dark. A snapshot doesn't know anything has changed, because a snapshot doesn't know anything at all. It only remembers. And memory, in security, is how the dead get in. Not by breaking down the door — by being let inside once, long ago, for a perfectly good reason, and then never being asked to leave.
+
+        ## HOW TO RECOGNIZE THE DEAD
+
+        You can name them, if you know the signs. The trouble is that no single sign is damning on its own, and the zombies count on exactly that. They hide in the gap between "technically still works" and "actually still alive."
+
+        There is the package with no release in eighteen months while the rest of the ecosystem shipped, patched, and iterated past it. There is the advisory whose affected-version range includes the exact version you are shipping — not a version like yours, yours. There is the maintainer who went quiet, issues piling up unanswered, the human who used to be the immune system of this project simply gone. There is the download curve bending downward while a competitor's bends up. And worst of all, there is the transitive dependency three levels down that nobody chose, nobody reviews, and nobody can quite explain. None of these show up in a green checkmark. Every one of them shows up in live data.
+
+        ## REAL DATA IS THE FLASHLIGHT
+
+        This is the turn in the story, the moment the protagonist stops trusting the house and starts trusting their own eyes. The only thing that kills a zombie is seeing it clearly — and you cannot see a moving threat with a still picture.
+
+        Live registry signal, pulled fresh. Real-time OSV queries run against the version you are actually shipping in this build, on this commit, today — not the version you wrote down in a file and trusted to stay honest. Maintenance activity you can watch in motion: last commit, last release, issue response time, the slow vital signs that tell you whether anyone is still home. The difference between "this was safe when I pinned it" and "this is safe as of this exact moment" is the difference between a photograph and a pulse.
+
+        [img:/blog/zombie-code-architecture.png:SNAPSHOT -> LIVE QUERY -> OSV OVERLAY -> GATE DECISION. From a photograph to a pulse — verifying repository vitality on real-time data.]
+
+        Real data doesn't remember your dependency tree. It interrogates it. Every build. On the version that is really in your hands. It walks the neighborhood at night and knocks on every door, and when nobody answers at the house with the porch light on a timer, it does not shrug and write "looks fine." It writes the truth: nobody has been home here for a very long time.
+
+        ## THE GATE IS WHERE YOU MAKE YOUR STAND
+
+        Seeing the monster is only half the job. The other half is not letting it through. The pattern is almost embarrassingly simple once you say it out loud. Snapshot the tree, so you know exactly what is in the house. Query it live, so you know what is true about it right now. Cross-reference every version against the advisory data, so you know which residents have turned. Then — and this is the part most pipelines skip — decide, and mean it.
+
+        A zombie dependency reaches the gate, and the gate says no. Right there in CI. Before the merge. Before the deploy. Before the thing ever gets to walk into production wearing your build's face and your team's name. The verdict is not a warning buried on page four of a report nobody reads. It is a stop. A real one. The kind that blocks.
+
+        [img:/blog/zombie-code-evidence.png:SECURITY VERDICT — PACKAGE: event-stream, WARN. The gate read the policy and did exactly what it was told.]
+
+        That is the whole defense, and the beautiful thing is that it is not clever. It does not require you to predict the future or out-think an attacker. It just requires you to keep looking — to refuse the comforting fiction of the snapshot and insist, every single build, on the living truth. The dead only win when nobody checks. The gate is just the institutionalized refusal to stop checking.
+
+        ## THE QUIET ONES ARE ALWAYS LYING
+
+        The scariest dependency in your tree is not the one throwing errors. Errors are honest — they are a thing screaming for help. The scariest dependency is the quiet one. The one that has not released in two years and has not broken anything and has not made a single sound, sitting perfectly still in the corner of your lockfile, green checkmark glowing softly above it like a porch light on a timer.
+
+        Stillness is not safety. Stillness is just a zombie that has not had a reason to move yet. Treat every dependency like it is already lying to you, because the quiet ones always are — and the only way to catch a lie that good is to stop trusting the photograph and turn on the light. Snapshot it. Query it live. Check it against what is true today. And when something shambles toward your build out of the dark, put a gate in the doorway and make it stop.
+
+        Real data doesn't blink. Real data doesn't remember a version fondly. Real data never stops looking. And that — not luck, not hope, not a green checkmark — is what kills the zombie code.
+
+        Stay brilliant.`,
+  },
+  {
         heroImage: "/blog/deps-registry-phase3-real-signal-hero.png",
         slug: "deps-registry-phase3-real-signal",
         title: "THE REGISTRY DON'T LIE.",
