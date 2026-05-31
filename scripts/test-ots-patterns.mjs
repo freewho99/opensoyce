@@ -5,6 +5,7 @@ import {
   otsPatternVerdict,
   OTS_PATTERN_DEFINITIONS,
   OTS_PATTERN_PACKS,
+  workflowOrigin,
 } from '../src/shared/otsPatterns.js';
 
 let passed = 0;
@@ -253,6 +254,125 @@ test('GitHub Actions detector coverage: dangerous-release-permission fires + WAR
   // Evidence surfaces the write scopes
   const ev = p.evidence.find((e) => e.label === 'Write Scopes');
   ok(ev && ev.value.includes('contents'), 'evidence lists scopes');
+});
+
+// ---------------------------------------------------------------------------
+// PR #17 — Workflow origin evidence
+// ---------------------------------------------------------------------------
+
+test('workflowOrigin: step-level row → workflowPath#jobId.steps.N', () => {
+  const origin = workflowOrigin({
+    workflowPath: '.github/workflows/ci.yml',
+    jobId: 'test',
+    stepIndex: 2,
+  });
+  eq(origin, '.github/workflows/ci.yml#test.steps.2', 'step-level origin');
+});
+
+test('workflowOrigin: job-level row (no stepIndex) → workflowPath#jobId', () => {
+  const origin = workflowOrigin({
+    workflowPath: '.github/workflows/release.yml',
+    jobId: 'publish',
+  });
+  eq(origin, '.github/workflows/release.yml#publish', 'job-level origin');
+});
+
+test('workflowOrigin: workflow-level row (no jobId) → workflowPath only', () => {
+  const origin = workflowOrigin({ workflowPath: '.github/workflows/audit.yml' });
+  eq(origin, '.github/workflows/audit.yml', 'workflow-level origin');
+});
+
+test('workflowOrigin: stepIndex 0 is preserved (no falsy-skip)', () => {
+  const origin = workflowOrigin({
+    workflowPath: '.github/workflows/ci.yml',
+    jobId: 'test',
+    stepIndex: 0,
+  });
+  eq(origin, '.github/workflows/ci.yml#test.steps.0', 'index 0 not dropped');
+});
+
+test('workflowOrigin: missing workflowPath falls back to row.package', () => {
+  eq(workflowOrigin({ package: '.github/workflows/x.yml#a.steps.1' }), '.github/workflows/x.yml#a.steps.1', 'package fallback');
+  eq(workflowOrigin({}), 'workflow.yml', 'final fallback');
+  eq(workflowOrigin(null), 'workflow.yml', 'null-safe');
+});
+
+test('pull-request-target-abuse evidence: includes Source + step-level Origin', () => {
+  const patterns = detectOtsPatternsForRow({
+    package: '.github/workflows/bad.yml#test.steps.0',
+    isWorkflowAction: true,
+    pullRequestTargetAbuse: true,
+    workflowPath: '.github/workflows/bad.yml',
+    jobId: 'test',
+    stepIndex: 0,
+    evidenceText: 'actions/checkout@v4 with ref: ${{ github.event.pull_request.head.sha }}',
+  }, {});
+  const p = patterns.find((x) => x.patternId === 'pull-request-target-abuse');
+  ok(p, 'pattern fires');
+  const source = p.evidence.find((e) => e.label === 'Source');
+  const origin = p.evidence.find((e) => e.label === 'Origin');
+  ok(source, 'Source row present');
+  eq(source.value, 'GitHub workflow', 'Source value');
+  ok(origin, 'Origin row present');
+  eq(origin.value, '.github/workflows/bad.yml#test.steps.0', 'step-level origin');
+});
+
+test('untrusted-workflow-input evidence: includes Source + step-level Origin', () => {
+  const patterns = detectOtsPatternsForRow({
+    package: '.github/workflows/triage.yml#issue.steps.1',
+    isWorkflowAction: true,
+    untrustedWorkflowInput: true,
+    workflowPath: '.github/workflows/triage.yml',
+    jobId: 'issue',
+    stepIndex: 1,
+    evidenceText: 'echo ${{ github.event.issue.title }}',
+  }, {});
+  const p = patterns.find((x) => x.patternId === 'untrusted-workflow-input');
+  ok(p, 'pattern fires');
+  const source = p.evidence.find((e) => e.label === 'Source');
+  const origin = p.evidence.find((e) => e.label === 'Origin');
+  ok(source && source.value === 'GitHub workflow', 'Source = GitHub workflow');
+  ok(origin && origin.value === '.github/workflows/triage.yml#issue.steps.1', 'step-level origin');
+});
+
+test('dangerous-release-permission evidence: includes Source + job-level Origin (no stepIndex)', () => {
+  // Permissions are declared per-job, not per-step — the parser emits
+  // dangerous-release rows without a stepIndex. Origin must reflect that
+  // and NOT invent a fake .steps.0.
+  const patterns = detectOtsPatternsForRow({
+    package: '.github/workflows/release.yml#publish',
+    isWorkflowAction: true,
+    dangerousReleasePermission: true,
+    workflowPath: '.github/workflows/release.yml',
+    jobId: 'publish',
+    writeScopes: ['contents', 'packages'],
+  }, {});
+  const p = patterns.find((x) => x.patternId === 'dangerous-release-permission');
+  ok(p, 'pattern fires');
+  const source = p.evidence.find((e) => e.label === 'Source');
+  const origin = p.evidence.find((e) => e.label === 'Origin');
+  ok(source && source.value === 'GitHub workflow', 'Source = GitHub workflow');
+  ok(origin && origin.value === '.github/workflows/release.yml#publish', 'job-level origin (no .steps.X)');
+});
+
+test('non-workflow (npm/package row) patterns do NOT carry Source: GitHub workflow', () => {
+  // Honesty invariant: only workflow-originated patterns claim the
+  // GitHub workflow source. A demo package row firing
+  // install-time-remote-execution / hidden-dependency-injection must
+  // not pretend the signal came from a workflow file.
+  const patterns = detectOtsPatternsForRow({
+    package: 'malicious-pkg',
+    version: '1.0.0',
+    hasInstallScript: true,
+  }, { allowDemoFixtures: true });
+  ok(patterns.length > 0, 'demo package row emits patterns');
+  for (const p of patterns) {
+    const source = (p.evidence || []).find((e) => e.label === 'Source');
+    ok(
+      !source || source.value !== 'GitHub workflow',
+      `pattern ${p.patternId} must not claim GitHub workflow source on a non-workflow row`
+    );
+  }
 });
 
 test('production mode (allowDemoFixtures NOT set) does not fire on demo names alone', () => {

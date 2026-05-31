@@ -272,6 +272,58 @@ export default function ProjectDetail() {
                   </div>
                 )}
 
+                {/* Workflow scan summary — surfaces the result of the on-demand
+                    .github/workflows/*.yml scan (PR #16). Renders only when the
+                    analyze API attached a workflowOtsScan; cached/mock projects
+                    without live data render nothing here, which is correct. */}
+                {project.workflowOtsScan && (() => {
+                  const ws = project.workflowOtsScan;
+                  const statusLabel = ws.scanned && !ws.error ? 'SCANNED'
+                    : ws.scanned && ws.error === 'NO_WORKFLOWS_DIR' ? 'NO WORKFLOWS'
+                    : ws.error === 'RATE_LIMIT_HIT' ? 'RATE LIMITED'
+                    : ws.error === 'UPSTREAM_ERROR' ? 'UPSTREAM ERROR'
+                    : 'UNKNOWN';
+                  const statusBg = statusLabel === 'SCANNED' ? 'bg-emerald-500'
+                    : statusLabel === 'NO WORKFLOWS' ? 'bg-soy-label'
+                    : 'bg-amber-500';
+                  const workflowCount = Array.isArray(ws.workflows) ? ws.workflows.length : 0;
+                  const patternCount = Array.isArray(ws.patterns) ? ws.patterns.length : 0;
+                  return (
+                    <div className="border-4 border-black bg-white p-6 mb-8 shadow-[6px_6px_0px_#000]">
+                      <div className="flex items-center gap-3 mb-3 pb-3 border-b-2 border-black">
+                        <span className={`text-[10px] font-black uppercase tracking-[0.3em] px-3 py-1 border-2 border-black ${statusBg} text-black`}>
+                          {statusLabel}
+                        </span>
+                        <h4 className="text-sm font-black uppercase italic tracking-tight">
+                          Workflow Scan
+                        </h4>
+                      </div>
+                      <p className="text-sm font-bold text-soy-bottle/80 leading-relaxed">
+                        {statusLabel === 'SCANNED' && (
+                          <>
+                            {workflowCount} workflow file{workflowCount === 1 ? '' : 's'} scanned ·{' '}
+                            <span className={patternCount > 0 ? 'text-soy-red' : ''}>
+                              {patternCount} workflow risk pattern{patternCount === 1 ? '' : 's'} found
+                            </span>
+                          </>
+                        )}
+                        {statusLabel === 'NO WORKFLOWS' && (
+                          <>No <code className="font-mono text-xs">.github/workflows/</code> directory in this repository.</>
+                        )}
+                        {statusLabel === 'RATE LIMITED' && (
+                          <>GitHub rate limit hit during workflow scan — patterns shown below may be incomplete.</>
+                        )}
+                        {statusLabel === 'UPSTREAM ERROR' && (
+                          <>Could not reach GitHub to fetch workflows — patterns shown below may be incomplete.</>
+                        )}
+                      </p>
+                      <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-soy-bottle/50">
+                        Source: .github/workflows/*.yml
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 {/* OTS Detected Risk Patterns */}
                 {detectedPatterns.length > 0 && (
                   <div className="border-4 border-black bg-white p-8 mb-12 shadow-[8px_8px_0px_#000]">
