@@ -558,6 +558,40 @@ export function getOtsIncident(id) {
 }
 
 /**
+ * Build a precise origin string for a GitHub workflow row.
+ *
+ *   step-level signal (jobId + stepIndex set):
+ *     .github/workflows/ci.yml#test.steps.2
+ *
+ *   job-level signal (jobId only):
+ *     .github/workflows/release.yml#publish
+ *
+ *   workflow-level signal (no jobId):
+ *     .github/workflows/ci.yml
+ *
+ *   missing workflowPath (defensive fallback):
+ *     row.package, or 'workflow.yml'
+ *
+ * `pull-request-target-abuse` and `untrusted-workflow-input` rows from
+ * the parser carry both jobId and stepIndex, so they render at step
+ * granularity. `dangerous-release-permission` rows carry jobId only, so
+ * they render at job granularity. That asymmetry is intentional —
+ * permissions are declared per-job, not per-step.
+ */
+export function workflowOrigin(row) {
+  if (!row || typeof row !== 'object' || !row.workflowPath) {
+    return (row && row.package) ? String(row.package) : 'workflow.yml';
+  }
+  if (row.jobId && row.stepIndex !== undefined && row.stepIndex !== null) {
+    return `${row.workflowPath}#${row.jobId}.steps.${row.stepIndex}`;
+  }
+  if (row.jobId) {
+    return `${row.workflowPath}#${row.jobId}`;
+  }
+  return row.workflowPath;
+}
+
+/**
  * Quantify/detect OTS patterns matching a scanned dependency package row.
  * Maps signals (vulnerability fields, threat fields, capability profiles,
  * installation scripts) to pattern rules.
@@ -867,7 +901,8 @@ export function detectOtsPatternsForRow(row, context = {}) {
       policyImpact: 'block',
       confidence: 0.9,
       evidence: [
-        { label: 'Workflow', value: row.workflowPath || row.package || 'workflow.yml' },
+        { label: 'Source', value: 'GitHub workflow' },
+        { label: 'Origin', value: workflowOrigin(row) },
         { label: 'Trigger', value: 'pull_request_target' },
         { label: 'Risk', value: 'Workflow runs fork-controlled code under the privileged pull_request_target token' },
         ...(row.evidenceText ? [{ label: 'Offending Step', value: String(row.evidenceText).slice(0, 200) }] : []),
@@ -886,7 +921,8 @@ export function detectOtsPatternsForRow(row, context = {}) {
       policyImpact: 'block',
       confidence: 0.86,
       evidence: [
-        { label: 'Workflow', value: row.workflowPath || row.package || 'workflow.yml' },
+        { label: 'Source', value: 'GitHub workflow' },
+        { label: 'Origin', value: workflowOrigin(row) },
         { label: 'Input Source', value: 'github.event / PR / issue context interpolated into run script' },
         ...(row.evidenceText ? [{ label: 'Offending Expression', value: String(row.evidenceText).slice(0, 200) }] : []),
       ]
@@ -905,7 +941,8 @@ export function detectOtsPatternsForRow(row, context = {}) {
       policyImpact: 'warn',
       confidence: 0.84,
       evidence: [
-        { label: 'Workflow', value: row.workflowPath || row.package || 'workflow.yml' },
+        { label: 'Source', value: 'GitHub workflow' },
+        { label: 'Origin', value: workflowOrigin(row) },
         { label: 'Write Scopes', value: Array.isArray(row.writeScopes) && row.writeScopes.length > 0 ? row.writeScopes.join(', ') : 'write-level scope detected' },
       ]
     });
