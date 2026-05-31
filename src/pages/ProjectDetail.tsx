@@ -78,6 +78,7 @@ export default function ProjectDetail() {
           migration: data.migration ?? null,
           extensionExploitRisk: data.extensionExploitRisk ?? null,
           trustPosture: data.trustPosture ?? null,
+          workflowOtsScan: data.workflowOtsScan ?? null,
         });
       } catch (err: any) {
         setError(err.message);
@@ -109,9 +110,17 @@ export default function ProjectDetail() {
   // true` to fire those synthetic paths; we opt in explicitly here so
   // the marketing demo keeps working. Production gate paths never set
   // this flag.
-  const detectedPatterns = rowForPatterns
+  const demoPatterns = rowForPatterns
     ? detectOtsPatternsForRow(rowForPatterns, { allowDemoFixtures: true })
     : [];
+
+  // On-demand workflow scan: patterns from .github/workflows/*.yml in the
+  // live repo, threaded through the analyze API. Real-data patterns
+  // (allowDemoFixtures: false enforced server-side in
+  // detectGithubWorkflowOtsPatterns), so the "FROM WORKFLOW" cards on
+  // this page reflect actual repository state.
+  const workflowPatterns: Array<any> = project?.workflowOtsScan?.patterns ?? [];
+  const detectedPatterns = [...demoPatterns, ...workflowPatterns];
 
   const getHistory = () => {
     if (!project) return [];
@@ -281,10 +290,10 @@ export default function ProjectDetail() {
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {detectedPatterns.map((pat) => {
+                      {detectedPatterns.map((pat, idx) => {
                         const def = getOtsPatternDefinition(pat.patternId);
                         if (!def) return null;
-                        
+
                         const severityClass: Record<string, string> = {
                           critical: 'bg-soy-red text-white border-black',
                           high: 'bg-orange-500 text-white border-black',
@@ -292,9 +301,9 @@ export default function ProjectDetail() {
                           low: 'bg-blue-400 text-white border-black',
                           info: 'bg-soy-label text-black border-black',
                         };
-                        
+
                         return (
-                          <div key={pat.patternId} className="border-2 border-black p-5 bg-soy-label/40 flex flex-col justify-between shadow-[4px_4px_0px_#000]">
+                          <div key={`${pat.patternId}-${idx}`} className="border-2 border-black p-5 bg-soy-label/40 flex flex-col justify-between shadow-[4px_4px_0px_#000]">
                             <div>
                               <div className="flex items-center justify-between gap-2 mb-2">
                                 <span className={`text-[9px] font-black uppercase border px-2 py-0.5 ${severityClass[pat.severity] || ''}`}>

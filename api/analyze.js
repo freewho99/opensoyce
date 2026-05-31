@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 
   const headers = githubHeaders(process.env.GITHUB_TOKEN);
   try {
-    const data = await analyzeRepo(owner, repo, headers);
+    const data = await analyzeRepo(owner, repo, headers, { includeWorkflowPatterns: true });
     if (!data) return res.status(404).json({ error: 'REPO_NOT_FOUND' });
     // Opt-in signing via `?signed=1` (same pattern as /api/scan). Default
     // unsigned for backward compat.
