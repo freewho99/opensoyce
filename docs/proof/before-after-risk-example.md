@@ -37,38 +37,113 @@ The team sees a red badge. The team does not see a decision.
 
 OpenSoyce evaluates the same package as a trust decision under a real policy.
 
-**Detected patterns (target shape):**
+The production gate pipeline (resolver → OSV overlay → pattern detector → policy evaluation) was run against `ua-parser-js@0.7.29` on 2026-05-31 with `allowDemoFixtures: false`. The verbatim output is below. No values were edited. No patterns were synthesized.
 
-- `known-vulnerability-exposure` — OSV advisory match, real GHSA ID surfaced.
-- `install-time-remote-execution` — preinstall script with network behavior.
-- `maintainer-account-compromise-signal` — maintainer signal flagged on the package row.
+### Stage 1 — OSV fast-path (live `api.osv.dev/v1/querybatch`)
 
-**Decision:**
+```text
+duration: 401ms
+summary: {
+  "hasVulns": true,
+  "ids": [
+    "GHSA-394c-5j6w-4xmx",
+    "GHSA-662x-fhqg-9p8v",
+    "GHSA-78cj-fxph-m83p",
+    "GHSA-fhg7-m89q-25r3",
+    "GHSA-pjwm-rvh2-c87w"
+  ],
+  "highestSeverity": "unknown",
+  "critical": false,
+  "summary": "Known vulnerability published in OSV database"
+}
+```
 
-BLOCK.
+Five real GHSA IDs surfaced. `GHSA-pjwm-rvh2-c87w` is the canonical October 2021 supply-chain compromise advisory.
 
-**Evidence shape:**
+### Stage 2 — Resolver (live npm registry + GitHub)
 
-- Advisory ID from the OSV overlay.
-- Per-match severity from the OSV record (not catalog default).
-- Install-time execution signal from the package row.
-- Maintainer-compromise signal from the package row.
+```text
+duration: 1139ms
+resolved: {
+  "score": 75.8,
+  "license": "AGPL-3.0",
+  "verdict": "forkable",
+  "status": "FRESH",
+  "warn": null,
+  "description": "UAParser.js - The Essential Web Development Tool ...",
+  "critical": false,
+  "source": "live"
+}
+```
 
-> TODO: paste exact production gate output for `ua-parser-js@0.7.29` from a live `/api/gate` call. Replace this block with the verbatim JSON response.
+License `AGPL-3.0` reflects the 2023 relicensing by the maintainer (unrelated to the 2021 compromise). The resolver did not return a maintainer-compromise signal or an install-script signal. The production resolver row does not carry those fields today.
 
-> TODO: paste exact OSV advisory IDs surfaced. Confirm `GHSA-pjwm-rvh2-c87w` is the active ID and capture any related entries returned by `api.osv.dev/v1/querybatch`.
+### Stage 3 — Production pattern row (production shape)
 
-> TODO: paste screenshot of the Project Detail "Detected Risk Patterns" panel with the three patterns above visible and the evidence rows expanded.
+```text
+rowForPatterns: {
+  "package": "ua-parser-js",
+  "version": "0.7.29",
+  "severity": "medium",
+  "ids": [
+    "GHSA-394c-5j6w-4xmx",
+    "GHSA-662x-fhqg-9p8v",
+    "GHSA-78cj-fxph-m83p",
+    "GHSA-fhg7-m89q-25r3",
+    "GHSA-pjwm-rvh2-c87w"
+  ],
+  "verified": true,
+  "license": "AGPL-3.0"
+}
+```
 
-> TODO: paste screenshot of `/proof/ots-replays` rendering the `ua-parser-js` replay row, since this incident is one of the six cited replays in the proof page.
+### Stage 4 — Pattern detector
+
+```text
+patternCount: 1
+- known-vulnerability-exposure [severity=medium policy=block confidence=0.95]
+    Signal Source: GHSA-394c-5j6w-4xmx, GHSA-662x-fhqg-9p8v,
+                   GHSA-78cj-fxph-m83p, GHSA-fhg7-m89q-25r3,
+                   GHSA-pjwm-rvh2-c87w
+    Severity Tier: Medium
+```
+
+### Stage 5 — Policy decision (default policy)
+
+```text
+policy: warn=[graveyard, risky, watchlist], block=[]
+action: ALLOW
+reason: (none)
+```
+
+## What Production Actually Fired vs. The Target Shape
+
+The target shape in the original draft of this document expected three patterns: `known-vulnerability-exposure`, `install-time-remote-execution`, `maintainer-account-compromise-signal`.
+
+Production fired one: `known-vulnerability-exposure`.
+
+This is the doctrine in action. Two specific gaps are now visible:
+
+1. **OSV severity normalization returned `unknown`.** Five real GHSA advisories were retrieved, but the severity-normalization pass in `osvFastPath.js` did not classify any of them. The pattern row's severity fell back to the score-derived heuristic (`medium`), and the OSV record's `critical` field stayed `false`. The advisories themselves are real and surfaced; the severity classification on top of them is the open work.
+2. **Production gate rows do not carry maintainer-compromise or install-script signals.** Those signals exist in the detector and fire correctly on the `/proof/ots-replays` live-detector path (PR #8), because that path sets `row.maintainerCompromise` directly. The production gate's resolver pipeline does not yet thread an equivalent field. The pattern was not suppressed. The input was not present.
+
+## Decision
+
+Default policy: ALLOW.
+
+Five real CVE/GHSA advisories surfaced, including the canonical maintainer-account-compromise advisory. The decision is still ALLOW because the policy is reading the score-derived severity, not the OSV-derived severity, and verdict `forkable` is not warned.
+
+This is a real, named gap. The product is not pretending it blocked the package. The product is showing the buyer exactly where the next tightening lives.
+
+A tighter policy that blocks any verified npm package carrying one or more open OSV advisories — independent of the normalized severity — would flip this same input to BLOCK without any change to the detector. That policy already composes from the existing primitives.
 
 ## Trust Decision
 
 This is not only "vulnerable."
 
-This is "not allowed to enter the software supply chain without remediation or exception."
+This is "here is a package, here is what we found about it, here is which patterns fired, here is what our policy did about it, and here is where the next decision authority gets added."
 
-The difference is decision authority. The same advisory data, run through a real trust policy, produces a different output: an action, with evidence, that a human or a CI step can act on.
+Most scanners stop at the first line. OpenSoyce ships the rest.
 
 ## Buyer Translation
 
@@ -82,14 +157,15 @@ That is the category change.
 
 ## Honest Caveats
 
-- The exact gate output above is a target shape, not a paste. The verbatim response will replace the TODO blocks before this document is treated as final proof. The doctrine of this product is that proof gets pasted, not described.
-- `maintainer-account-compromise-signal` fires on `row.maintainerCompromise`. The package row producer that sets that signal for `ua-parser-js` historically is the live-detector replay in `/proof/ots-replays`. The production gate path will surface the same signal only when the upstream resolver / OSV overlay populates the equivalent field for the queried version. Where that signal does not yet thread through the production gate, the proof will say so rather than claim it.
-- `install-time-remote-execution` is the critical-tier pattern. `install-time-execution` is the medium-tier sibling. Both exist in the catalog (PR #7). The verbatim gate output will resolve which one fires for the queried version.
+- The verbatim gate output above was captured on 2026-05-31 via a one-off smoke script that calls the same shared modules as `api/exceptions.js` (`queryOsvBatch`, `resolvePackages`, `detailPatchFromOsv`, `detectOtsPatternsForRow`) with `allowDemoFixtures: false`. The production HTTP path produces the same data structure; the wrapper differs only in JSON serialization and auth headers.
+- `maintainer-account-compromise-signal` did not fire because the production gate row does not set `row.maintainerCompromise`. The `/proof/ots-replays` page does fire it on this same incident, because the replay path sets that field directly. Threading equivalent signal into the production resolver row is queued, not claimed.
+- `install-time-remote-execution` did not fire because the production gate row does not set `row.hasInstallScript` for live-fetched packages. Both `install-time-remote-execution` (critical) and `install-time-execution` (medium) remain in the catalog. Adding install-script analysis to the live-fetch path is queued, not claimed.
+- Screenshots from the live deployment are still to come and will be added once the production walkthrough PR captures them.
 - Workflow-side patterns (`pull-request-target-abuse`, `untrusted-workflow-input`, `dangerous-release-permission`) are out of scope for this example. They are covered by the workflow companion example, planned next using `tj-actions/changed-files` (`GHSA-mrrh-fwg8-r2c3`).
 
 ## What This Proves
 
-One real package, one real advisory, one real decision, one real evidence trail.
+One real package, five real advisories, one real decision, one real evidence trail, two real gaps named in plain language.
 
 That is the unit of proof.
 
@@ -98,6 +174,8 @@ The rest of the proof package — doctrine, narrative, demo, walkthrough — exi
 ## Status
 
 Spine: shipped.
-Verbatim gate output: pending paste.
+Verbatim gate output: pasted (2026-05-31).
 Screenshots: pending capture.
 Workflow companion (`tj-actions/changed-files`): queued.
+OSV severity normalization tuning: queued.
+Live-fetch row enrichment (install-script, maintainer-compromise): queued.
