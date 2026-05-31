@@ -186,6 +186,13 @@ test('detector emissions match the gate-active label', () => {
     // Detector v2 workflow signals
     { row: { package: 'tj-actions/changed-files', isWorkflowAction: true, tagDrift: true, hasSecretsAccess: true, publisherVerified: false, unpinnedReference: true } },
     { row: { package: 'polyfill.io', publisherIdentityDrift: { drifted: true } } },
+    // GitHub Actions detector coverage (this PR) — the parser at
+    // src/shared/githubWorkflowSignals.js produces rows with these
+    // shapes from real workflow YAML; this synthetic fixture is enough
+    // to fire the new detector branches without depending on YAML.
+    { row: { package: '.github/workflows/bad.yml#test.steps.0', isWorkflowAction: true, pullRequestTargetAbuse: true, workflowPath: '.github/workflows/bad.yml' } },
+    { row: { package: '.github/workflows/bad.yml#test.steps.1', isWorkflowAction: true, untrustedWorkflowInput: true, workflowPath: '.github/workflows/bad.yml', evidenceText: 'echo ${{ github.event.issue.title }}' } },
+    { row: { package: '.github/workflows/release.yml#release', isWorkflowAction: true, dangerousReleasePermission: true, workflowPath: '.github/workflows/release.yml', writeScopes: ['contents'] } },
     // CI-with-secrets context
     { row: { package: 'risky-installer', hasInstallScript: true }, ctx: { ci: true, hasSecrets: true } },
   ];
@@ -201,6 +208,51 @@ test('detector emissions match the gate-active label', () => {
     }
   }
   ok(wrongStatus.length === 0, `mislabeled patterns: ${wrongStatus.join(', ') || '(none)'}`);
+});
+
+test('GitHub Actions detector coverage: pull-request-target-abuse fires + BLOCK', () => {
+  const patterns = detectOtsPatternsForRow({
+    package: '.github/workflows/bad.yml#test.steps.0',
+    isWorkflowAction: true,
+    pullRequestTargetAbuse: true,
+    workflowPath: '.github/workflows/bad.yml',
+    evidenceText: 'actions/checkout@v4 with ref: ${{ github.event.pull_request.head.sha }}',
+  }, {});
+  const p = patterns.find((x) => x.patternId === 'pull-request-target-abuse');
+  ok(p, 'pull-request-target-abuse fires');
+  eq(p.policyImpact, 'block', 'BLOCK');
+  eq(p.severity, 'critical', 'critical');
+  eq(otsPatternVerdict(patterns), 'BLOCK', 'verdict');
+});
+
+test('GitHub Actions detector coverage: untrusted-workflow-input fires + BLOCK', () => {
+  const patterns = detectOtsPatternsForRow({
+    package: '.github/workflows/triage.yml#issue.steps.0',
+    isWorkflowAction: true,
+    untrustedWorkflowInput: true,
+    workflowPath: '.github/workflows/triage.yml',
+    evidenceText: 'echo ${{ github.event.issue.title }}',
+  }, {});
+  const p = patterns.find((x) => x.patternId === 'untrusted-workflow-input');
+  ok(p, 'untrusted-workflow-input fires');
+  eq(p.policyImpact, 'block', 'BLOCK');
+  eq(otsPatternVerdict(patterns), 'BLOCK', 'verdict');
+});
+
+test('GitHub Actions detector coverage: dangerous-release-permission fires + WARN', () => {
+  const patterns = detectOtsPatternsForRow({
+    package: '.github/workflows/release.yml#release',
+    isWorkflowAction: true,
+    dangerousReleasePermission: true,
+    workflowPath: '.github/workflows/release.yml',
+    writeScopes: ['contents', 'packages'],
+  }, {});
+  const p = patterns.find((x) => x.patternId === 'dangerous-release-permission');
+  ok(p, 'dangerous-release-permission fires');
+  eq(p.policyImpact, 'warn', 'WARN (catalog default; not auto-block on its own)');
+  // Evidence surfaces the write scopes
+  const ev = p.evidence.find((e) => e.label === 'Write Scopes');
+  ok(ev && ev.value.includes('contents'), 'evidence lists scopes');
 });
 
 test('production mode (allowDemoFixtures NOT set) does not fire on demo names alone', () => {
