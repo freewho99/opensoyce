@@ -26,6 +26,7 @@ import { computeMaintainerConcentration } from './maintainerConcentration.js';
 import { getVendorSdk } from '../data/vendorSdks.js';
 import { verdictFor, detectExtensionExploitRisk, trustPostureFor } from './verdict.js';
 import { detectMigration, makeFetchForks } from './detectMigration.js';
+import { scanRepoWorkflows } from './repoWorkflowScan.js';
 
 const GH = 'https://api.github.com';
 
@@ -33,9 +34,16 @@ const GH = 'https://api.github.com';
  * @param {string} owner
  * @param {string} repo
  * @param {Record<string,string>} headers
+ * @param {{ includeWorkflowPatterns?: boolean }} [opts] — when
+ *   `includeWorkflowPatterns: true` is set, the analyze pipeline also
+ *   fetches `.github/workflows/*.yml` and runs each file through the OTS
+ *   workflow detector (PR #15 parser → patterns). Result is attached as
+ *   `workflowOtsScan`. Default `false` so transitive-dep repo-health
+ *   calls (runScan) don't multiply GitHub fetches per vulnerability —
+ *   the single-repo dashboard path opts in at the route layer.
  * @returns {Promise<AnalyzeResult|null>}
  */
-export async function analyzeRepo(owner, repo, headers) {
+export async function analyzeRepo(owner, repo, headers, opts = {}) {
   const issuesSince = new Date(Date.now() - 90 * 86400000).toISOString();
   const [
     repoRes,
@@ -184,6 +192,20 @@ export async function analyzeRepo(owner, repo, headers) {
     migration = null;
   }
 
+  // OTS on-demand workflow scan. Opt-in at the call site so transitive-dep
+  // repo-health passes (runScan) don't multiply GitHub fetches per vuln.
+  // The single-repo dashboard route (api/analyze) opts in. Fail-safe by
+  // construction — scanRepoWorkflows never throws — but the try/catch is
+  // defense-in-depth, the gate must never crash on a workflow scan.
+  let workflowOtsScan = null;
+  if (opts && opts.includeWorkflowPatterns) {
+    try {
+      workflowOtsScan = await scanRepoWorkflows(repoData.owner.login, repoData.name, headers);
+    } catch {
+      workflowOtsScan = { scanned: false, workflows: [], patterns: [], error: 'UPSTREAM_ERROR' };
+    }
+  }
+
   return {
     ...scoreResult,
     maintainerConcentration,
@@ -191,6 +213,7 @@ export async function analyzeRepo(owner, repo, headers) {
     migration,
     extensionExploitRisk,
     trustPosture,
+    workflowOtsScan,
     repo: {
       id: repoData.id,
       name: repoData.name,
