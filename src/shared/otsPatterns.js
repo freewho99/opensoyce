@@ -168,7 +168,7 @@ export const OTS_PATTERN_DEFINITIONS = [
     defaultPolicyImpact: 'block',
     recommendedAction: 'Remove git checkout of fork code from workflows triggered by pull_request_target, or strictly enforce manual approval.',
     realWorldExamples: ['Fork PR token leaks on open-source projects'],
-    coverageStatus: 'catalog-only'
+    coverageStatus: 'gate-active'
   },
   {
     id: 'untrusted-workflow-input',
@@ -180,7 +180,7 @@ export const OTS_PATTERN_DEFINITIONS = [
     defaultPolicyImpact: 'block',
     recommendedAction: 'Pass inputs as environment variables in the action step instead of directly interpolating them into bash scripts.',
     realWorldExamples: ['PR Title command injection bugs'],
-    coverageStatus: 'catalog-only'
+    coverageStatus: 'gate-active'
   },
   {
     id: 'third-party-action-with-secrets',
@@ -216,7 +216,7 @@ export const OTS_PATTERN_DEFINITIONS = [
     defaultPolicyImpact: 'warn',
     recommendedAction: 'Restrict workflow permissions globally to read-only, and only enable write permissions on targeted deployment jobs.',
     realWorldExamples: ['Backdooring release binaries during build'],
-    coverageStatus: 'catalog-only'
+    coverageStatus: 'gate-active'
   },
 
   // --- Pack 3: Developer Tool Pattern Pack ---
@@ -853,6 +853,60 @@ export function detectOtsPatternsForRow(row, context = {}) {
       evidence: [
         { label: 'Publisher Domain', value: row.package || 'unnamed-publisher' },
         { label: 'Identity Status', value: row.publisherIdentityDrift.reason || 'Domain owner change or publisher namespace drift' }
+      ]
+    });
+  }
+
+  // 16. Pull Request Target Abuse — workflow uses pull_request_target
+  // trigger AND either checks out / executes fork-controlled PR content.
+  // Signal comes from src/shared/githubWorkflowSignals.js parser.
+  if (row.isWorkflowAction === true && row.pullRequestTargetAbuse === true) {
+    patterns.push({
+      patternId: 'pull-request-target-abuse',
+      severity: 'critical',
+      policyImpact: 'block',
+      confidence: 0.9,
+      evidence: [
+        { label: 'Workflow', value: row.workflowPath || row.package || 'workflow.yml' },
+        { label: 'Trigger', value: 'pull_request_target' },
+        { label: 'Risk', value: 'Workflow runs fork-controlled code under the privileged pull_request_target token' },
+        ...(row.evidenceText ? [{ label: 'Offending Step', value: String(row.evidenceText).slice(0, 200) }] : []),
+      ]
+    });
+  }
+
+  // 17. Untrusted Workflow Input — run step interpolates an
+  // attacker-controllable github.event field directly into the shell.
+  // The fix pattern (env-var indirection) is recognized by the parser
+  // and never produces this row.
+  if (row.isWorkflowAction === true && row.untrustedWorkflowInput === true) {
+    patterns.push({
+      patternId: 'untrusted-workflow-input',
+      severity: 'high',
+      policyImpact: 'block',
+      confidence: 0.86,
+      evidence: [
+        { label: 'Workflow', value: row.workflowPath || row.package || 'workflow.yml' },
+        { label: 'Input Source', value: 'github.event / PR / issue context interpolated into run script' },
+        ...(row.evidenceText ? [{ label: 'Offending Expression', value: String(row.evidenceText).slice(0, 200) }] : []),
+      ]
+    });
+  }
+
+  // 18. Dangerous Release Permission — workflow holds a write-level
+  // scope that lets it ship code/artifacts. Catalog default is WARN
+  // (not BLOCK) because legitimate release workflows need these;
+  // combine with pull-request-target-abuse or untrusted-workflow-input
+  // for the real blocking decision (those patterns already do BLOCK).
+  if (row.isWorkflowAction === true && row.dangerousReleasePermission === true) {
+    patterns.push({
+      patternId: 'dangerous-release-permission',
+      severity: 'high',
+      policyImpact: 'warn',
+      confidence: 0.84,
+      evidence: [
+        { label: 'Workflow', value: row.workflowPath || row.package || 'workflow.yml' },
+        { label: 'Write Scopes', value: Array.isArray(row.writeScopes) && row.writeScopes.length > 0 ? row.writeScopes.join(', ') : 'write-level scope detected' },
       ]
     });
   }
