@@ -142,6 +142,66 @@ function maxSeverity(a, b) {
 }
 
 // ---------------------------------------------------------------------------
+// Compromise-indicator derivation
+// ---------------------------------------------------------------------------
+
+// Supply-chain compromise advisories carry distinctive CWE codes that routine
+// vulnerabilities (ReDoS, prototype pollution, command injection on API
+// surface) do not. CWE-829 (Inclusion of Functionality from Untrusted Control
+// Sphere) and CWE-912 (Hidden Functionality) both indicate the published
+// package itself executes untrusted/hidden code — the structural shape of
+// supply-chain compromise.
+//
+// Probed against the 5 ua-parser-js advisories on 2026-06-01:
+//   GHSA-394c-5j6w-4xmx  — ReDoS    — CWE-400         — no compromise signal
+//   GHSA-662x-fhqg-9p8v  — ReDoS    — CWE-400         — no compromise signal
+//   GHSA-78cj-fxph-m83p  — ReDoS    — CWE-400         — no compromise signal
+//   GHSA-fhg7-m89q-25r3  — ReDoS    — CWE-1333,400    — no compromise signal
+//   GHSA-pjwm-rvh2-c87w  — Malware  — CWE-829,912     — COMPROMISE SIGNAL ✓
+//
+// The heuristic is conservative on purpose. A false-positive supply-chain
+// compromise call against a routine bug would be a credibility incident; a
+// false-negative is recoverable via the existing replay path which sets
+// row.maintainerCompromise directly. Expansion of the indicator vocabulary
+// (e.g. add CWE-506 for embedded malicious code) ships only with cited
+// incident evidence, matching the doctrine for the rest of the catalog.
+
+const COMPROMISE_CWE_IDS = new Set(['CWE-829', 'CWE-912']);
+
+function cweIdsFromVuln(vuln) {
+  const ids = vuln && vuln.database_specific && vuln.database_specific.cwe_ids;
+  return Array.isArray(ids) ? ids : [];
+}
+
+function deriveCompromiseIndicators(vulns) {
+  const indicatorIds = [];
+  let firstSummary = '';
+  for (const v of vulns) {
+    const cwes = cweIdsFromVuln(v);
+    const hit = cwes.some((c) => COMPROMISE_CWE_IDS.has(c));
+    if (hit && typeof v.id === 'string' && v.id.length > 0) {
+      indicatorIds.push(v.id);
+      if (!firstSummary && typeof v.summary === 'string') firstSummary = v.summary;
+    }
+  }
+  if (indicatorIds.length === 0) {
+    return {
+      hasInstallScript: false,
+      hasRemoteExecution: false,
+      maintainerCompromiseReason: null,
+      indicatorIds: [],
+    };
+  }
+  const reasonHead = firstSummary || 'Advisory indicates embedded malicious code';
+  return {
+    hasInstallScript: true,
+    hasRemoteExecution: true,
+    maintainerCompromiseReason: `${reasonHead} (${indicatorIds.join(', ')})`,
+    indicatorIds,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Vuln summary shaping
 // ---------------------------------------------------------------------------
 
@@ -166,6 +226,7 @@ function summarizeVulns(vulns) {
     highestSeverity,
     critical: highestSeverity === 'critical',
     summary: summary || 'Known vulnerability published in OSV database',
+    compromiseIndicators: deriveCompromiseIndicators(vulns),
   };
 }
 

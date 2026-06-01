@@ -1210,6 +1210,15 @@ async function handleComplianceGate(req, res) {
     const observedSeverity = (osvSummary && osvSummary.highestSeverity && osvSummary.highestSeverity !== 'unknown')
       ? osvSummary.highestSeverity
       : (isCritical ? 'critical' : (details.score < 6 ? 'high' : 'medium'));
+    // Compromise indicators derived from OSV advisory CWE codes (CWE-829 /
+    // CWE-912 — the structural signal of supply-chain compromise; see
+    // osvFastPath.js deriveCompromiseIndicators). When present, thread the
+    // signals into the pattern row so the production gate fires
+    // install-time-remote-execution + maintainer-account-compromise-signal
+    // on real-advisory evidence, not just on replay fixtures. Conservative
+    // by design: the four ReDoS GHSAs on ua-parser-js do not carry these
+    // CWE codes and do not produce these signals.
+    const compromise = osvSummary && osvSummary.compromiseIndicators;
     const rowForPatterns = {
       package: pkgNameForPatterns,
       version: pkgVersionForPatterns,
@@ -1217,6 +1226,13 @@ async function handleComplianceGate(req, res) {
       ids: osvIds,
       verified: details.verdict !== 'graveyard' && details.verdict !== 'risky' ? true : 'unverified',
       license: details.license,
+      hasInstallScript: !!(compromise && compromise.hasInstallScript),
+      capabilityProfile: compromise && compromise.hasRemoteExecution
+        ? { remoteExecution: true }
+        : undefined,
+      maintainerCompromise: compromise && compromise.maintainerCompromiseReason
+        ? { reason: compromise.maintainerCompromiseReason }
+        : undefined,
     };
     // Production gate must not fire demo-only detector branches. The
     // detector defaults to allowDemoFixtures:false; we pass it explicitly
