@@ -101,7 +101,7 @@ The proof package is a parent index. Each artifact lands as its own file under `
 2. **[Doctrine Page](proof/doctrine-pattern-enforcement.md)** — the four enforcement layers, coverage statuses, and the enforcement rule. Shipped.
 3. **[Enterprise Trust Narrative](proof/enterprise-trust-narrative.md)** — buyer-facing long-form: the trust-decision problem, the OTS loop, why honesty is the product. Shipped.
 4. **[Demo Script](proof/demo-script.md)** — two-path runnable walkthrough: `ua-parser-js` honesty path + workflow origin precision path. Shipped (markdown-only; `.mjs` driver deferred).
-5. **Production Walkthrough** — `docs/proof/production-walkthrough.md`. Not yet written. Requires screenshots from a live deployment.
+5. **[Production Walkthrough](proof/production-walkthrough.md)** — capture contract for the final visual proof. Spine shipped; screenshots pending (slots 01–09). Capture-completion PR queued as #25.
 
 ## The Story
 
@@ -136,4 +136,4 @@ OpenSoyce is teaching software teams how to make trust decisions.
 
 ## Next Artifact
 
-Production Walkthrough — screenshot-grounded record of an end-to-end run, captured against the live deployment. Final artifact in the proof package.
+Capture-completion PR (#25) — replaces TODO rows in the production walkthrough with production URL, demo-repo selections, and screenshots for slots 01–09. After that, the proof package is final.
