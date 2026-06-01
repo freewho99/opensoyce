@@ -100,7 +100,7 @@ The proof package is a parent index. Each artifact lands as its own file under `
 1. **[Before / After Risk Example](proof/before-after-risk-example.md)** — one real package, one concrete delta. Shipped.
 2. **[Doctrine Page](proof/doctrine-pattern-enforcement.md)** — the four enforcement layers, coverage statuses, and the enforcement rule. Shipped.
 3. **[Enterprise Trust Narrative](proof/enterprise-trust-narrative.md)** — buyer-facing long-form: the trust-decision problem, the OTS loop, why honesty is the product. Shipped.
-4. **Demo Script** — `docs/proof/demo-script.md`. Not yet written.
+4. **[Demo Script](proof/demo-script.md)** — two-path runnable walkthrough: `ua-parser-js` honesty path + workflow origin precision path. Shipped (markdown-only; `.mjs` driver deferred).
 5. **Production Walkthrough** — `docs/proof/production-walkthrough.md`. Not yet written. Requires screenshots from a live deployment.
 
 ## The Story
@@ -136,4 +136,4 @@ OpenSoyce is teaching software teams how to make trust decisions.
 
 ## Next Artifact
 
-Demo Script — runnable, scripted demo path tying the before/after evidence, doctrine, and narrative into a 10-step walkthrough.
+Production Walkthrough — screenshot-grounded record of an end-to-end run, captured against the live deployment. Final artifact in the proof package.
