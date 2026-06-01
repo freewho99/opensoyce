@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 460" font-family="Georgia, 'Times New Roman', serif">
+    <rect width="800" height="460" fill="#F4ECD8"/>
+    <text x="40" y="56" font-size="13" letter-spacing="3" fill="#1A1A1A" font-weight="bold">FOUR LAYERS, KEPT SEPARATE</text>
+    <line x1="40" y1="72" x2="760" y2="72" stroke="#E63322" stroke-width="3"/>
+    <g>
+          <rect x="40" y="100" width="720" height="68" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="64" y="132" font-size="22" font-weight="bold" fill="#1A1A1A">1 — DETECTION</text>
+          <text x="64" y="154" font-size="14" fill="#444">Finds patterns. What might be wrong.</text>
+    </g>
+    <text x="400" y="190" font-size="20" fill="#E63322" text-anchor="middle">v</text>
+    <g>
+          <rect x="40" y="200" width="720" height="68" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="64" y="232" font-size="22" font-weight="bold" fill="#1A1A1A">2 — EVIDENCE</text>
+          <text x="64" y="254" font-size="14" fill="#444">What you actually have. Gaps included.</text>
+    </g>
+    <text x="400" y="290" font-size="20" fill="#E63322" text-anchor="middle">v</text>
+    <g>
+          <rect x="40" y="300" width="720" height="68" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="64" y="332" font-size="22" font-weight="bold" fill="#1A1A1A">3 — POLICY</text>
+          <text x="64" y="354" font-size="14" fill="#444">Decides what to do with the evidence.</text>
+    </g>
+    <text x="400" y="390" font-size="20" fill="#E63322" text-anchor="middle">v</text>
+    <g>
+          <rect x="40" y="400" width="720" height="50" fill="#E63322" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="64" y="432" font-size="22" font-weight="bold" fill="#FFFFFF">4 — ENFORCEMENT  —  acts on the verdict</text>
+    </g>
+</svg>
