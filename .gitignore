@@ -11,6 +11,7 @@ coverage/
 .scan-fixtures/
 *.png
 !public/**/*.png
+!docs/proof/images/*.png
 
 # Test artifacts left in cwd by ad-hoc CLI runs (curl > path, opensoyce-scan-report,
 # etc). These belong in /tmp or a user-chosen --out path, not in the repo.
