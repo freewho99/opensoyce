@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" font-family="Georgia, 'Times New Roman', serif">
+    <rect width="1200" height="630" fill="#0A0A0A"/>
+    <rect x="36" y="36" width="1128" height="558" fill="none" stroke="#E63322" stroke-width="4"/>
+    <text x="80" y="130" font-size="22" letter-spacing="8" fill="#E63322" font-weight="bold">ON THE RECORD  /  NO. 1</text>
+    <line x1="80" y1="150" x2="1120" y2="150" stroke="#333333" stroke-width="2"/>
+    <text x="80" y="270" font-size="76" fill="#F4ECD8" font-weight="bold" font-style="italic">Five Advisories</text>
+    <text x="80" y="360" font-size="76" fill="#F4ECD8" font-weight="bold" font-style="italic">and an <tspan fill="#E63322">ALLOW</tspan></text>
+    <text x="80" y="450" font-size="28" fill="#AAAAAA" font-style="italic">Why the honest answer beat the scary one.</text>
+    <g>
+          <rect x="80" y="500" width="260" height="54" fill="#1A1A1A" stroke="#444" stroke-width="2"/>
+          <text x="210" y="535" font-size="24" fill="#888" text-anchor="middle" letter-spacing="2">5 ADVISORIES</text>
+          <text x="370" y="535" font-size="30" fill="#E63322" font-weight="bold">&#8594;</text>
+          <rect x="420" y="500" width="200" height="54" fill="#E63322"/>
+          <text x="520" y="535" font-size="24" fill="#FFFFFF" text-anchor="middle" font-weight="bold" letter-spacing="3">ALLOW</text>
+    </g>
+    <text x="1120" y="560" font-size="18" fill="#555" text-anchor="end" letter-spacing="3">OPENSOYCE</text>
+</svg>
