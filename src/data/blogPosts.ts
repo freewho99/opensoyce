@@ -26,7 +26,7 @@ export const blogPosts: BlogPost[] = [
         readTime: '4 min',
         date: 'MAY 31, 2026',
         featured: false,
-        heroImage: '/blog/on-the-record-no1-hero.png',
+        heroImage: '/blog/on-the-record-no1-hero.svg',
         metaDescription: "Five advisories came back on ua-parser-js and the OTS gate still returned ALLOW. An unscripted conversation about why the honest answer beat the scary one, and why detection, evidence, policy, and enforcement have to stay separate.",
         tags: ['on-the-record', 'trust-decisions', 'ots-gate', 'open-source-security', 'policy', 'enterprise', 'devsecops', 'opensoyce'],
     content: `Unscripted on open-source trust. Lightly edited for length. This is the first in a series — the conversations we usually have behind the gate, said out loud.
