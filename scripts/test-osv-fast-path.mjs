@@ -158,6 +158,84 @@ test('CVSS escalates above database_specific (ua-parser-js compromise case)', as
   ok(summary.ids.includes('GHSA-pjwm-rvh2-c87w'), 'GHSA ID surfaced');
 });
 
+test('compromiseIndicators: CWE-829 / CWE-912 vuln produces install + remote + maintainer signals', async () => {
+  // Real shape of GHSA-pjwm-rvh2-c87w as probed against /v1/vulns/<id> on
+  // 2026-06-01. CWE-829 (Inclusion of Functionality from Untrusted Control
+  // Sphere) + CWE-912 (Hidden Functionality) is the structural signal of
+  // supply-chain compromise.
+  __setOsvClientForTests(async () => ({
+    results: [{
+      vulns: [{
+        id: 'GHSA-pjwm-rvh2-c87w',
+        summary: 'Embedded malware in ua-parser-js',
+        database_specific: { severity: 'HIGH', cwe_ids: ['CWE-829', 'CWE-912'] },
+        severity: [{ type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H' }],
+      }],
+    }],
+  }));
+  const m = await queryOsvBatch(['ua-parser-js']);
+  const summary = m.get('ua-parser-js');
+  ok(summary.compromiseIndicators, 'compromiseIndicators present');
+  eq(summary.compromiseIndicators.hasInstallScript, true, 'install script signal set');
+  eq(summary.compromiseIndicators.hasRemoteExecution, true, 'remote execution signal set');
+  ok(summary.compromiseIndicators.maintainerCompromiseReason.includes('Embedded malware'), 'reason carries advisory summary');
+  ok(summary.compromiseIndicators.maintainerCompromiseReason.includes('GHSA-pjwm-rvh2-c87w'), 'reason cites the GHSA id');
+  eq(summary.compromiseIndicators.indicatorIds.length, 1, 'one indicator id');
+});
+
+test('compromiseIndicators: ReDoS-only vulns (CWE-400 / CWE-1333) do NOT produce compromise signals', async () => {
+  // The 4 other ua-parser-js GHSAs are ReDoS bugs. Those CWE codes describe
+  // routine API-surface vulnerabilities, not supply-chain compromise.
+  // Heuristic must stay conservative.
+  __setOsvClientForTests(async () => ({
+    results: [{
+      vulns: [
+        { id: 'GHSA-394c-5j6w-4xmx', database_specific: { severity: 'HIGH', cwe_ids: ['CWE-400'] } },
+        { id: 'GHSA-fhg7-m89q-25r3', database_specific: { severity: 'HIGH', cwe_ids: ['CWE-1333', 'CWE-400'] } },
+      ],
+    }],
+  }));
+  const m = await queryOsvBatch(['redos-only-pkg']);
+  const summary = m.get('redos-only-pkg');
+  ok(summary.compromiseIndicators, 'compromiseIndicators present');
+  eq(summary.compromiseIndicators.hasInstallScript, false, 'no install script signal');
+  eq(summary.compromiseIndicators.hasRemoteExecution, false, 'no remote execution signal');
+  eq(summary.compromiseIndicators.maintainerCompromiseReason, null, 'no maintainer compromise reason');
+  eq(summary.compromiseIndicators.indicatorIds.length, 0, 'no indicator ids');
+});
+
+test('compromiseIndicators: mixed list (4 ReDoS + 1 compromise) produces signals from the compromise only', async () => {
+  // Real ua-parser-js shape: 4 ReDoS + 1 compromise. Signals come from the
+  // one compromise advisory; the ReDoS ones do not pollute the indicators.
+  __setOsvClientForTests(async () => ({
+    results: [{
+      vulns: [
+        { id: 'GHSA-394c-5j6w-4xmx', database_specific: { severity: 'HIGH', cwe_ids: ['CWE-400'] } },
+        { id: 'GHSA-662x-fhqg-9p8v', database_specific: { severity: 'HIGH', cwe_ids: ['CWE-400'] } },
+        { id: 'GHSA-78cj-fxph-m83p', database_specific: { severity: 'HIGH', cwe_ids: ['CWE-400'] } },
+        { id: 'GHSA-fhg7-m89q-25r3', database_specific: { severity: 'HIGH', cwe_ids: ['CWE-1333', 'CWE-400'] } },
+        {
+          id: 'GHSA-pjwm-rvh2-c87w',
+          summary: 'Embedded malware in ua-parser-js',
+          database_specific: { severity: 'HIGH', cwe_ids: ['CWE-829', 'CWE-912'] },
+        },
+      ],
+    }],
+  }));
+  const m = await queryOsvBatch(['ua-parser-js-mixed']);
+  const summary = m.get('ua-parser-js-mixed');
+  eq(summary.compromiseIndicators.hasInstallScript, true, 'install script signal set by compromise advisory');
+  eq(summary.compromiseIndicators.hasRemoteExecution, true, 'remote execution signal set by compromise advisory');
+  eq(summary.compromiseIndicators.indicatorIds.length, 1, 'only the compromise advisory contributes to indicators');
+  eq(summary.compromiseIndicators.indicatorIds[0], 'GHSA-pjwm-rvh2-c87w', 'correct indicator id');
+});
+
+test('compromiseIndicators: no vulns → null summary (no indicators)', async () => {
+  __setOsvClientForTests(async () => ({ results: [{}] }));
+  const m = await queryOsvBatch(['clean-pkg']);
+  eq(m.get('clean-pkg'), null, 'no-vuln packages map to null, not to a stub summary');
+});
+
 test('upstream null / failure → all names map to null (degrades gracefully)', async () => {
   __setOsvClientForTests(async () => null);
   const m = await queryOsvBatch(['react', 'express']);
