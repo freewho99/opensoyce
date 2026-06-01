@@ -3,7 +3,7 @@ export type BlogPost = {
   slug: string;
   title: string;
   subtitle: string;
-  category: "ANALYSIS" | "HOT TAKE" | "DEEP DIVE" | "FRAMEWORK WARS" | "SECURITY" | "PRODUCT";
+    category: "ANALYSIS" | "HOT TAKE" | "DEEP DIVE" | "FRAMEWORK WARS" | "SECURITY" | "PRODUCT" | "ON THE RECORD";
   date: string;
   readTime: string;
   emoji: string;
@@ -16,6 +16,59 @@ export type BlogPost = {
 };
 
 export const blogPosts: BlogPost[] = [
+  {
+        slug: 'on-the-record-five-advisories-and-an-allow',
+        primaryProductAction: 'scanner',
+        title: "On the Record, No. 1 — Five Advisories and an ALLOW",
+        subtitle: "Unscripted on open-source trust. The first in a series of candid conversations from inside the gate.",
+        category: "ON THE RECORD",
+        emoji: "🎙️",
+        readTime: '4 min',
+        date: 'MAY 31, 2026',
+        featured: false,
+        heroImage: '/blog/on-the-record-no1-hero.png',
+        metaDescription: "Five advisories came back on ua-parser-js and the OTS gate still returned ALLOW. An unscripted conversation about why the honest answer beat the scary one, and why detection, evidence, policy, and enforcement have to stay separate.",
+        tags: ['on-the-record', 'trust-decisions', 'ots-gate', 'open-source-security', 'policy', 'enterprise', 'devsecops', 'opensoyce'],
+    content: `Unscripted on open-source trust. Lightly edited for length. This is the first in a series — the conversations we usually have behind the gate, said out loud.
+
+
+    ## Five advisories came back on ua-parser-js and the gate still said ALLOW. Start there.
+
+    That's the gate working, not failing. The reflex is to treat any advisory as a stop sign. But five advisories surfacing and a default policy returning ALLOW isn't a contradiction — it's a decision. Honest tooling tells you what fired, what didn't, and why. A red badge that can't explain itself isn't safety. It's anxiety with a UI.
+
+
+    ## A buyer sees "five advisories, ALLOW" and panics.
+
+    Good — that's the conversation worth having. Open-source risk stopped being only a vulnerability problem a long time ago. It's a trust-decision problem now. There are always CVEs. The real question is the harder one: given everything we know, do we let this into production, and can we defend that call to a board six months from now?
+
+
+    ## You keep separating detection, evidence, policy, and enforcement. Why does that matter?
+
+    Because blurring them is how you end up lying. Detection finds patterns. Evidence is what you actually have — and sometimes you're missing the maintainer-compromise signal, missing the install-script flag, and OSV severity normalizes to unknown. Policy decides what to do with that. Enforcement acts. Collapse those four layers into a single number and you start faking pattern firings just to tell a cleaner story. We'd rather show the gap than invent a verdict.
+[img:/blog/on-the-record-no1-fig1.svg:Four separate layers — detection, evidence, policy, enforcement. Keeping them distinct is what lets the gate explain a verdict instead of faking one.]
+
+
+    ## It's a strange thing to brag about — admitting what you don't know.
+
+    It's the whole thing, honestly. A serious trust product has to be able to say "this evidence layer has holes." The alternative is a tool that's confidently wrong, and security teams already have plenty of those. Honesty isn't a disclaimer here. It's the feature.
+
+
+    ## So if it isn't a scanner, what is it?
+
+    A trust decision layer. Scanners find vulnerabilities. They don't always produce enforceable, explainable decisions you can stand behind. The loop we care about is detect, decide, explain, act, record, prove. Most tools stop at detect.
+[img:/blog/on-the-record-no1-fig2.svg:The OTS loop — detect, decide, explain, act, record, prove. The cycle that turns a scan into a defensible decision.]
+
+
+    ## What does an enterprise actually get out of that?
+
+    Fewer vague red badges, more defensible decisions. Security teams are answering board-level and compliance-level questions now — what open-source are we shipping, which dependencies are allowed, which workflows can release artifacts, what happens when we knowingly accept risk, and can we prove the decision later. "The scanner was red" answers none of those. A recorded, explained ALLOW-with-exceptions answers all of them.
+
+
+    ## Closing thought.
+
+    Ship software with trust decisions you can inspect, explain, and defend. Not fewer alerts for the sake of quiet — better decisions you'd be comfortable reading aloud in an audit. That's the whole series, really. We'll keep putting these on the record.
+    `,
+  },
   {
         slug: 'real-data-kills-the-zombie-code',
         primaryProductAction: 'scanner',
