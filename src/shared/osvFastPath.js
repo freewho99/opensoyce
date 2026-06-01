@@ -45,6 +45,7 @@
  */
 
 const OSV_BATCH_ENDPOINT = 'https://api.osv.dev/v1/querybatch';
+const OSV_VULN_ENDPOINT = 'https://api.osv.dev/v1/vulns';
 const DEFAULT_TIMEOUT_MS = 1000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -125,9 +126,15 @@ function severityFromCvss(severityArray) {
 }
 
 function pickSeverity(vuln) {
+  // Take the MAX of GitHub's database_specific rating and the underlying CVSS.
+  // GHSA's database_specific.severity is sometimes downrated relative to the
+  // CVSS vector (the canonical 2021 ua-parser-js compromise is rated HIGH in
+  // database_specific but carries CVSS:3.1/.../C:H/I:H/A:H — critical-tier
+  // impact across confidentiality, integrity, and availability). Preferring
+  // database_specific would lose the critical signal; the max preserves it.
   const a = severityFromDatabaseSpecific(vuln.database_specific);
-  if (a !== 'unknown') return a;
-  return severityFromCvss(vuln.severity);
+  const b = severityFromCvss(vuln.severity);
+  return maxSeverity(a, b);
 }
 
 function maxSeverity(a, b) {
@@ -166,7 +173,13 @@ function summarizeVulns(vulns) {
 // HTTP client (timeout + JSON shape)
 // ---------------------------------------------------------------------------
 
-async function realOsvFetch(names, opts) {
+// OSV's /v1/querybatch returns only `{id, modified}` stubs per vuln. Severity,
+// summary, and CVSS data live on the full `/v1/vulns/<id>` records. The
+// production fetcher does both calls: bulk to discover IDs, parallel detail
+// fetches to enrich. Without enrichment the normalizer always returns
+// 'unknown' (the bug PR #20 surfaced via the ua-parser-js ALLOW evidence).
+
+async function bulkFetch(names, opts) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
   try {
@@ -182,14 +195,64 @@ async function realOsvFetch(names, opts) {
     return await res.json();
   } catch (err) {
     if (err && err.name === 'AbortError') {
-      console.warn(`osvFastPath: query timed out after ${opts.timeoutMs}ms`);
+      console.warn(`osvFastPath: bulk query timed out after ${opts.timeoutMs}ms`);
     } else {
-      console.warn('osvFastPath: query failed:', err && err.message);
+      console.warn('osvFastPath: bulk query failed:', err && err.message);
     }
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function detailFetch(id, opts) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+  try {
+    const res = await fetch(`${OSV_VULN_ENDPOINT}/${encodeURIComponent(id)}`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      console.warn(`osvFastPath: detail fetch for ${id} timed out after ${opts.timeoutMs}ms`);
+    } else {
+      console.warn(`osvFastPath: detail fetch for ${id} failed:`, err && err.message);
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function realOsvFetch(names, opts) {
+  const bulk = await bulkFetch(names, opts);
+  if (!bulk || !Array.isArray(bulk.results)) return null;
+
+  // Collect unique vuln IDs across all packages; parallel-fetch each once.
+  const idToDetail = new Map();
+  const allIds = new Set();
+  for (const result of bulk.results) {
+    const stubs = Array.isArray(result && result.vulns) ? result.vulns : [];
+    for (const s of stubs) {
+      if (s && typeof s.id === 'string' && s.id.length > 0) allIds.add(s.id);
+    }
+  }
+  await Promise.all([...allIds].map(async (id) => {
+    const detail = await detailFetch(id, opts);
+    if (detail) idToDetail.set(id, detail);
+  }));
+
+  // Re-assemble: each package's vulns become enriched records. If a detail
+  // fetch failed for some ID, fall back to the stub (id only); the normalizer
+  // returns 'unknown' for that one entry but the ID still surfaces.
+  const enrichedResults = bulk.results.map((result) => {
+    const stubs = Array.isArray(result && result.vulns) ? result.vulns : [];
+    const vulns = stubs.map((s) => (s && idToDetail.get(s.id)) || s);
+    return { vulns };
+  });
+  return { results: enrichedResults };
 }
 
 // ---------------------------------------------------------------------------
