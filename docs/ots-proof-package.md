@@ -101,7 +101,7 @@ The proof package is a parent index. Each artifact lands as its own file under `
 2. **[Doctrine Page](proof/doctrine-pattern-enforcement.md)** — the four enforcement layers, coverage statuses, and the enforcement rule. Shipped.
 3. **[Enterprise Trust Narrative](proof/enterprise-trust-narrative.md)** — buyer-facing long-form: the trust-decision problem, the OTS loop, why honesty is the product. Shipped.
 4. **[Demo Script](proof/demo-script.md)** — two-path runnable walkthrough: `ua-parser-js` honesty path + workflow origin precision path. Shipped (markdown-only; `.mjs` driver deferred).
-5. **[Production Walkthrough](proof/production-walkthrough.md)** — capture contract for the final visual proof. Spine shipped; screenshots pending (slots 01–09). Capture-completion PR queued.
+5. **[Production Walkthrough](proof/production-walkthrough.md)** — screenshot-grounded record of an end-to-end run against `opensoyce-f336.vercel.app`. Captured 2026-06-01. Nine numbered slots filled plus GUARD probe documented. Shipped.
 
 ## The Story
 
