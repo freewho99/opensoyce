@@ -153,11 +153,11 @@ The walkthrough must be discarded and re-captured if any of the following change
 
 When any of those move, the walkthrough is re-captured. Stale captures do not get re-used.
 
-## Status
+## Capture Status
 
 Spine: shipped.
 Production URL: pending.
 Demo-repo selection (Path A + Path B): pending.
 Screenshots (slots 01–09): pending capture.
-Capture-completion PR: queued as PR #25 — `docs(ots): attach production walkthrough screenshots`.
+Capture-completion PR: queued — `docs(ots): attach production walkthrough screenshots`.
 Final proof package: blocked on the capture-completion PR.
