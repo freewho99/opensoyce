@@ -67,10 +67,10 @@ That is a different category.
 ## Current Proof State
 
 - Score: 90 / 100
-- Tests: 100 passing
+- Tests: 101 passing
 - Gate-active patterns: 20 / 31
 - Workflow scan: live on real repositories
-- OSV overlay: integrated
+- OSV overlay: integrated (severity normalization shipped in PR #28 — bulk + detail enrichment, max-of-both severity)
 - Synthetic demo signals: isolated
 - Evidence display: operator-readable
 - Coverage disclosure: honest by design

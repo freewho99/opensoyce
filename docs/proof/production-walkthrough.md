@@ -108,15 +108,23 @@ The page is labeled "PROOF LAYER V0 — 6 LIVE DETECTOR · 0 CATALOG MAPPING" an
 
 **Surface 4c — Production gate seam (repo docs).** File: [docs/proof/before-after-risk-example.md](before-after-risk-example.md)
 
-The verbatim production gate output for `ua-parser-js@0.7.29` was captured in PR #20 and lives in the repo. Five real GHSAs surface. One pattern fires: `known-vulnerability-exposure`. Default policy returns **ALLOW**.
+The verbatim production gate output for `ua-parser-js@0.7.29` lives in the repo. The doc carries two captures:
+
+- **2026-05-31 (pre-PR-#28):** Five real GHSAs surface. One pattern fires: `known-vulnerability-exposure` at **medium** severity. Default policy returns **ALLOW**. Captured under the original evidence layer where the OSV fast path issued only the bulk query and the summarizer found no severity fields.
+- **2026-06-01 (post-PR-#28):** Same five GHSAs surface. One pattern fires: `known-vulnerability-exposure` at **critical** severity. Default policy returns **BLOCK**. Re-captured after PR #28 added bulk → detail enrichment and changed `pickSeverity` to take `max(database_specific, cvss)`.
+
+Both captures are preserved verbatim in the repo doc. The doctrine ("Risk does not lose its name because someone needed to ship") applies here in a meta way: prior evidence is not erased, it is recorded as a historical state of the evidence layer.
 
 **The seam — and the doctrine in action.**
 
-The replay surface (4b) shows what the detector CAN do when properly fed: 3 patterns, BLOCK. The production gate evidence (4c) shows what the gate actually does on the same package today: 1 pattern, ALLOW. The difference is the evidence-availability layer of the doctrine.
+The replay surface (4b) shows what the detector CAN do when properly fed: 3 patterns, BLOCK. The production gate evidence (4c) shows what the gate actually did on the same package across two evidence-layer states:
 
-The production resolver row does not yet thread `row.maintainerCompromise` or `row.hasInstallScript`. The OSV severity normalization returned `unknown` for all five advisories. So `install-time-remote-execution` and `maintainer-account-compromise-signal` did not fire on the production gate path, even though the catalog (surface 4a) and the replay (surface 4b) both show they SHOULD fire for this incident.
+- Before PR #28 — 1 pattern, ALLOW (OSV severity normalization gap)
+- After PR #28 — 1 pattern at critical severity, BLOCK (gap closed)
 
-This is the four-layer answer the doctrine page describes: the catalog says these patterns match; the live detector confirms the catalog when properly fed; the production gate emits the subset it actually has inputs for; the policy decides on that subset. Conflating the four would be the marketing answer. OpenSoyce sells the four-part answer.
+The production resolver row still does not thread `row.maintainerCompromise` or `row.hasInstallScript`. So `install-time-remote-execution` and `maintainer-account-compromise-signal` still do not fire on the production gate path, even though the catalog (surface 4a) and the replay (surface 4b) both show they SHOULD fire for this incident. That gap remains queued.
+
+This is the four-layer answer the doctrine page describes: the catalog says these patterns match; the live detector confirms the catalog when properly fed; the production gate emits the subset it actually has inputs for; the policy decides on that subset. The 2026-05-31 → 2026-06-01 transition is the four-layer answer made visible across time: evidence improved, policy responded, no rule edits, no detector edits.
 
 **The original walkthrough spine assumed slot 04 would capture a `faisalman/ua-parser-js` repo scan.** The deployed product has stronger ua-parser-js surfaces than that assumption recognized: an incident page and a live replay lab, both of which connect the doctrine to a real public incident with real public advisory references. The spine has been updated to reflect what production actually exposes.
 
@@ -210,8 +218,8 @@ The `PRO` label in the sidebar nav (`GUARD PRO`) is a tier marker for paid featu
 
 The capture session is complete. The following items remain queued and are tracked separately:
 
-- **Engineering follow-up (carried from PR #20):** OSV severity normalization tuning in `osvFastPath.js`. Five GHSAs returned `highestSeverity: unknown`; the production gate's score-derived severity fell back to `medium`, so the default policy returned ALLOW on ua-parser-js@0.7.29. Tightening the normalization would flip ALLOW → BLOCK on the same input and invalidate slot 4c (the verbatim repo-doc evidence).
-- **Engineering follow-up (carried from PR #20):** live-fetch row enrichment in `packageRegistryQuery.js` — thread `hasInstallScript` and `maintainerCompromise` into the production resolver row so the production gate path can fire the two patterns the replay lab (slot 4b) currently fires only via fixture inputs.
+- **Engineering follow-up (SHIPPED in PR #28):** OSV severity normalization tuning in `osvFastPath.js`. The fast path now does bulk + per-vuln detail enrichment, and `pickSeverity` takes `max(database_specific, cvss)`. The flip is real: `ua-parser-js@0.7.29` now BLOCKs under default policy. Slot 4c (the verbatim repo-doc evidence) has been re-captured to record both the pre-PR-#28 ALLOW state and the post-PR-#28 BLOCK state.
+- **Engineering follow-up (carried from PR #20, still open):** live-fetch row enrichment in `packageRegistryQuery.js` — thread `hasInstallScript` and `maintainerCompromise` into the production resolver row so the production gate path can fire the two patterns the replay lab (slot 4b) currently fires only via fixture inputs.
 - **Engineering follow-up (added by PR #26):** public package-version gate UI surface. The deployed `/incidents/` and `/proof/ots-replays` pages are strong, but a `?package=ua-parser-js@0.7.29` query surface that returns the verbatim production gate output (slot 4c) would close the spine's original Step-4 assumption directly. Not blocking the proof package; surfaces it as a target.
 - **Content follow-up:** deploy the proof package docs (slots 02, 03, 09) inside the product itself so buyers don't have to click through to GitHub. Today the docs live in the repo. The deployed-UI mirror is a separate decision.
 
@@ -220,7 +228,7 @@ The capture session is complete. The following items remain queued and are track
 The walkthrough must be discarded and re-captured if any of the following change after capture:
 
 - The production URL moves.
-- The gate response for `ua-parser-js@0.7.29` changes (for example, after OSV severity normalization tuning lands and flips the ALLOW to BLOCK — that is a desirable engineering outcome and an invalidating event for slot 4c).
+- The gate response for `ua-parser-js@0.7.29` changes again (after PR #28 it now BLOCKs; slot 4c's repo-doc evidence has been re-captured to record both states). Further invalidating events include: live-fetch row enrichment landing (would let `install-time-remote-execution` and `maintainer-account-compromise-signal` fire on the production gate path), or a public `package@version` gate UI surface landing (would let slot 04 capture a real production gate call).
 - The `/incidents/ua-parser-js-compromise` page changes its pattern set or primary-source citations (slot 04a).
 - The `/proof/ots-replays` ua-parser-js fixture row, detector output, or gate verdict changes (slot 04b).
 - A public package-version gate UI surface lands. When that surface exists, slot 04 should be re-captured against the real `ua-parser-js@0.7.29` gate result in production instead of the current incident-page + replay-lab + repo-docs combination.
@@ -238,4 +246,5 @@ Path A target: revised from `faisalman/ua-parser-js` scan to `/incidents/ua-pars
 Path B target: `freewho99/opensoyce` confirmed — produces a real `dangerous-release-permission` workflow finding.
 Screenshots (slots 01–09 + G): captured 2026-06-01.
 GUARD probe: documented (public surface, PRO refers to TEAM-tier features).
-Proof package: structurally and visually complete. Engineering follow-ups remain queued.
+Slot 4c repo-doc evidence: re-captured 2026-06-01 post-PR-#28 (ALLOW → BLOCK transition recorded under Capture History in [before-after-risk-example.md](before-after-risk-example.md)). The pixel captures of the live deployed surfaces (slots 4a + 4b) remain valid — those surfaces did not change.
+Proof package: structurally and visually complete. Engineering follow-ups: 1 of 3 shipped (OSV severity normalization, PR #28); 2 remain queued.
