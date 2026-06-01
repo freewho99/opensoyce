@@ -98,7 +98,7 @@ That doctrine is the credibility engine.
 The proof package is a parent index. Each artifact lands as its own file under `docs/proof/`.
 
 1. **[Before / After Risk Example](proof/before-after-risk-example.md)** — one real package, one concrete delta. Shipped.
-2. **Doctrine Page** — `docs/proof/doctrine-pattern-enforcement.md`. Not yet written.
+2. **[Doctrine Page](proof/doctrine-pattern-enforcement.md)** — the four enforcement layers, coverage statuses, and the enforcement rule. Shipped.
 3. **Enterprise Trust Narrative** — `docs/proof/enterprise-trust-narrative.md`. Not yet written.
 4. **Demo Script** — `docs/proof/demo-script.md`. Not yet written.
 5. **Production Walkthrough** — `docs/proof/production-walkthrough.md`. Not yet written. Requires screenshots from a live deployment.
@@ -136,4 +136,4 @@ OpenSoyce is teaching software teams how to make trust decisions.
 
 ## Next Artifact
 
-[Before / After Risk Example](proof/before-after-risk-example.md) — `ua-parser-js` supply-chain compromise.
+Enterprise Trust Narrative — buyer-facing long-form pitch grounded in the doctrine page and the `ua-parser-js` evidence.
