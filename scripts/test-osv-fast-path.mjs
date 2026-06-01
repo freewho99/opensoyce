@@ -129,6 +129,35 @@ test('CVSS string fallback when database_specific missing', async () => {
   eq(summary.highestSeverity, 'critical', 'CVSS C:H I:H A:H → critical');
 });
 
+test('CVSS escalates above database_specific (ua-parser-js compromise case)', async () => {
+  // Real shape of GHSA-pjwm-rvh2-c87w as returned by /v1/vulns/<id>:
+  // GitHub-rated HIGH in database_specific, but the underlying CVSS vector
+  // is C:H/I:H/A:H — critical-tier impact across all CIA dimensions.
+  // The fix takes MAX(database_specific, cvss) so the critical signal is not
+  // lost. Before the fix, pickSeverity returned 'high' (from database_specific)
+  // and stopped, never reading the CVSS. The gate path consumed
+  // osvSummary.critical = false and let ua-parser-js@0.7.29 through with ALLOW.
+  __setOsvClientForTests(async () => ({
+    results: [
+      {
+        vulns: [
+          {
+            id: 'GHSA-pjwm-rvh2-c87w',
+            summary: 'Embedded malicious code in ua-parser-js',
+            database_specific: { severity: 'HIGH' },
+            severity: [{ type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H' }],
+          },
+        ],
+      },
+    ],
+  }));
+  const m = await queryOsvBatch(['ua-parser-js']);
+  const summary = m.get('ua-parser-js');
+  eq(summary.highestSeverity, 'critical', 'CVSS escalates above database_specific HIGH');
+  eq(summary.critical, true, 'critical = true — gate will BLOCK this package');
+  ok(summary.ids.includes('GHSA-pjwm-rvh2-c87w'), 'GHSA ID surfaced');
+});
+
 test('upstream null / failure → all names map to null (degrades gracefully)', async () => {
   __setOsvClientForTests(async () => null);
   const m = await queryOsvBatch(['react', 'express']);
