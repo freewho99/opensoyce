@@ -4,7 +4,7 @@
 
 This walkthrough is the final proof-package artifact.
 
-Current status: screenshot slots prepared; live deployment captures pending.
+Captures completed: 2026-06-01 against `opensoyce-f336.vercel.app`. Nine numbered slots filled. One GUARD probe documented. One spine assumption (deployed UI exposes only a GitHub owner/repo scanner) revised by the captures — see Step 4.
 
 ## Purpose
 
@@ -18,12 +18,12 @@ Without screenshots, the proof package ends at "here is what would happen." With
 
 ## Capture Requirements
 
-Before this document is treated as final, capture the following nine artifacts. Each maps to a slot in the inventory table below.
+This document captures the following nine artifacts against the live deployment. Each maps to a slot in the inventory table below.
 
 1. Production URL loaded.
 2. Proof package page visible.
-3. Doctrine page visible.
-4. `ua-parser-js` production scan seam — the deployed scanner on the real upstream repo (`faisalman/ua-parser-js`), linked back to the verbatim `ua-parser-js@0.7.29` gate evidence in the repo docs.
+3. Doctrine page visible (four-layer model).
+4. `ua-parser-js` production surface — the deployed `/incidents/ua-parser-js-compromise` case study **and** the live-replay output on `/proof/ots-replays`, linked back to the verbatim `ua-parser-js@0.7.29` gate evidence in the repo docs.
 5. Project Detail page with workflow scan summary.
 6. Workflow-originated pattern card.
 7. Pattern card evidence rows showing:
@@ -34,140 +34,208 @@ Before this document is treated as final, capture the following nine artifacts. 
 
 Plus one probe captured separately, outside the numbered sequence:
 
-- **GUARD** — probe whether the surface is public, auth-gated, PRO-only, or unavailable. Capture the result of the probe; do not force GUARD into the public proof package if it is not public.
-
-Until all nine are captured and attached, this document is a capture contract, not a proof artifact.
+- **GUARD** — probed and confirmed **public**. Marketing surface, sandbox interactions, and sample PR-comment renderer all load without auth. The PRO label refers to a TEAM-tier feature ladder (private repos, `.opensoyce.yml` policy enforcement, audit log, etc.), not auth-gated surface access.
 
 ## Screenshot Inventory
 
 | Slot | Screenshot | Required proof |
 | --- | --- | --- |
-| 01 | TODO | Production URL loaded |
-| 02 | TODO | Proof package index visible |
-| 03 | TODO | Doctrine four-layer model visible |
-| 04 | TODO | `faisalman/ua-parser-js` production scan + link to package-gate evidence doc |
-| 05 | TODO | Workflow scan summary visible |
-| 06 | TODO | Workflow pattern card visible |
-| 07 | TODO | `Source: GitHub workflow` + exact `Origin` rows visible |
-| 08 | TODO | `/patterns` coverage status visible |
-| 09 | TODO | Enterprise close visible |
-| G | TODO | GUARD probe result — categorize as public / auth-gated / PRO-only / unavailable |
+| 01 | [01-production-homepage.png](images/01-production-homepage.png) | Production URL loaded |
+| 02 | [02-proof-package-index.png](images/02-proof-package-index.png) | Proof package index visible |
+| 03 | [03-doctrine-four-layer-model.png](images/03-doctrine-four-layer-model.png) | Doctrine four-layer model visible |
+| 04a | [04a-ua-parser-js-incident-page.png](images/04a-ua-parser-js-incident-page.png) | `/incidents/ua-parser-js-compromise` case study + triggered patterns |
+| 04b | [04b-ua-parser-js-replay-lab.png](images/04b-ua-parser-js-replay-lab.png) | `/proof/ots-replays` live-detector output for ua-parser-js (3 patterns, BLOCK) |
+| 05/06/07 | [05-06-07-workflow-scan-and-pattern.png](images/05-06-07-workflow-scan-and-pattern.png) | Project Detail page for `freewho99/opensoyce`: workflow scan summary + pattern card + `Source: GitHub workflow` + exact `Origin` |
+| 08 | [08-patterns-coverage.png](images/08-patterns-coverage.png) | `/patterns` coverage status (20/31 gate-active) + doctrine sentence rendered in production |
+| 09 | [09-enterprise-close.png](images/09-enterprise-close.png) | Enterprise narrative key line + Strong Close |
+| G | [G-guard-public.png](images/G-guard-public.png) | GUARD probe result — **public** marketing/sandbox surface, with PRO/TEAM feature tier |
 
 ## Walkthrough
 
 ### Step 1 — Open Production
 
-URL: TODO
+URL: `https://opensoyce-f336.vercel.app/`
 
-Screenshot: TODO (slot 01)
+![Production homepage](images/01-production-homepage.png)
 
-What this proves: the proof package is attached to the live product, not only repo-local docs. The phase shift from build mode to proof mode has a public address.
+What this proves: the deployed product loads at a public URL with no auth wall. The phase shift from build mode to proof mode has a public address.
+
+Observed: homepage renders the trust-layer hero ("BEFORE YOU BUILD ON OPEN SOURCE, CHECK THE LABEL."), the sidebar navigation (SCANNER, GUARD PRO, COMPARE, PRICING, EXPLORE/COMMUNITY/RESOURCES/DEVELOPER), the sample SOYCE-label card, and the AI-dependency leaderboard preview. No sign-in required.
 
 ### Step 2 — Open Proof Package
 
-URL or path: TODO
+URL: `https://github.com/freewho99/opensoyce/blob/main/docs/ots-proof-package.md`
 
-Screenshot: TODO (slot 02)
+![Proof package index](images/02-proof-package-index.png)
 
 What this proves: the product has a parent proof artifact and a visible artifact index. Every claim made downstream can be traced back to this index.
 
+Observed: GitHub-rendered parent doc shows Phase Status, Core Claim, What Is Now Proven, The Phase Shift, The OTS Loop, Current Proof State (score 90/100, tests 100 passing, 20/31 gate-active), the doctrine, and the Proof Artifacts index linking to all five children. The proof package lives in the repo today; surfacing it in the deployed product is a separate engineering decision (see Remaining Work).
+
 ### Step 3 — Show Doctrine
 
-URL or path: TODO
+URL: `https://github.com/freewho99/opensoyce/blob/main/docs/proof/doctrine-pattern-enforcement.md`
 
-Screenshot: TODO (slot 03)
+![Doctrine four-layer model](images/03-doctrine-four-layer-model.png)
 
 What this proves: the product publicly separates detection, evidence, policy, and enforcement. The four-layer model is on the page, not buried in a slide deck.
 
-### Step 4 — Show the `ua-parser-js` Production Scan Seam
+Observed: doctrine page renders Core Doctrine, Why This Doctrine Exists, The Four Layers (pattern definition / evidence availability / policy decision / enforcement action), the ua-parser-js example, Why That Is Correct (naming the three evidence-layer gaps), Coverage Status (`gate-active` / `catalog-only` / `roadmap` / `fixture-only`), and the Enforcement Rule ("Risk can be accepted. Risk cannot disappear."). The coverage sentence ("a pattern can be educational before it is enforceable") also renders in the deployed `/patterns` page — see slot 08.
 
-Repo: `faisalman/ua-parser-js`
+### Step 4 — Show the `ua-parser-js` Production Surfaces and the Seam
 
-Screenshot: TODO (slot 04)
+The deployed product has two public `ua-parser-js` surfaces. The walkthrough captures both, then links to the third (repo-doc) surface that closes the seam.
 
-What this proves: OpenSoyce can analyze the real upstream repository behind the `ua-parser-js` incident, while the package-version gate evidence for `ua-parser-js@0.7.29` currently lives in the proof docs rather than in the deployed UI.
+**Surface 4a — Incident case study.** URL: `https://opensoyce-f336.vercel.app/incidents/ua-parser-js-compromise`
 
-Expected:
+![ua-parser-js incident page](images/04a-ua-parser-js-incident-page.png)
 
-- The deployed product loads a real SOYCE scan for `faisalman/ua-parser-js`.
-- The walkthrough links back to [Before / After Risk Example](before-after-risk-example.md) for the verbatim `ua-parser-js@0.7.29` gate evidence: five GHSAs surface (`GHSA-394c-5j6w-4xmx`, `GHSA-662x-fhqg-9p8v`, `GHSA-78cj-fxph-m83p`, `GHSA-fhg7-m89q-25r3`, `GHSA-pjwm-rvh2-c87w`), `known-vulnerability-exposure` fires, default policy returns ALLOW.
-- The walkthrough names the product seam: the deployed UI does not yet expose a public `package@version` gate query surface.
+What this proves: OpenSoyce publishes a primary-sourced incident page for the 2021 compromise, citing `GHSA-pjwm-rvh2-c87w` directly, and names the three OTS risk patterns the incident triggers:
 
-This is an intentional honesty point. The proof package does not pretend the deployed scanner has a surface it does not have. The missing surface is queued as engineering work (see Remaining Work + What Would Invalidate).
+- `KNOWN VULNERABILITY EXPOSURE` (Critical)
+- `INSTALL-TIME REMOTE EXECUTION` (Critical)
+- `MAINTAINER ACCOUNT COMPROMISE SIGNAL` (High)
+
+This is the catalog-mapping view: which patterns the incident matches against the published catalog.
+
+**Surface 4b — Live replay lab.** URL: `https://opensoyce-f336.vercel.app/proof/ots-replays#ua-parser-js-compromise`
+
+![ua-parser-js replay lab](images/04b-ua-parser-js-replay-lab.png)
+
+What this proves: the replay page calls `detectOtsPatternsForRow()` at render time against an explicit fixture row that sets `hasInstallScript: true`, `capabilityProfile.remoteExecution: true`, and `maintainerCompromise.reason: ...`. The detector returns all 3 patterns. OTS GATE VERDICT: **BLOCK**.
+
+The page is labeled "PROOF LAYER V0 — 6 LIVE DETECTOR · 0 CATALOG MAPPING" and the methodology block reads: "This page calls detectOtsPatternsForRow() at render time. Output below is live, not narrated." The fixture row is shown in full above the detector output. Nothing is hidden.
+
+**Surface 4c — Production gate seam (repo docs).** File: [docs/proof/before-after-risk-example.md](before-after-risk-example.md)
+
+The verbatim production gate output for `ua-parser-js@0.7.29` was captured in PR #20 and lives in the repo. Five real GHSAs surface. One pattern fires: `known-vulnerability-exposure`. Default policy returns **ALLOW**.
+
+**The seam — and the doctrine in action.**
+
+The replay surface (4b) shows what the detector CAN do when properly fed: 3 patterns, BLOCK. The production gate evidence (4c) shows what the gate actually does on the same package today: 1 pattern, ALLOW. The difference is the evidence-availability layer of the doctrine.
+
+The production resolver row does not yet thread `row.maintainerCompromise` or `row.hasInstallScript`. The OSV severity normalization returned `unknown` for all five advisories. So `install-time-remote-execution` and `maintainer-account-compromise-signal` did not fire on the production gate path, even though the catalog (surface 4a) and the replay (surface 4b) both show they SHOULD fire for this incident.
+
+This is the four-layer answer the doctrine page describes: the catalog says these patterns match; the live detector confirms the catalog when properly fed; the production gate emits the subset it actually has inputs for; the policy decides on that subset. Conflating the four would be the marketing answer. OpenSoyce sells the four-part answer.
+
+**The original walkthrough spine assumed slot 04 would capture a `faisalman/ua-parser-js` repo scan.** The deployed product has stronger ua-parser-js surfaces than that assumption recognized: an incident page and a live replay lab, both of which connect the doctrine to a real public incident with real public advisory references. The spine has been updated to reflect what production actually exposes.
 
 ### Step 5 — Show Workflow Scan Summary
 
-Repo: TODO (Path B repo — `freewho99/opensoyce` is a known-good candidate per the PR #16 live smoke).
+URL: `https://opensoyce-f336.vercel.app/projects/freewho99/opensoyce`
 
-Screenshot: TODO (slot 05)
+![Workflow scan, pattern card, Source/Origin evidence rows](images/05-06-07-workflow-scan-and-pattern.png)
 
-What this proves: OpenSoyce scans real `.github/workflows/*.yml` files, not only dependency manifests. The scan summary appears at the top of the Project Detail page when `project.workflowOtsScan` is present.
+What this proves: OpenSoyce scans real `.github/workflows/*.yml` files, not only dependency manifests. The scan summary appears at the top of the Project Detail page.
 
-### Step 6 — Show Workflow Origin Precision
+Observed: the page renders a `WORKFLOW SCAN` block stating "2 workflow files scanned · 1 workflow risk pattern found · SOURCE: .GITHUB/WORKFLOWS/*.YML" against `freewho99/opensoyce`. The scan is live — no cached fixture.
 
-Pattern card: TODO (any workflow-originated pattern card in the Detected Risk Patterns grid).
+### Step 6 — Show Workflow-Originated Pattern Card
 
-Screenshot: TODO (slot 06 + slot 07)
+Same page as Step 5; same image.
 
-What this proves: workflow-originated findings name the exact source and origin. The capture must include both the pattern card header and the expanded evidence rows.
+What this proves: workflow-originated findings render in the `DETECTED RISK PATTERNS (1)` grid with severity, policy-impact, and pattern title.
 
-Expected:
+Observed:
+
+- `DANGEROUS RELEASE/WRITE PERMISSION`
+- Severity: HIGH
+- Policy: WARN
+- Description: "The workflow has explicit GITHUB_TOKEN write permissions for packages or releases in general steps."
+- Link: `VIEW SPEC SPECIFICATIONS →` → `/patterns/dangerous-release-permission`
+
+### Step 7 — Show `Source: GitHub workflow` + Exact `Origin`
+
+Same page as Step 5; same image. The pattern card carries the evidence rows directly.
+
+What this proves: workflow-originated findings name the exact source and origin. The evidence row precision is the difference between a vague warning and an actionable trust finding.
+
+Observed evidence rows on the pattern card:
 
 - `Source: GitHub workflow`
-- For step-level patterns: `Origin: .github/workflows/<file>.yml#<jobId>.steps.<N>`
-- For `dangerous-release-permission` (job-level): `Origin: .github/workflows/<file>.yml#<jobId>`
+- `Origin: .github/workflows/opensoyce-scan.yml#scan`
+- `Write Scopes: pull-requests`
 
-### Step 7 — Show Coverage Status
+This is the format locked by PR #18: `workflowPath#jobId` for job-level patterns (like `dangerous-release-permission`), `workflowPath#jobId.steps.N` for step-level patterns. The honesty invariant test in `test-ots-patterns.mjs` enforces that non-workflow rows cannot carry `Source: GitHub workflow` — the precision the buyer sees is the precision the product enforces on itself.
 
-URL or path: `/patterns` on the production deployment.
+The page also surfaces `AGGREGATED OTS VERDICT: WARN` below the pattern card, plus a direct link to `/patterns` for the full catalog.
 
-Screenshot: TODO (slot 08)
+### Step 8 — Show Coverage Status
 
-What this proves: OpenSoyce publicly distinguishes gate-active patterns from catalog-only and roadmap patterns. The capture must include the header sentence ("X of Y enforced by the gate today") and at least one of each badge color.
+URL: `https://opensoyce-f336.vercel.app/patterns`
 
-### Step 8 — Enterprise Close
+![/patterns coverage status](images/08-patterns-coverage.png)
 
-URL or path: TODO (production view of the enterprise narrative, or the in-product enterprise page if one exists).
+What this proves: OpenSoyce publicly distinguishes gate-active patterns from catalog-only and roadmap patterns, and renders the doctrine sentence in the deployed product itself.
 
-Screenshot: TODO (slot 09)
+Observed header sentence on `/patterns`:
 
-What this proves: the buyer-facing claim is explainability, not fake universal blocking. The capture should land on the blockquote that carries the key line:
+> 20 of 31 OTS patterns are enforced by the gate today. 11 are catalog-only or roadmap patterns used to document known attack shapes and guide detector expansion. A pattern can be educational before it is enforceable — the product always says which is which.
+
+That is the doctrine from PR #21, rendered in production. The deployed `/patterns` page surfaces both the coverage ratio AND the doctrine line. Slot 08 covers what slot 03 documents at the four-layer level — the deployed surface speaks the doctrine in product copy.
+
+Each catalog entry below the header carries a per-pattern status badge (GATE ACTIVE / CATALOG ONLY / ROADMAP), a severity tier, a category, the description, and the policy action (BLOCK / WARN). Six case-study cards (xz-utils, tj-actions/changed-files, polyfill.io, ua-parser-js, event-stream, Ledger Connect Kit) sit in the right sidebar, each linking to its own incident page.
+
+### Step 9 — Enterprise Close
+
+URL: `https://github.com/freewho99/opensoyce/blob/main/docs/proof/enterprise-trust-narrative.md`
+
+![Enterprise narrative](images/09-enterprise-close.png)
+
+What this proves: the buyer-facing claim is explainability, not fake universal blocking. The narrative renders the key line and the Strong Close.
+
+Observed key line (in blockquote on the page):
 
 > OpenSoyce does not promise that every risk becomes a block.
 >
 > It promises that every risk decision becomes explainable.
 
+Observed Strong Close:
+
+> OpenSoyce helps organizations ship software with trust decisions they can inspect, explain, and defend. It does not sell fear. It does not invent risk where there is none. It does not erase risk where the policy chose to accept it. It builds a record — pattern by pattern, package by package, workflow by workflow — that the organization can stand behind the next time someone asks how the decision was made. That record is the product.
+
+### GUARD Probe
+
+URL: `https://opensoyce-f336.vercel.app/guard`
+
+![GUARD public surface](images/G-guard-public.png)
+
+Category: **public** (with PRO/TEAM-tier feature ladder).
+
+Observed: the page loads without auth. Visible elements include the marketing hero ("STOP RISKY DEPENDENCIES BEFORE THEY MERGE."), three interactive sandbox tabs (Sandbox Guard / SOC 2 Compliance / GitHub App Info), the install CTA, the four-step "HOW IT WORKS" flow, a sample PR-comment renderer showing 14-dep verdict summary across stable/watchlist/risky/graveyard verdicts, a `.opensoyce.yml` policy code sample, and the FREE vs TEAM pricing comparison.
+
+The `PRO` label in the sidebar nav (`GUARD PRO`) is a tier marker for paid features (private repos, policy enforcement, audit log, watchlists, Slack alerts) — not an access wall. The proof package can cite GUARD as a public proof surface today.
+
 ## Remaining Work
 
-- Paste production URL.
-- Capture screenshots for slots 01 through 09, plus slot G (GUARD probe).
-- Replace TODO rows with image references.
-- Note exact observed outputs alongside the expected outputs above. If observed diverges from expected (different advisory IDs returned, different policy result, different pattern set), the divergence gets named here, not erased.
-- Document the GUARD probe outcome under one of: public / auth-gated / PRO-only / unavailable. If GUARD is not public, document the wall and exclude it from the public proof package.
-- Re-run the demo after screenshots are added, to confirm the captures still match what the deployed product does.
+The capture session is complete. The following items remain queued and are tracked separately:
 
-**Engineering follow-up queued by this walkthrough:**
-
-- Add a public package-version gate UI surface for examples such as `ua-parser-js@0.7.29`, backed by the same gate flow used in the verbatim proof evidence. Until that surface lands, Step 4 documents the seam between the deployed scanner (GitHub owner/repo) and the gate evidence (repo docs).
+- **Engineering follow-up (carried from PR #20):** OSV severity normalization tuning in `osvFastPath.js`. Five GHSAs returned `highestSeverity: unknown`; the production gate's score-derived severity fell back to `medium`, so the default policy returned ALLOW on ua-parser-js@0.7.29. Tightening the normalization would flip ALLOW → BLOCK on the same input and invalidate slot 4c (the verbatim repo-doc evidence).
+- **Engineering follow-up (carried from PR #20):** live-fetch row enrichment in `packageRegistryQuery.js` — thread `hasInstallScript` and `maintainerCompromise` into the production resolver row so the production gate path can fire the two patterns the replay lab (slot 4b) currently fires only via fixture inputs.
+- **Engineering follow-up (added by PR #26):** public package-version gate UI surface. The deployed `/incidents/` and `/proof/ots-replays` pages are strong, but a `?package=ua-parser-js@0.7.29` query surface that returns the verbatim production gate output (slot 4c) would close the spine's original Step-4 assumption directly. Not blocking the proof package; surfaces it as a target.
+- **Content follow-up:** deploy the proof package docs (slots 02, 03, 09) inside the product itself so buyers don't have to click through to GitHub. Today the docs live in the repo. The deployed-UI mirror is a separate decision.
 
 ## What Would Invalidate This Walkthrough
 
 The walkthrough must be discarded and re-captured if any of the following change after capture:
 
 - The production URL moves.
-- The gate response for `ua-parser-js@0.7.29` changes (for example, after OSV severity normalization tuning lands and flips the ALLOW to BLOCK — that is a desirable engineering outcome and an invalidating event for these specific screenshots).
-- A public package-version gate UI surface lands. When that surface exists, slot 04 should be re-captured against the real `ua-parser-js@0.7.29` gate result in production instead of the current repo-scan-plus-docs seam.
-- The selected workflow demo repo (`freewho99/opensoyce` per Path B) changes its `.github/workflows/*.yml` content.
+- The gate response for `ua-parser-js@0.7.29` changes (for example, after OSV severity normalization tuning lands and flips the ALLOW to BLOCK — that is a desirable engineering outcome and an invalidating event for slot 4c).
+- The `/incidents/ua-parser-js-compromise` page changes its pattern set or primary-source citations (slot 04a).
+- The `/proof/ots-replays` ua-parser-js fixture row, detector output, or gate verdict changes (slot 04b).
+- A public package-version gate UI surface lands. When that surface exists, slot 04 should be re-captured against the real `ua-parser-js@0.7.29` gate result in production instead of the current incident-page + replay-lab + repo-docs combination.
+- The selected workflow demo repo (`freewho99/opensoyce` per Path B) changes its `.github/workflows/*.yml` content or scan output.
 - The catalog coverage ratio changes (currently 20 of 31 gate-active).
-- The GUARD surface category changes (e.g. from PRO-only to public). The probe row gets re-captured and reframed accordingly.
+- The GUARD surface category changes (e.g. from public to auth-gated). The probe row gets re-captured and reframed accordingly.
 
 When any of those move, the walkthrough is re-captured. Stale captures do not get re-used.
 
 ## Capture Status
 
 Spine: shipped.
-Production URL: pending.
-Demo-repo selection (Path A + Path B): pending.
-Screenshots (slots 01–09): pending capture.
-Capture-completion PR: queued — `docs(ots): attach production walkthrough screenshots`.
-Final proof package: blocked on the capture-completion PR.
+Production URL: pinned (`opensoyce-f336.vercel.app`).
+Path A target: revised from `faisalman/ua-parser-js` scan to `/incidents/ua-parser-js-compromise` + `/proof/ots-replays`. The deployed product has stronger ua-parser-js surfaces than the spine assumed.
+Path B target: `freewho99/opensoyce` confirmed — produces a real `dangerous-release-permission` workflow finding.
+Screenshots (slots 01–09 + G): captured 2026-06-01.
+GUARD probe: documented (public surface, PRO refers to TEAM-tier features).
+Proof package: structurally and visually complete. Engineering follow-ups remain queued.

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 320" font-family="Georgia, 'Times New Roman', serif">
+    <rect width="800" height="320" fill="#F4ECD8"/>
+    <text x="40" y="52" font-size="13" letter-spacing="3" fill="#1A1A1A" font-weight="bold">THE OTS LOOP</text>
+    <line x1="40" y1="68" x2="760" y2="68" stroke="#E63322" stroke-width="3"/>
+    <g font-size="16" font-weight="bold" text-anchor="middle">
+          <rect x="40" y="110" width="150" height="60" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="115" y="147" fill="#1A1A1A">DETECT</text>
+          <rect x="220" y="110" width="150" height="60" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="295" y="147" fill="#1A1A1A">DECIDE</text>
+          <rect x="400" y="110" width="150" height="60" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="475" y="147" fill="#1A1A1A">EXPLAIN</text>
+          <rect x="580" y="110" width="150" height="60" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="655" y="147" fill="#1A1A1A">ACT</text>
+          <rect x="220" y="220" width="150" height="60" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="295" y="257" fill="#1A1A1A">RECORD</text>
+          <rect x="400" y="220" width="150" height="60" fill="#E63322" stroke="#1A1A1A" stroke-width="3"/>
+          <text x="475" y="257" fill="#FFFFFF">PROVE</text>
+    </g>
+    <g fill="#E63322" font-size="22" font-weight="bold" text-anchor="middle">
+          <text x="205" y="148">&#8594;</text>
+          <text x="385" y="148">&#8594;</text>
+          <text x="565" y="148">&#8594;</text>
+          <text x="655" y="200">&#8595;</text>
+          <text x="385" y="256">&#8592;</text>
+    </g>
+    <text x="475" y="308" fill="#444" font-size="13" text-anchor="middle" font-style="italic">A scan becomes a decision you can defend.</text>
+</svg>
