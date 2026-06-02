@@ -20,6 +20,7 @@ import {
   resolvePackages,
   cacheStatusFor,
   TTL_BY_VERDICT_MS,
+  splitPackageVersion,
   __setLiveFetcherForTests,
   __setClockForTests,
   __resetInflightForTests,
@@ -330,6 +331,57 @@ test('null / blank package names are filtered out', async () => {
   const map = await resolvePackages(sb, [null, '', '  ', 'real-pkg']);
   eq(map.size, 1, 'only real-pkg survives');
   ok(map.has('real-pkg'), 'real-pkg in map');
+});
+
+// ---------------------------------------------------------------------------
+// splitPackageVersion — canonical strip/split helper for @version inputs.
+// Must match between cleanNames generation and per-dep loop lookups in
+// api/exceptions.js handleComplianceGate, otherwise versioned inputs fall
+// through to FALLBACK_DEFAULTS even when the maps have correct data.
+// ---------------------------------------------------------------------------
+
+test('splitPackageVersion: unscoped package with version', () => {
+  const split = splitPackageVersion('lodash@4.17.20');
+  eq(split.name, 'lodash', 'name stripped');
+  eq(split.version, '4.17.20', 'version captured');
+});
+
+test('splitPackageVersion: unscoped package without version', () => {
+  const split = splitPackageVersion('react');
+  eq(split.name, 'react', 'name passes through');
+  eq(split.version, '', 'no version');
+});
+
+test('splitPackageVersion: scoped package with version', () => {
+  const split = splitPackageVersion('@types/react@18.2.0');
+  eq(split.name, '@types/react', 'scoped name preserved');
+  eq(split.version, '18.2.0', 'version captured');
+});
+
+test('splitPackageVersion: scoped package without version', () => {
+  const split = splitPackageVersion('@types/react');
+  eq(split.name, '@types/react', 'scoped name passes through');
+  eq(split.version, '', 'no version');
+});
+
+test('splitPackageVersion: ua-parser-js compromise version (the actual bug case)', () => {
+  // This is the specific input that surfaced the production bug via the
+  // /proof/gate UI on 2026-06-02. Pre-fix, the gate handler looked up
+  // resolverMap.get('ua-parser-js@0.7.29') which returned undefined,
+  // falling through to FALLBACK_DEFAULTS (score 8.0, MIT, stable, FRESH,
+  // 0 patterns, ALLOW) even though resolverMap.get('ua-parser-js') had
+  // the real data. The helper standardizes the strip; the per-dep loop
+  // must call it to derive the lookup key.
+  const split = splitPackageVersion('ua-parser-js@0.7.29');
+  eq(split.name, 'ua-parser-js', 'name stripped to bare');
+  eq(split.version, '0.7.29', 'version preserved for pattern row');
+});
+
+test('splitPackageVersion: empty / null / undefined inputs return empty strings safely', () => {
+  eq(splitPackageVersion('').name, '', 'empty in → empty out');
+  eq(splitPackageVersion('').version, '', 'empty in → no version');
+  eq(splitPackageVersion(null).name, '', 'null in → empty out');
+  eq(splitPackageVersion(undefined).name, '', 'undefined in → empty out');
 });
 
 (async () => {
