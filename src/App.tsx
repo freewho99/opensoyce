@@ -44,6 +44,7 @@ import IncidentDetail from './pages/IncidentDetail';
 import OtsReplays from './pages/OtsReplays';
 import Gate from './pages/Gate';
 import AppealsReview from './pages/AppealsReview';
+import IncidentCandidatesReview from './pages/IncidentCandidatesReview';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
 // while the browser entry uses <BrowserRouter>. Keep this in sync with the
@@ -86,6 +87,7 @@ export function AppRoutes() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/admin/signals" element={<SignalInbox />} />
         <Route path="/admin/appeals" element={<AppealsReview />} />
+        <Route path="/admin/incident-candidates" element={<IncidentCandidatesReview />} />
         <Route path="/compare/skills-agents" element={<SkillsAgentsCompare />} />
         <Route path="/challenge" element={<Challenge />} />
         <Route path="/case-study/open-design" element={<OpenDesignCaseStudy />} />
