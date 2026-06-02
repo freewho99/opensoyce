@@ -160,6 +160,8 @@ test('threatDb checkThreats benchmark: runs in under 25ms', async () => {
 });
 
 // ===========================================================================
+// Parser tests live in scripts/test-incident-candidates.mjs alongside the
+// rest of the incident-candidate pipeline.
 console.log(`\n${'='.repeat(50)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
