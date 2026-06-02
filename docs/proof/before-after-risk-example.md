@@ -37,9 +37,15 @@ The team sees a red badge. The team does not see a decision.
 
 OpenSoyce evaluates the same package as a trust decision under a real policy.
 
-The production gate pipeline (resolver → OSV overlay → pattern detector → policy evaluation) was first run against `ua-parser-js@0.7.29` on 2026-05-31. That capture produced ALLOW, and the document named the evidence-layer gap that caused it.
+The production gate pipeline has been captured three times against the same `ua-parser-js@0.7.29` query, with the same default policy, against the live `api.osv.dev`. The diff across the three captures is the unit of proof for the doctrine:
 
-The same pipeline was re-run on 2026-06-01 after PR #28 (`feat(ots): enrich OSV fast-path severity from advisory details`) landed. The pipeline now produces BLOCK on the same package. The verbatim output below is the **2026-06-01 re-capture**. The 2026-05-31 ALLOW capture is preserved verbatim further down under [Capture History](#capture-history) — it is the historical record of the doctrine working as designed.
+- **2026-05-31 (pre-PR-#28)** — 1 pattern (medium), **ALLOW**. OSV severity normalization returned `unknown`.
+- **2026-06-01 first re-capture (post-PR-#28)** — 1 pattern (critical), **BLOCK**. **PR #28 changed the decision** by tightening severity normalization (bulk + per-vuln detail fetches, `max(database_specific, cvss)`).
+- **2026-06-01 second re-capture (post-PR-#30)** — **4 patterns**, BLOCK. **PR #30 changed the firing set** by threading CWE-829/CWE-912 compromise indicators into the production resolver row.
+
+That distinction is the whole point. Decision changes and firing-set changes are different layers of the doctrine. The proof package records both.
+
+The verbatim output below is the **post-PR-#30 capture** (current state). The earlier captures are preserved verbatim in [Capture History](#capture-history).
 
 No values were edited. No patterns were synthesized.
 
@@ -109,22 +115,38 @@ rowForPatterns: {
     "GHSA-pjwm-rvh2-c87w"
   ],
   "verified": true,
-  "license": "AGPL-3.0"
+  "license": "AGPL-3.0",
+  "hasInstallScript": true,
+  "capabilityProfile": {
+    "remoteExecution": true
+  },
+  "maintainerCompromise": {
+    "reason": "Embedded malware in ua-parser-js (GHSA-pjwm-rvh2-c87w)"
+  }
 }
 ```
 
-`details.critical` is `true` because the OSV patch sets it from `osvSummary.critical`. `rowForPatterns.severity` is `critical` because the gate handler reads OSV's normalized severity directly instead of falling back to the score-derived heuristic.
+`details.critical` is `true` because the OSV patch sets it from `osvSummary.critical`. `rowForPatterns.severity` is `critical` because the gate handler reads OSV's normalized severity directly. **The three new fields** (`hasInstallScript`, `capabilityProfile.remoteExecution`, `maintainerCompromise.reason`) come from PR #30's `compromiseIndicators` derivation in `osvFastPath.js`: any vuln carrying CWE-829 (Inclusion of Functionality from Untrusted Control Sphere) or CWE-912 (Hidden Functionality) populates them. `GHSA-pjwm-rvh2-c87w` carries both. The four routine ReDoS GHSAs do not.
 
 ### Stage 4 — Pattern detector
 
 ```text
-patternCount: 1
+patternCount: 4
 - known-vulnerability-exposure [severity=critical policy=block confidence=0.95]
     Signal Source: GHSA-394c-5j6w-4xmx, GHSA-662x-fhqg-9p8v,
                    GHSA-78cj-fxph-m83p, GHSA-fhg7-m89q-25r3,
                    GHSA-pjwm-rvh2-c87w
     Severity Tier: Critical
+- install-time-remote-execution [severity=critical policy=block confidence=0.92]
+    Install Script: preinstall/postinstall script present
+    Egress Behavior: Remote payload download requested
+- maintainer-account-compromise-signal [severity=high policy=warn confidence=0.82]
+    Publisher Account: Embedded malware in ua-parser-js (GHSA-pjwm-rvh2-c87w)
+- ci-secret-exposure-path [severity=critical policy=block confidence=0.9]
+    Execution Context: CI runner job equipped with environment secrets
 ```
+
+Four patterns fire on the same advisory data. Three of them are the target shape the original draft of this document called for: `known-vulnerability-exposure`, `install-time-remote-execution`, `maintainer-account-compromise-signal`. The fourth (`ci-secret-exposure-path`) fires as a downstream consequence of the new `hasInstallScript` signal under the gate's `ci: true, hasSecrets: true` context — install-time scripts that run in CI with secrets configured ARE a secret-exposure path, and the detector composes that signal honestly (see `otsPatterns.js:789`). Not over-fire; not suppressed.
 
 ### Stage 5 — Policy decision (default policy)
 
@@ -136,28 +158,37 @@ reason: UAParser.js - The Essential Web Development Tool for User-Agent Detectio
         Browser (client-side) or Node.js (server-side).
 ```
 
-Default policy returns BLOCK because `details.critical === true`. The reason field carries the package description because the OSV summary text falls through into `details.description` when the resolver's description was used as-is — that is the existing handler behavior, unchanged by PR #28.
+Default policy returns BLOCK because `details.critical === true`. Same decision as the post-PR-#28 capture — PR #30 did not change the decision. PR #30 changed which patterns fire on the way to that decision.
 
 ## What Production Actually Fired vs. The Target Shape
 
 The target shape in the original draft of this document expected three patterns: `known-vulnerability-exposure`, `install-time-remote-execution`, `maintainer-account-compromise-signal`.
 
-Production fires one: `known-vulnerability-exposure` — at **critical** severity, carrying all five real GHSA IDs.
+Production fires four:
 
-Of the two evidence-layer gaps named in the original 2026-05-31 capture, one is closed and one remains:
+- `known-vulnerability-exposure` (critical, block) — surfaces all 5 real GHSAs
+- `install-time-remote-execution` (critical, block) — sourced from CWE-829/CWE-912 indicators
+- `maintainer-account-compromise-signal` (high, warn) — sourced from CWE-829/CWE-912 + advisory summary
+- `ci-secret-exposure-path` (critical, block) — derived from install-script + CI/secrets context
 
-1. **CLOSED — OSV severity normalization.** PR #28 (`feat(ots): enrich OSV fast-path severity from advisory details`) replaced the single bulk query (which returns stubs without severity) with a bulk + parallel `/v1/vulns/<id>` detail-fetch pipeline, and changed `pickSeverity` to take `max(database_specific, cvss)`. `GHSA-pjwm-rvh2-c87w` carries `database_specific.severity: HIGH` plus CVSS `C:H/I:H/A:H` (critical-tier across CIA). The max-of-both correctly escalates the package's `highestSeverity` to `critical`, which flows through to `details.critical` and the gate's BLOCK path.
-2. **OPEN — production gate rows still do not carry maintainer-compromise or install-script signals.** Those signals exist in the detector and fire correctly on the `/proof/ots-replays` live-detector path (PR #8), because that path sets `row.maintainerCompromise` directly. The production gate's resolver pipeline does not yet thread an equivalent field. The patterns are not suppressed. The inputs are not present.
+All three evidence-layer gaps named in the original 2026-05-31 capture are now CLOSED:
 
-The package still BLOCKs even without those two patterns firing — `known-vulnerability-exposure` at critical severity is enough on its own. The remaining gap is about completeness of the firing set, not about whether the gate decision is correct.
+1. **CLOSED — OSV severity normalization (PR #28).** Bulk + per-vuln detail fetch pipeline; `pickSeverity` takes `max(database_specific, cvss)`. `GHSA-pjwm-rvh2-c87w` carries `database_specific.severity: HIGH` plus CVSS `C:H/I:H/A:H` (critical-tier across CIA). The max correctly escalates `highestSeverity` to `critical` → `details.critical = true` → BLOCK.
+2. **CLOSED — install-script signal on production rows (PR #30).** `osvFastPath.js` now derives `compromiseIndicators` from advisory CWE codes. CWE-829 (Inclusion of Functionality from Untrusted Control Sphere) or CWE-912 (Hidden Functionality) on any vuln in the package's advisory set populates `hasInstallScript: true` and `capabilityProfile.remoteExecution: true` on the gate row.
+3. **CLOSED — maintainer-compromise signal on production rows (PR #30).** Same derivation. The indicator object carries `maintainerCompromiseReason` with the advisory summary + the GHSA id for evidence rendering.
+
+The fourth firing (`ci-secret-exposure-path`) was not in the original target shape because it composes from the install-script signal under the gate's CI context. It is correct evidence, derived honestly from real inputs.
 
 ## Decision
 
 Default policy: BLOCK.
 
-Five real CVE/GHSA advisories surface, including the canonical maintainer-account-compromise advisory. The OSV overlay now correctly classifies the maximum severity across all five as `critical`. `details.critical` is `true`. The gate's `isCritical` check passes. Policy returns BLOCK with the package description as the reason.
+Same decision as the post-PR-#28 capture. PR #30 did not change the decision; it changed the firing set. That distinction is the whole point of the doctrine: detection, evidence, policy, and enforcement are separate layers, and changes happen at different layers at different times.
 
-This is the same package, the same advisories, and the same default policy as the 2026-05-31 capture. What changed is the evidence layer underneath. The doctrine ("detection, evidence, policy, and enforcement are separate layers") predicts exactly this: when the evidence layer improves, the policy layer responds. Nothing in the policy rules was edited.
+- The 2026-05-31 → 2026-06-01 (post-#28) transition was a **decision change**: ALLOW → BLOCK, driven by improved severity classification.
+- The post-#28 → post-#30 transition is a **firing-set change**: 1 pattern → 4 patterns, driven by threading compromise indicators into the production row.
+
+Nothing in the detector was edited. Nothing in the policy rules was edited. The catalog gained no new patterns. Every change was at the evidence-layer boundary, with code paths the rest of the catalog uses too.
 
 ## Trust Decision
 
@@ -179,19 +210,24 @@ That is the category change.
 
 ## Honest Caveats
 
-- The verbatim gate output above was re-captured on 2026-06-01 via a one-off smoke script that calls the same shared modules as `api/exceptions.js` (`queryOsvBatch`, `resolvePackages`, `detailPatchFromOsv`, `detectOtsPatternsForRow`) with `allowDemoFixtures: false`. The production HTTP path produces the same data structure; the wrapper differs only in JSON serialization and auth headers. The 2026-05-31 capture (which produced ALLOW under the pre-PR-#28 evidence layer) is preserved verbatim in [Capture History](#capture-history) below.
-- `maintainer-account-compromise-signal` did not fire because the production gate row does not set `row.maintainerCompromise`. The `/proof/ots-replays` page does fire it on this same incident, because the replay path sets that field directly. Threading equivalent signal into the production resolver row is queued, not claimed.
-- `install-time-remote-execution` did not fire because the production gate row does not set `row.hasInstallScript` for live-fetched packages. Both `install-time-remote-execution` (critical) and `install-time-execution` (medium) remain in the catalog. Adding install-script analysis to the live-fetch path is queued, not claimed.
-- Production walkthrough slot 4c (the verbatim repo-doc evidence captured 2026-05-31) was the ALLOW output. Slot 4a (`/incidents/ua-parser-js-compromise`) and slot 4b (`/proof/ots-replays`) remain valid — those surfaces showed the 3-pattern + BLOCK shape via catalog mapping and replay fixtures respectively. The walkthrough's "What Would Invalidate" section anticipated this re-capture explicitly.
+- The verbatim gate output above was re-captured on 2026-06-01 (post-PR-#30) via a one-off smoke script that calls the same shared modules as `api/exceptions.js` (`queryOsvBatch`, `resolvePackages`, `detailPatchFromOsv`, `detectOtsPatternsForRow`) with `allowDemoFixtures: false`. The production HTTP path produces the same data structure; the wrapper differs only in JSON serialization and auth headers. The two earlier captures (2026-05-31 ALLOW under pre-PR-#28 evidence, and 2026-06-01 first re-capture BLOCK-with-1-pattern under post-PR-#28 evidence) are preserved verbatim in [Capture History](#capture-history) below.
+- The compromise-indicator heuristic is **package-level**, not version-aware. Any version of `ua-parser-js` would now match the indicators because the OSV query is package-name-level (per `osvFastPath.js` documented constraint: "No version-awareness in v1. Each lookup returns ALL known vulns for the package name family"). A future version-aware-gate PR will narrow this signal. For now, latest-version queries of `ua-parser-js` would also surface the historical compromise advisory's CWE codes — that is correct per the existing v1 doctrine (false-positives preferred to false-negatives for a security gate).
+- The CWE heuristic is conservative on purpose. Only CWE-829 (Inclusion of Functionality from Untrusted Control Sphere) and CWE-912 (Hidden Functionality) trigger the indicators today. The four routine ReDoS GHSAs on ua-parser-js do not pollute the indicators. Expansion of the indicator vocabulary (e.g. add CWE-506 for embedded malicious code) ships only with cited incident evidence, matching the doctrine for the rest of the catalog.
+- Production walkthrough slot 4c (the verbatim repo-doc evidence) has now been re-captured twice. The 2026-05-31 ALLOW capture and the 2026-06-01 first re-capture (post-PR-#28, 1 pattern + BLOCK) are both preserved verbatim. Slot 4a (`/incidents/ua-parser-js-compromise`) and slot 4b (`/proof/ots-replays`) pixel captures remain valid — those deployed surfaces did not change.
 - Workflow-side patterns (`pull-request-target-abuse`, `untrusted-workflow-input`, `dangerous-release-permission`) are out of scope for this example. They are covered by the workflow companion example, planned next using `tj-actions/changed-files` (`GHSA-mrrh-fwg8-r2c3`).
 
 ## What This Proves
 
-One real package, five real advisories, one real decision (now BLOCK), one real evidence trail, one engineering gap closed (OSV severity normalization), one engineering gap still named in plain language (live-fetch row enrichment).
+One real package, five real advisories, one real decision (BLOCK), one real evidence trail, three engineering gaps named and now closed (OSV severity normalization, install-script signal threading, maintainer-compromise signal threading), one engineering gap still queued in plain language (public `package@version` gate UI surface).
 
 That is the unit of proof.
 
-The rest of the proof package — doctrine, narrative, demo, walkthrough — exists to scale this single unit into a story buyers, developers, and security teams can act on. The ALLOW → BLOCK transition between the two captures is also a unit of proof: the doctrine working as designed, the evidence layer improving, the policy layer responding without an edit.
+The rest of the proof package — doctrine, narrative, demo, walkthrough — exists to scale this single unit into a story buyers, developers, and security teams can act on. The transitions between captures are also units of proof:
+
+- **2026-05-31 → 2026-06-01 (post-#28)**: decision change. ALLOW → BLOCK. Evidence layer (severity normalization) improved; policy layer responded.
+- **post-#28 → post-#30**: firing-set change. 1 pattern → 4 patterns. Evidence layer (row enrichment from advisory CWEs) improved; detector emitted what it always knew how to emit; policy decision stayed BLOCK.
+
+Two transitions, two layers, no detector edits, no policy rule edits, no new patterns in the catalog. That is the doctrine working as designed across time.
 
 ## Capture History
 
@@ -255,18 +291,81 @@ reason: (none)
 
 The capture was honest. The product said so. The doc said so. The doctrine page (PR #21) used this exact ALLOW outcome as the worked example.
 
-### 2026-06-01 re-capture — post-PR-#28 (evidence-layer gap closed → BLOCK)
+### 2026-06-01 first re-capture — post-PR-#28 (severity normalization gap closed → BLOCK with 1 pattern)
 
-The current document above this section. Same package, same advisories, same default policy. Different evidence layer. Different policy result.
+PR #28 (`feat(ots): enrich OSV fast-path severity from advisory details`) replaced the single bulk query with bulk + per-vuln detail-fetch, and changed `pickSeverity` to take `max(database_specific, cvss)`. `highestSeverity` flipped to `critical`. `details.critical` became `true`. Default policy returned BLOCK. The firing set was still 1 pattern — the compromise-indicator threading would not land until PR #30.
 
-The diff between the two captures is the unit of proof for the doctrine. Detection did not change. Policy did not change. Evidence improved. Enforcement followed.
+**Stage 1 — OSV fast-path:**
+
+```text
+duration: 1279ms
+summary: {
+  "hasVulns": true,
+  "ids": [
+    "GHSA-394c-5j6w-4xmx",
+    "GHSA-662x-fhqg-9p8v",
+    "GHSA-78cj-fxph-m83p",
+    "GHSA-fhg7-m89q-25r3",
+    "GHSA-pjwm-rvh2-c87w"
+  ],
+  "highestSeverity": "critical",
+  "critical": true,
+  "summary": "ua-parser-js Regular Expression Denial of Service vulnerability"
+}
+```
+
+**Stage 3 — Production pattern row:**
+
+```text
+rowForPatterns: {
+  "package": "ua-parser-js",
+  "version": "0.7.29",
+  "severity": "critical",
+  "ids": ["GHSA-394c-5j6w-4xmx", "GHSA-662x-fhqg-9p8v", "GHSA-78cj-fxph-m83p",
+          "GHSA-fhg7-m89q-25r3", "GHSA-pjwm-rvh2-c87w"],
+  "verified": true,
+  "license": "AGPL-3.0"
+}
+```
+
+`hasInstallScript`, `capabilityProfile`, and `maintainerCompromise` are absent at this point — PR #30 had not landed yet.
+
+**Stage 4 — Pattern detector:**
+
+```text
+patternCount: 1
+- known-vulnerability-exposure [severity=critical policy=block confidence=0.95]
+    Signal Source: GHSA-394c-5j6w-4xmx, GHSA-662x-fhqg-9p8v,
+                   GHSA-78cj-fxph-m83p, GHSA-fhg7-m89q-25r3,
+                   GHSA-pjwm-rvh2-c87w
+    Severity Tier: Critical
+```
+
+**Stage 5 — Policy decision:**
+
+```text
+policy: warn=[graveyard, risky, watchlist], block=[]
+action: BLOCK
+reason: UAParser.js - The Essential Web Development Tool for User-Agent Detection.
+        Detect Browsers, OS, Devices, Bots, Apps, AI Crawlers, and more...
+```
+
+The pre-#28 → post-#28 transition was a **decision change**: ALLOW → BLOCK. The firing set stayed 1 pattern.
+
+### 2026-06-01 second re-capture — post-PR-#30 (firing-set gap closed → BLOCK with 4 patterns)
+
+The current document above this section. Same package, same advisories, same default policy, same decision (BLOCK). What changed is the firing set: 1 pattern → 4 patterns.
+
+PR #30 (`feat(ots): enrich live package rows with install-script and maintainer-compromise signals`) added `deriveCompromiseIndicators` in `osvFastPath.js` and threaded the indicators through the gate handler's `rowForPatterns`. The detector emits `install-time-remote-execution`, `maintainer-account-compromise-signal`, and (composed from the install-script signal under CI/secrets context) `ci-secret-exposure-path` in addition to the existing `known-vulnerability-exposure`.
+
+The post-#28 → post-#30 transition is a **firing-set change**: 1 → 4 patterns. The decision stayed BLOCK. Two transitions, two layers of the doctrine working independently.
 
 ## Status
 
 Spine: shipped.
-Verbatim gate output: pasted (re-captured 2026-06-01 post-PR-#28; original 2026-05-31 capture preserved under Capture History).
-Screenshots: production walkthrough captured 2026-06-01 (PR #27); slot 4c invalidated by this re-capture and will need re-shot in the next walkthrough cycle if the doc is re-rendered as visual proof.
+Verbatim gate output: pasted (re-captured 2026-06-01 post-PR-#30; the original 2026-05-31 ALLOW capture and the 2026-06-01 first re-capture post-PR-#28 are both preserved under Capture History).
+Screenshots: production walkthrough captured 2026-06-01 (PR #27); slot 4c repo-doc evidence re-captured twice now (post-#28, post-#30); the deployed-UI slots 4a + 4b pixel captures remain valid.
 Workflow companion (`tj-actions/changed-files`): queued.
 OSV severity normalization tuning: **shipped (PR #28).**
-Live-fetch row enrichment (install-script, maintainer-compromise): queued.
-Public `package@version` gate UI surface: queued.
+Live-fetch row enrichment (install-script, maintainer-compromise): **shipped (PR #30).**
+Public `package@version` gate UI surface: queued (last queued engineering follow-up).
