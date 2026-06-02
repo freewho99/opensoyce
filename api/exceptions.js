@@ -1603,6 +1603,120 @@ async function handleAppealReview(req, res, session) {
 }
 
 // ---------------------------------------------------------------------------
+// Incident Candidate review (PR #2a — review queue, intake only)
+//
+// Reads the `incident_candidates` table (populated by the HN scraper, see
+// scripts/hn-exploit-scraper.mjs) and lets a reviewer Reject noise rows so
+// the queue stays useful. Promotion-to-public-incident is intentionally NOT
+// implemented here — that's PR #2b (Promote opens a PR adding the entry to
+// the static OTS_INCIDENTS source).
+//
+// Authorization mirrors the appeals flow: gated by isReviewer() against the
+// OPENSOYCE_REVIEWERS env var. Same allowlist controls both surfaces.
+// ---------------------------------------------------------------------------
+
+async function handleCandidatesList(req, res, session) {
+  if (!isReviewer(session.login)) {
+    return err(res, 403, 'FORBIDDEN', 'You are not authorized to review incident candidates');
+  }
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions candidates-list: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  const { data, error } = await sb
+    .from('incident_candidates')
+    .select('id, source, source_id, source_url, title, author, published_at, parsed_package, parsed_version, parsed_ecosystem, parsed_threat_type, parser_confidence, status, promoted_to_incident_id, reviewed_by, reviewed_at, review_notes, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('exceptions candidates-list query failed', error.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+
+  return sendJson(res, 200, { candidates: data || [] });
+}
+
+async function handleCandidateReject(req, res, session) {
+  if (!isReviewer(session.login)) {
+    return err(res, 403, 'FORBIDDEN', 'You are not authorized to review incident candidates');
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  const terminalStatus = typeof body.status === 'string' ? body.status.trim() : 'rejected';
+  const reviewNotes = typeof body.review_notes === 'string' ? body.review_notes.trim() : '';
+
+  if (!id) {
+    return err(res, 400, 'BAD_REQUEST', 'id is required');
+  }
+  // PR #2a only lets reviewers move a candidate into 'rejected' or
+  // 'duplicate'. Promotion is intentionally not exposed here; it lives in
+  // PR #2b under a different action.
+  if (terminalStatus !== 'rejected' && terminalStatus !== 'duplicate') {
+    return err(res, 400, 'BAD_REQUEST', 'status must be rejected or duplicate');
+  }
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions candidate-reject: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  // Verify candidate is currently pending — don't let reviewers re-reject
+  // an already-promoted or already-rejected row by accident.
+  const { data: existing, error: getErr } = await sb
+    .from('incident_candidates')
+    .select('id, status')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (getErr) {
+    console.error('exceptions candidate-reject: select failed', getErr.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+  if (!existing) {
+    return err(res, 404, 'NOT_FOUND', 'candidate not found');
+  }
+  if (existing.status !== 'pending') {
+    return err(res, 400, 'BAD_REQUEST', `candidate is already in status: ${existing.status}`);
+  }
+
+  const nowStr = new Date().toISOString();
+  const { data: updated, error: upErr } = await sb
+    .from('incident_candidates')
+    .update({
+      status: terminalStatus,
+      reviewed_by: session.login,
+      reviewed_at: nowStr,
+      review_notes: reviewNotes || null,
+      updated_at: nowStr,
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (upErr) {
+    console.error('exceptions candidate-reject: update failed', upErr.message);
+    return err(res, 500, 'DB_ERROR', 'database update failed');
+  }
+
+  return sendJson(res, 200, { ok: true, candidate: updated });
+}
+
+// ---------------------------------------------------------------------------
 // Sprint+6: fetch the user's GitHub org memberships during sign-in.
 //
 // Walks /user/orgs pagination (cap 3 pages = 90 orgs — typical users have <30).
@@ -2561,6 +2675,8 @@ export default async function handler(req, res) {
     if (method === 'POST' && action === 'submit-appeal') return await handleSubmitAppeal(req, res, session);
     if (method === 'GET' && action === 'appeals-list') return await handleAppealsList(req, res, session);
     if (method === 'POST' && action === 'appeal-review') return await handleAppealReview(req, res, session);
+    if (method === 'GET' && action === 'candidates-list') return await handleCandidatesList(req, res, session);
+    if (method === 'POST' && action === 'candidate-reject') return await handleCandidateReject(req, res, session);
     if (method === 'GET' && action === 'compliance-report') return await handleComplianceReport(req, res, session);
     if (method === 'GET' && action === 'whoami') return await handleWhoami(req, res, session);
     if (method === 'GET' && action === 'my-repos') return await handleMyRepos(req, res, session);
