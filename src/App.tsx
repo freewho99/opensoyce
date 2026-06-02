@@ -42,6 +42,7 @@ import Patterns from './pages/Patterns';
 import PatternDetail from './pages/PatternDetail';
 import IncidentDetail from './pages/IncidentDetail';
 import OtsReplays from './pages/OtsReplays';
+import Gate from './pages/Gate';
 import AppealsReview from './pages/AppealsReview';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
@@ -74,6 +75,7 @@ export function AppRoutes() {
         <Route path="/methodology" element={<Methodology />} />
         <Route path="/proof" element={<Proof />} />
         <Route path="/proof/ots-replays" element={<OtsReplays />} />
+        <Route path="/proof/gate" element={<Gate />} />
         <Route path="/patterns" element={<Patterns />} />
         <Route path="/patterns/:patternId" element={<PatternDetail />} />
         <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
