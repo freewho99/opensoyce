@@ -315,12 +315,28 @@ export default function IncidentCandidatesReview() {
         return { ok: false, error: (body && body.message) || `Promote failed (${resp.status})` };
       }
       const body = await resp.json();
-      await fetchCandidates();
-      setPromotingId(null);
+      // DO NOT refetch the list or clear promotingId here. The form needs
+      // to stay mounted long enough to render its success UI (the
+      // "PROMOTE PR OPENED" panel with the clickable PR URL — this is
+      // the "repo remembers" handoff moment). Both side-effects unmount
+      // the form: setPromotingId(null) directly, and fetchCandidates()
+      // indirectly because the candidate's status flips to 'promoted'
+      // and isPending becomes false, dropping the form out of the
+      // pending-only render branch. They run in handlePromoteFormClose
+      // instead, when the reviewer dismisses the success UI.
       return { ok: true, prUrl: body.pr && body.pr.url };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
     }
+  }, []);
+
+  // Wired as the form's onCancel: both the X/Cancel buttons (pre-submit)
+  // and the "Close form" button on the success UI (post-submit) route
+  // here. Always refetch — cheap, and the candidate's status changed
+  // server-side if the reviewer reached the success screen.
+  const handlePromoteFormClose = useCallback(() => {
+    setPromotingId(null);
+    void fetchCandidates();
   }, [fetchCandidates]);
 
   const handleReject = useCallback(async (id: string, status: 'rejected' | 'duplicate') => {
@@ -817,7 +833,7 @@ export default function IncidentCandidatesReview() {
                               parsed_ecosystem: cand.parsed_ecosystem,
                             }}
                             onSubmit={handlePromote}
-                            onCancel={() => setPromotingId(null)}
+                            onCancel={handlePromoteFormClose}
                           />
                         )}
                       </div>
