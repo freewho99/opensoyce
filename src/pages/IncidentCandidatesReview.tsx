@@ -475,13 +475,26 @@ export default function IncidentCandidatesReview() {
           <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-8 leading-relaxed">
             THE INCIDENT CANDIDATE REVIEW QUEUE IS RESTRICTED TO DESIGNATED OPENSOYCE REVIEWERS. PLEASE SIGN IN.
           </p>
-          <button
-            type="button"
-            onClick={handleSignIn}
-            className="w-full bg-black text-white py-4 text-xs font-black uppercase tracking-widest hover:bg-soy-red transition-all border-2 border-black flex items-center justify-center gap-2 shadow-[4px_4px_0px_#E63322]"
-          >
-            SIGN IN WITH GITHUB →
-          </button>
+          {oauthClientId === '' ? (
+            <div className="bg-soy-red text-white border-4 border-black p-4 shadow-[4px_4px_0px_#000] text-left mb-2">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={16} className="shrink-0" />
+                <span className="font-black uppercase tracking-widest text-[11px]">OAUTH NOT CONFIGURED</span>
+              </div>
+              <p className="text-[9px] font-bold uppercase tracking-wider leading-normal">
+                This instance of OpenSoyce is missing its GitHub OAuth client ID. Set <code className="bg-black/20 px-1">GITHUB_OAUTH_CLIENT_ID</code> in your Vercel environment, then redeploy. Sandbox mode below is available without auth.
+              </p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSignIn}
+              disabled={oauthClientId === null}
+              className="w-full bg-black text-white py-4 text-xs font-black uppercase tracking-widest hover:bg-soy-red transition-all border-2 border-black flex items-center justify-center gap-2 shadow-[4px_4px_0px_#E63322] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {oauthClientId === null ? 'LOADING…' : 'SIGN IN WITH GITHUB →'}
+            </button>
+          )}
           <div className="mt-8 pt-6 border-t-2 border-black/10">
             <button
               type="button"
