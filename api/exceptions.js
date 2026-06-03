@@ -1717,6 +1717,309 @@ async function handleCandidateReject(req, res, session) {
 }
 
 // ---------------------------------------------------------------------------
+// Incident Candidate Promote (PR #2b — promote-opens-a-PR)
+//
+// When a reviewer promotes a pending candidate, the server:
+//   1. Validates the candidate is in status='pending' (same guardrail as reject)
+//   2. Validates the incident payload (full OTS_INCIDENTS schema)
+//   3. Validates the slug is unique (not already in OTS_INCIDENTS seed +
+//      already-promoted entries)
+//   4. Validates every triggeredPatternId exists in the pattern catalog
+//   5. Opens a bot-authored PR against the repo that appends the new
+//      entry to src/data/promotedIncidents.json
+//   6. Flips the candidate to status='promoted' with the PR URL stored
+//      in promoted_to_incident_id
+//
+// Auth: requires the same isReviewer() allowlist as reject + a server-side
+// OPENSOYCE_PROMOTE_BOT_TOKEN (GitHub PAT with `repo` scope on the target
+// repo). When the token is missing the handler returns 503 — Promote is
+// explicitly opt-in per deploy.
+//
+// Reviewer attribution: triple-stamped — bot commits as author/committer,
+// Co-Authored-By trailer carries the reviewer, PR body opens with
+// "Promoted by @<login> from candidate <UUID>". The candidate row also
+// carries reviewed_by=<login> as the auditable DB record.
+//
+// Failure mode: if any GitHub API call fails, the candidate row stays
+// pending — the reviewer can retry. We do NOT half-promote (no DB write
+// before the PR is open).
+// ---------------------------------------------------------------------------
+
+const VALID_SOURCE_CONFIDENCES = new Set(['primary', 'authoritative-secondary', 'unverified']);
+
+function ghApiBase() {
+  return process.env.OPENSOYCE_GITHUB_API_BASE || 'https://api.github.com';
+}
+function ghRepoOwner() {
+  return process.env.OPENSOYCE_REPO_OWNER || 'freewho99';
+}
+function ghRepoName() {
+  return process.env.OPENSOYCE_REPO_NAME || 'opensoyce';
+}
+
+// Test seam: tests inject a mock fetch so no real GitHub traffic happens.
+let __githubFetcher = null;
+export function __setGithubFetcherForTests(fn) { __githubFetcher = fn; }
+async function ghFetch(url, init) {
+  if (__githubFetcher) return __githubFetcher(url, init);
+  return fetch(url, init);
+}
+
+// Test seam: tests inject the existing OTS_INCIDENTS so we can simulate
+// slug collisions without touching the real catalog.
+let __existingIncidentIdsResolver = null;
+export function __setExistingIncidentIdsResolverForTests(fn) { __existingIncidentIdsResolver = fn; }
+async function existingIncidentIds() {
+  if (__existingIncidentIdsResolver) return __existingIncidentIdsResolver();
+  const { OTS_INCIDENTS } = await import('../src/shared/otsPatterns.js');
+  return new Set(OTS_INCIDENTS.map(i => i.id));
+}
+
+// Test seam: same for the pattern catalog.
+let __existingPatternIdsResolver = null;
+export function __setExistingPatternIdsResolverForTests(fn) { __existingPatternIdsResolver = fn; }
+async function existingPatternIds() {
+  if (__existingPatternIdsResolver) return __existingPatternIdsResolver();
+  const { OTS_PATTERN_DEFINITIONS } = await import('../src/shared/otsPatterns.js');
+  return new Set(OTS_PATTERN_DEFINITIONS.map(p => p.id));
+}
+
+function validateIncidentPayload(incident) {
+  if (!incident || typeof incident !== 'object') return 'incident is required';
+  const requiredStringFields = ['id', 'name', 'date', 'target', 'sourceUrl', 'description', 'context', 'whatHappened', 'preventionStrategy'];
+  for (const f of requiredStringFields) {
+    if (typeof incident[f] !== 'string' || !incident[f].trim()) return `incident.${f} is required`;
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(incident.id)) {
+    return 'incident.id must be a lowercase kebab-case slug (e.g. "ua-parser-js-compromise")';
+  }
+  if (!VALID_SOURCE_CONFIDENCES.has(incident.sourceConfidence)) {
+    return `incident.sourceConfidence must be one of ${[...VALID_SOURCE_CONFIDENCES].join(', ')}`;
+  }
+  if (!Array.isArray(incident.triggeredPatternIds) || incident.triggeredPatternIds.length === 0) {
+    return 'incident.triggeredPatternIds must be a non-empty array of pattern IDs';
+  }
+  if (incident.corroboratingSourceUrl !== undefined && typeof incident.corroboratingSourceUrl !== 'string') {
+    return 'incident.corroboratingSourceUrl must be a string when provided';
+  }
+  return null;
+}
+
+async function openPromotePr(incident, reviewerLogin, candidateId) {
+  const token = process.env.OPENSOYCE_PROMOTE_BOT_TOKEN;
+  if (!token) {
+    const e = new Error('PROMOTE_NOT_CONFIGURED');
+    e.code = 'PROMOTE_NOT_CONFIGURED';
+    throw e;
+  }
+
+  const owner = ghRepoOwner();
+  const repo = ghRepoName();
+  const api = ghApiBase();
+  const branch = `bot/promote-incident-${incident.id}`;
+  const filePath = 'src/data/promotedIncidents.json';
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'opensoyce-promote-bot',
+  };
+
+  // 1. Fetch base SHA of main
+  const refRes = await ghFetch(`${api}/repos/${owner}/${repo}/git/refs/heads/main`, { headers });
+  if (!refRes.ok) {
+    const text = await refRes.text().catch(() => '');
+    throw new Error(`github-get-ref-failed: ${refRes.status} ${text.slice(0, 200)}`);
+  }
+  const refBody = await refRes.json();
+  const baseSha = refBody.object && refBody.object.sha;
+  if (!baseSha) throw new Error('github-get-ref-failed: no sha in response');
+
+  // 2. Create branch
+  const createRefRes = await ghFetch(`${api}/repos/${owner}/${repo}/git/refs`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+  });
+  if (!createRefRes.ok && createRefRes.status !== 422) {
+    // 422 = branch already exists (reviewer retry on same incident id) — tolerable
+    const text = await createRefRes.text().catch(() => '');
+    throw new Error(`github-create-branch-failed: ${createRefRes.status} ${text.slice(0, 200)}`);
+  }
+
+  // 3. Read current promotedIncidents.json on main
+  const contentsRes = await ghFetch(`${api}/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath)}?ref=main`, { headers });
+  if (!contentsRes.ok) {
+    const text = await contentsRes.text().catch(() => '');
+    throw new Error(`github-read-contents-failed: ${contentsRes.status} ${text.slice(0, 200)}`);
+  }
+  const contentsBody = await contentsRes.json();
+  const currentSha = contentsBody.sha;
+  const currentContent = Buffer.from(contentsBody.content || '', 'base64').toString('utf8');
+  let currentArray;
+  try {
+    currentArray = JSON.parse(currentContent);
+    if (!Array.isArray(currentArray)) throw new Error('not an array');
+  } catch (e) {
+    throw new Error(`promotedIncidents.json is malformed on main: ${e.message}`);
+  }
+
+  // 4. Append + base64 encode
+  const updatedArray = [...currentArray, incident];
+  const updatedContent = JSON.stringify(updatedArray, null, 2) + '\n';
+  const updatedBase64 = Buffer.from(updatedContent, 'utf8').toString('base64');
+
+  // 5. Commit to branch
+  const commitMessage =
+    `feat(ots): promote incident — ${incident.name}\n\n` +
+    `Promoted by @${reviewerLogin} from candidate ${candidateId}.\n\n` +
+    `Co-Authored-By: ${reviewerLogin} <${reviewerLogin}@users.noreply.github.com>`;
+  const putRes = await ghFetch(`${api}/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath)}`, {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: commitMessage,
+      content: updatedBase64,
+      sha: currentSha,
+      branch,
+      committer: { name: 'opensoyce-bot', email: 'opensoyce-bot@users.noreply.github.com' },
+      author: { name: 'opensoyce-bot', email: 'opensoyce-bot@users.noreply.github.com' },
+    }),
+  });
+  if (!putRes.ok) {
+    const text = await putRes.text().catch(() => '');
+    throw new Error(`github-put-contents-failed: ${putRes.status} ${text.slice(0, 200)}`);
+  }
+
+  // 6. Open PR
+  const prBody =
+    `**Promoted by @${reviewerLogin}** from incident candidate \`${candidateId}\`.\n\n` +
+    `This PR appends a single entry to \`${filePath}\`. When merged, the entry joins the public \`OTS_INCIDENTS\` catalog rendered at \`/proof/ots-replays\` and \`/incidents/:id\`.\n\n` +
+    `**Incident**: ${incident.name}\n` +
+    `**Target**: ${incident.target}\n` +
+    `**Date**: ${incident.date}\n` +
+    `**Source confidence**: \`${incident.sourceConfidence}\`\n` +
+    `**Source URL**: ${incident.sourceUrl}\n` +
+    (incident.corroboratingSourceUrl ? `**Corroborating source**: ${incident.corroboratingSourceUrl}\n` : '') +
+    `**Triggered patterns**: ${incident.triggeredPatternIds.map(id => `\`${id}\``).join(', ')}\n\n` +
+    `---\n\n` +
+    `*Generated by the OpenSoyce promote-bot. Doctrine: the scraper proposes, the reviewer decides, the repo remembers.*`;
+  const prRes = await ghFetch(`${api}/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: `feat(ots): promote incident — ${incident.name}`,
+      head: branch,
+      base: 'main',
+      body: prBody,
+      maintainer_can_modify: true,
+    }),
+  });
+  if (!prRes.ok) {
+    const text = await prRes.text().catch(() => '');
+    throw new Error(`github-create-pr-failed: ${prRes.status} ${text.slice(0, 200)}`);
+  }
+  const prJson = await prRes.json();
+  return { url: prJson.html_url, number: prJson.number };
+}
+
+async function handleCandidatePromote(req, res, session) {
+  if (!isReviewer(session.login)) {
+    return err(res, 403, 'FORBIDDEN', 'You are not authorized to promote incident candidates');
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return err(res, 400, 'BAD_REQUEST', 'invalid JSON body');
+  }
+
+  const candidateId = typeof body.id === 'string' ? body.id.trim() : '';
+  const incident = body.incident;
+
+  if (!candidateId) return err(res, 400, 'BAD_REQUEST', 'id is required');
+
+  const incidentError = validateIncidentPayload(incident);
+  if (incidentError) return err(res, 400, 'BAD_REQUEST', incidentError);
+
+  // Validate triggeredPatternIds exist in the catalog (no broken refs)
+  const patternIds = await existingPatternIds();
+  const badPatterns = incident.triggeredPatternIds.filter(id => !patternIds.has(id));
+  if (badPatterns.length > 0) {
+    return err(res, 400, 'BAD_REQUEST', `unknown pattern IDs: ${badPatterns.join(', ')}`);
+  }
+
+  // Validate slug uniqueness against current OTS_INCIDENTS (seed + already-promoted)
+  const existingIds = await existingIncidentIds();
+  if (existingIds.has(incident.id)) {
+    return err(res, 400, 'BAD_REQUEST', `incident.id "${incident.id}" already exists in OTS_INCIDENTS`);
+  }
+
+  let sb;
+  try {
+    sb = getSupabase();
+  } catch (e) {
+    console.error('exceptions candidate-promote: supabase init failed', e && e.message);
+    return err(res, 500, 'DB_ERROR', 'database not configured');
+  }
+
+  // Guardrail: candidate must be in pending status, same rule as reject
+  const { data: existing, error: getErr } = await sb
+    .from('incident_candidates')
+    .select('id, status')
+    .eq('id', candidateId)
+    .maybeSingle();
+
+  if (getErr) {
+    console.error('exceptions candidate-promote: select failed', getErr.message);
+    return err(res, 500, 'DB_ERROR', 'database query failed');
+  }
+  if (!existing) return err(res, 404, 'NOT_FOUND', 'candidate not found');
+  if (existing.status !== 'pending') {
+    return err(res, 400, 'BAD_REQUEST', `candidate is already in status: ${existing.status}`);
+  }
+
+  // Open the GitHub PR BEFORE we flip the candidate. If this fails the
+  // candidate stays pending and the reviewer can retry.
+  let pr;
+  try {
+    pr = await openPromotePr(incident, session.login, candidateId);
+  } catch (e) {
+    if (e.code === 'PROMOTE_NOT_CONFIGURED') {
+      return err(res, 503, 'PROMOTE_NOT_CONFIGURED', 'OPENSOYCE_PROMOTE_BOT_TOKEN is not configured — promote is unavailable until a maintainer sets it');
+    }
+    console.error('exceptions candidate-promote: github failed', e && e.message);
+    return err(res, 502, 'GITHUB_ERROR', `failed to open promote PR: ${e.message}`);
+  }
+
+  // PR is live — now flip the candidate
+  const nowStr = new Date().toISOString();
+  const { data: updated, error: upErr } = await sb
+    .from('incident_candidates')
+    .update({
+      status: 'promoted',
+      promoted_to_incident_id: pr.url,
+      reviewed_by: session.login,
+      reviewed_at: nowStr,
+      review_notes: typeof body.review_notes === 'string' ? body.review_notes.trim() || null : null,
+      updated_at: nowStr,
+    })
+    .eq('id', candidateId)
+    .select()
+    .single();
+
+  if (upErr) {
+    // PR is open but DB flip failed — log loudly so the candidate doesn't
+    // stay forever-pending while a PR exists in the repo.
+    console.error('exceptions candidate-promote: PR opened but DB flip failed', upErr.message, 'pr=', pr.url);
+    return err(res, 500, 'DB_ERROR', `PR opened (${pr.url}) but candidate status update failed: ${upErr.message}`);
+  }
+
+  return sendJson(res, 200, { ok: true, candidate: updated, pr });
+}
+
+// ---------------------------------------------------------------------------
 // Sprint+6: fetch the user's GitHub org memberships during sign-in.
 //
 // Walks /user/orgs pagination (cap 3 pages = 90 orgs — typical users have <30).
@@ -2677,6 +2980,7 @@ export default async function handler(req, res) {
     if (method === 'POST' && action === 'appeal-review') return await handleAppealReview(req, res, session);
     if (method === 'GET' && action === 'candidates-list') return await handleCandidatesList(req, res, session);
     if (method === 'POST' && action === 'candidate-reject') return await handleCandidateReject(req, res, session);
+    if (method === 'POST' && action === 'candidate-promote') return await handleCandidatePromote(req, res, session);
     if (method === 'GET' && action === 'compliance-report') return await handleComplianceReport(req, res, session);
     if (method === 'GET' && action === 'whoami') return await handleWhoami(req, res, session);
     if (method === 'GET' && action === 'my-repos') return await handleMyRepos(req, res, session);

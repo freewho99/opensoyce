@@ -1,3 +1,9 @@
+// Promoted incidents — appended by the candidate-promote bot (PR #2b).
+// The file ships as `[]` on day one and grows one entry per merged promote
+// PR. Bot writes mechanical JSON appends, never edits the seed array below;
+// keeps the bot path conflict-resistant and audit-traceable in git history.
+import PROMOTED_INCIDENTS from '../data/promotedIncidents.json' with { type: 'json' };
+
 export const OTS_PATTERN_DEFINITIONS = [
   // --- Pack 1: npm Supply-Chain Pattern Pack ---
   {
@@ -446,7 +452,7 @@ export const OTS_PATTERN_PACKS = [
 // sourceConfidence is 'primary' or 'authoritative-secondary'. Entries marked
 // 'unverified' are kept here as research backlog and excluded from the proof
 // surface by scripts/test-ots-replays.mjs.
-export const OTS_INCIDENTS = [
+const SEED_OTS_INCIDENTS = [
   {
     id: 'xz-utils-backdoor',
     name: 'xz-utils Backdoor (CVE-2024-3094)',
@@ -548,6 +554,12 @@ export const OTS_INCIDENTS = [
     preventionStrategy: 'Revoke publishing credentials immediately on employee offboarding; treat CDN-loaded runtime libraries as part of the production supply chain (pin to a specific version + verify SRI); require code review on every npm publish for security-critical libraries.'
   }
 ];
+
+// Public surface: hand-curated seed incidents + bot-promoted incidents
+// (PR #2b). Promoted entries land in promotedIncidents.json via merged PRs;
+// they're trusted as if hand-curated because every entry has a reviewed
+// git commit + PR discussion behind it.
+export const OTS_INCIDENTS = [...SEED_OTS_INCIDENTS, ...PROMOTED_INCIDENTS];
 
 export function getOtsPatternDefinition(id) {
   return OTS_PATTERN_DEFINITIONS.find((pattern) => pattern.id === id);
