@@ -123,7 +123,12 @@ export default function AppealsReview() {
     return defaultAppeals;
   };
 
-  const apiFetch = async (url: string, init?: RequestInit): Promise<Response> => {
+  // Memoize on [isSandbox] — without this, apiFetch is rebuilt every
+  // render and any consumer callback whose own dep array doesn't change
+  // at the moment sandbox activates ends up holding a stale closure
+  // that still routes to the real backend. Same shape and rationale as
+  // the fix landed for IncidentCandidatesReview in PR #37.
+  const apiFetch = useCallback(async (url: string, init?: RequestInit): Promise<Response> => {
     if (!isSandbox) {
       return window.fetch(url, init);
     }
@@ -168,7 +173,7 @@ export default function AppealsReview() {
     }
 
     return window.fetch(url, init);
-  };
+  }, [isSandbox]);
 
   // Bootstrap Auth
   useEffect(() => {
@@ -251,7 +256,7 @@ export default function AppealsReview() {
     } finally {
       setLoading(false);
     }
-  }, [phase]);
+  }, [phase, apiFetch]);
 
   useEffect(() => {
     fetchAppeals();
@@ -291,7 +296,7 @@ export default function AppealsReview() {
     } finally {
       setReviewingId(null);
     }
-  }, [notesInput, fetchAppeals]);
+  }, [notesInput, fetchAppeals, apiFetch]);
 
   // Stats computation
   const stats = useMemo(() => {
