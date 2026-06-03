@@ -14,7 +14,7 @@ For cross-arc rules (forbidden ops, working style, getting-started), see [README
 - **111 tests passing** in OTS-relevant suites (governor 15 + patterns 25 + replays 7 + resolver 18 + osv 18 + workflows 15 + repo-scan 13). Combined with the candidate arc's tests, the full `npm run test:ci` reports **158 passing**.
 - **Doctrine**: *A pattern can be educational before it is enforceable. The product always says which is which.* Plus: *Detection, evidence, policy, and enforcement are separate layers.*
 - **All four named engineering gaps are closed.** No queued OTS engineering follow-ups remain in this arc.
-- **Three small docs/UX follow-ups still queued.** PR #39 (doc repair), PR #40 (discoverability), PR #41 (phase closeout). Don't pull next-phase work forward without explicit user call.
+- **Two small docs/UX follow-ups still queued.** PR #41 (discoverability cross-links), PR #42 (phase closeout). PR #40 (doc repair recording the PR #32/#33 cycle) is the PR introducing this update. Don't pull next-phase work forward without explicit user call.
 
 ---
 
@@ -150,9 +150,8 @@ The deployed `/proof/gate` page at `src/pages/Gate.tsx` calls this endpoint with
 
 | Item | Why it needs a decision |
 |---|---|
-| **PR #39 (next number) — doc repair after PR #33** | Should record in `before-after-risk-example.md` and `production-walkthrough.md` that PR #33 fixed the production-bug surfaced by PR #32's `/proof/gate` UI. The "doctrine working as designed" framing is the same as PR #29 and PR #31. Tight scope. |
-| **PR #40 — discoverability cross-links** | Add links from `/proof/ots-replays` and `/incidents/*` to `/proof/gate?package=...`. Add to `/proof` page artifact list. Possibly sidebar nav entry. UX decisions on placement need user sign-off. |
-| **PR #41 — phase closeout doc** | Captures the full arc shipped (PRs #19–#33) as the "we shipped the phase" doc. Closes out the engineering arc cleanly so next-phase work has a clean start. |
+| **PR #41 — discoverability cross-links** | Add links from `/proof/ots-replays` and `/incidents/*` to `/proof/gate?package=...`. Add to `/proof` page artifact list. Possibly sidebar nav entry. UX decisions on placement need user sign-off. |
+| **PR #42 — phase closeout doc** | Captures the full arc shipped (PRs #19–#33) as the "we shipped the phase" doc. Closes out the engineering arc cleanly so next-phase work has a clean start. |
 | **Version-aware OSV queries (Phase 3.5)** | OSV v1 path is documented as package-level. Adding version awareness narrows compromise indicators but is a real product decision (false-positives-preferred is the current doctrine; version awareness changes that). |
 | **Trust Timeline / Repo Trust Dashboard / Open Source Trust Center / Vanta-Drata export / Trust Agent** | All named by user as "next phase, not urgent." Do not start any of these without explicit user call. The current arc needs to land cleanly first. |
 
@@ -221,22 +220,11 @@ The candidate-pipeline arc's `threat_feed` table debt is unrelated to OTS — se
 
 ## Backlog (for future PRs, do NOT start without explicit user call)
 
-### PR #39 — doc repair after PR #33
-
-Update `docs/proof/before-after-risk-example.md` and `docs/proof/production-walkthrough.md` to record that:
-
-- The public `/proof/gate` UI surface (PR #32) surfaced a production bug on its first live render
-- PR #33 fixed the bug (gate handler version-stripped lookup)
-- The page now produces real evidence for both bare and version-suffixed queries
-- This is the doctrine working — the deployed surface revealed what local smokes couldn't
-
-The framing parallels PR #29 and PR #31 (also doc-repair PRs after evidence-layer engineering fixes). Tight scope, docs-only.
-
-### PR #40 — discoverability cross-links
+### PR #41 — discoverability cross-links
 
 Add links from `/proof/ots-replays`, `/incidents/*`, and the `/proof` page artifact list to `/proof/gate?package=...`. Possibly a sidebar nav entry. Small UX PR; placement decisions need user sign-off.
 
-### PR #41 — phase closeout doc
+### PR #42 — phase closeout doc
 
 The "we shipped the phase" doc. Captures the full arc shipped:
 

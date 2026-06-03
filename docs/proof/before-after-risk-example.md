@@ -360,12 +360,40 @@ PR #30 (`feat(ots): enrich live package rows with install-script and maintainer-
 
 The post-#28 → post-#30 transition is a **firing-set change**: 1 → 4 patterns. The decision stayed BLOCK. Two transitions, two layers of the doctrine working independently.
 
+### 2026-06-02 → 2026-06-03 — production parity restored (PR #32 → PR #33)
+
+This is not a new capture. It is a parity event between two surfaces that should have matched but didn't.
+
+The local smoke that produced every verbatim block in this document calls the shared modules (`queryOsvBatch`, `resolvePackages`, `detectOtsPatternsForRow`) directly with the bare package name `ua-parser-js`. It always produced 4 patterns + BLOCK after PR #30.
+
+The **deployed gate API** (`/api/exceptions?action=compliance-gate`) is what the public `/proof/gate` UI page (shipped PR #32 on 2026-06-02) calls. On first live render of that page with the canonical preset `?package=ua-parser-js@0.7.29`, the API returned `decision: ALLOW, overallScore: 8, cache: miss, patterns: []` — the `FALLBACK_DEFAULTS` shape. Local and production diverged.
+
+The cause was a per-dep loop bug in `api/exceptions.js handleComplianceGate`: the handler stripped `@version` to build the OSV/resolver input maps (`cleanNames`), but then iterated the original `dependencies` array and used `nameLower` (still containing `@0.7.29`) as the map lookup key. `resolverMap.get('ua-parser-js@0.7.29')` and `osvMap.get('ua-parser-js@0.7.29')` both returned undefined. The gate fell through to fallback defaults, OSV summary was missing, no compromise indicators were threaded, no patterns fired.
+
+**PR #33** (`fix(ots): match resolver and OSV map keys to stripped lookup names`) added the `splitPackageVersion(name)` helper to `src/shared/packageRegistryQuery.js` as the single source of truth for the strip/split, and updated the gate handler to derive `lookupKey = splitPackageVersion(nameLower).name` for both map lookups. Merged at `169397b` on 2026-06-03 03:05 local. Verified live on first poll at 03:15 local:
+
+```text
+curl -sS -X POST .../api/exceptions?action=compliance-gate \
+  -d '{"dependencies":["ua-parser-js@0.7.29"]}'
+→ action=BLOCK score=75.8 patterns=4
+```
+
+Production now matches the post-#30 verbatim block above for both bare-name (`ua-parser-js`) and version-suffixed (`ua-parser-js@0.7.29`) queries. Local and production are at parity.
+
+**This is the doctrine doing its job.** The bug had existed since the original gate handler was written. Every local smoke and every test in the suite (the suite mocks the resolver / OSV) never exercised the version-suffix-in-the-loop path. The first time a user could naturally type `package@version` into a deployed UI was when PR #32 added `/proof/gate`. The page rendered exactly what the API returned — fallback shape on every version-suffixed preset. Honest by accident; useful for finding the bug.
+
+The deployed surface revealed what local smokes couldn't. That's why the proof package exists.
+
+This transition is neither a decision change nor a firing-set change in the doctrine's sense. It is a **parity event**: the live production surface (added in PR #32) brought into alignment with the local-smoke-verified canonical output (preserved verbatim above) by a tightly-scoped engineering fix (PR #33). The verbatim block above did not change; the API behind the deployed surface caught up.
+
 ## Status
 
 Spine: shipped.
 Verbatim gate output: pasted (re-captured 2026-06-01 post-PR-#30; the original 2026-05-31 ALLOW capture and the 2026-06-01 first re-capture post-PR-#28 are both preserved under Capture History).
-Screenshots: production walkthrough captured 2026-06-01 (PR #27); slot 4c repo-doc evidence re-captured twice now (post-#28, post-#30); the deployed-UI slots 4a + 4b pixel captures remain valid.
+Screenshots: production walkthrough captured 2026-06-01 (PR #27); slot 4c repo-doc evidence re-captured twice (post-#28, post-#30); the deployed-UI slots 4a + 4b pixel captures remain valid.
 Workflow companion (`tj-actions/changed-files`): queued.
 OSV severity normalization tuning: **shipped (PR #28).**
 Live-fetch row enrichment (install-script, maintainer-compromise): **shipped (PR #30).**
-Public `package@version` gate UI surface: queued (last queued engineering follow-up).
+Public `package@version` gate UI surface: **shipped (PR #32).** Production-parity bug surfaced by that surface: **fixed (PR #33).** Production now returns the verbatim post-#30 output for both bare and version-suffixed queries; verified live 2026-06-03.
+
+**All four named engineering gaps in this proof package are now closed.**
