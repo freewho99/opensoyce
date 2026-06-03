@@ -175,7 +175,12 @@ export default function IncidentCandidatesReview() {
     return defaults;
   };
 
-  const apiFetch = async (url: string, init?: RequestInit): Promise<Response> => {
+  // Memoize on [isSandbox] — without this, apiFetch is rebuilt every
+  // render and any consumer callback whose own dep array doesn't change
+  // at the moment sandbox activates ends up holding a stale closure that
+  // still routes to the real backend. handlePromote (deps `[]`) is the
+  // worst case; handleReject was vulnerable too.
+  const apiFetch = useCallback(async (url: string, init?: RequestInit): Promise<Response> => {
     if (!isSandbox) {
       return window.fetch(url, init);
     }
@@ -243,7 +248,7 @@ export default function IncidentCandidatesReview() {
     }
 
     return window.fetch(url, init);
-  };
+  }, [isSandbox]);
 
   // Bootstrap auth — identical model to AppealsReview.
   useEffect(() => {
@@ -294,7 +299,7 @@ export default function IncidentCandidatesReview() {
     } finally {
       setLoading(false);
     }
-  }, [phase]);
+  }, [phase, apiFetch]);
 
   useEffect(() => { fetchCandidates(); }, [fetchCandidates]);
 
@@ -328,7 +333,7 @@ export default function IncidentCandidatesReview() {
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
     }
-  }, []);
+  }, [apiFetch]);
 
   // Wired as the form's onCancel: both the X/Cancel buttons (pre-submit)
   // and the "Close form" button on the success UI (post-submit) route
@@ -368,7 +373,7 @@ export default function IncidentCandidatesReview() {
     } finally {
       setReviewingId(null);
     }
-  }, [notesInput, fetchCandidates]);
+  }, [notesInput, fetchCandidates, apiFetch]);
 
   const stats = useMemo(
     () => ({
