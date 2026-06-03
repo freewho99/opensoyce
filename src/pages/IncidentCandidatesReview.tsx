@@ -83,6 +83,11 @@ export default function IncidentCandidatesReview() {
     localStorage.getItem('soyce_dashboard_sandbox') === 'true',
   );
 
+  // OAuth client_id is fetched from /api/config (backed by the
+  // GITHUB_OAUTH_CLIENT_ID env var), NOT hardcoded. Mirrors Dashboard.tsx.
+  // null = not yet fetched, '' = fetched but missing/unconfigured.
+  const [oauthClientId, setOauthClientId] = useState<string | null>(null);
+
   const initSandboxMockData = (forceReset = false): CandidateRow[] => {
     const defaults: CandidateRow[] = [
       {
@@ -281,6 +286,33 @@ export default function IncidentCandidatesReview() {
     return () => { cancelled = true; };
   }, [isSandbox]);
 
+  // Fetch OAuth client_id once when the page lands in unauth phase.
+  // Mirrors Dashboard.tsx:555-577. /api/config returns
+  // { githubOauthClientId } from the GITHUB_OAUTH_CLIENT_ID env var.
+  // Sets empty string on missing/error so handleSignIn can surface
+  // the "missing client ID" message instead of redirecting to a 404
+  // GitHub URL with a stale hardcoded value.
+  useEffect(() => {
+    if (oauthClientId !== null) return;
+    if (phase !== 'unauth') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch('/api/config');
+        if (!resp.ok) {
+          if (!cancelled) setOauthClientId('');
+          return;
+        }
+        const body = await resp.json();
+        if (cancelled) return;
+        setOauthClientId(typeof body.githubOauthClientId === 'string' ? body.githubOauthClientId : '');
+      } catch {
+        if (!cancelled) setOauthClientId('');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [phase, oauthClientId]);
+
   const fetchCandidates = useCallback(async () => {
     if (phase !== 'auth') return;
     setLoading(true);
@@ -393,19 +425,25 @@ export default function IncidentCandidatesReview() {
     return candidates.filter((c) => c.status === filter);
   }, [candidates, filter]);
 
-  const handleSignIn = () => {
-    const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const handleSignIn = useCallback(() => {
+    if (!oauthClientId) {
+      setError('OpenSoyce is missing its GitHub OAuth client ID. Contact support@opensoyce.com.');
+      return;
+    }
+    const state = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
     sessionStorage.setItem(OAUTH_STATE_KEY, state);
     const redirectUri = `${window.location.origin}/dashboard`;
     const params = new URLSearchParams({
-      client_id: '8642921a6ca44621c05d',
+      client_id: oauthClientId,
       redirect_uri: redirectUri,
       scope: 'read:user read:org',
       state,
       allow_signup: 'false',
     });
     window.location.href = `https://github.com/login/oauth/authorize?${params.toString()}`;
-  };
+  }, [oauthClientId]);
 
   const handleExitSandbox = () => {
     localStorage.removeItem('soyce_dashboard_sandbox');
