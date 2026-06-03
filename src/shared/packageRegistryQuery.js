@@ -68,6 +68,35 @@ export const FALLBACK_DEFAULTS = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
+// Package@version splitting
+// ---------------------------------------------------------------------------
+
+/**
+ * Split an npm package reference into `{ name, version }`. Handles scoped
+ * packages (`@scope/pkg@1.0.0` → `{name: '@scope/pkg', version: '1.0.0'}`)
+ * and unscoped packages (`pkg@1.0.0` → `{name: 'pkg', version: '1.0.0'}`).
+ * Inputs without a version suffix return `{ name, version: '' }`.
+ *
+ * This is the canonical strip/split for any code path that needs to look
+ * up by package name in `package_registry`, `osvMap`, or `resolverMap` —
+ * those caches are keyed by stripped name. Production gate handler must
+ * use this when matching a versioned input against the maps, otherwise
+ * `pkg@1.2.3` lookups fall through to `FALLBACK_DEFAULTS` even when the
+ * resolver/OSV correctly populated `pkg`.
+ */
+export function splitPackageVersion(name) {
+  const s = String(name || '');
+  if (s.startsWith('@')) {
+    const atIdx = s.indexOf('@', 1);
+    if (atIdx === -1) return { name: s, version: '' };
+    return { name: s.substring(0, atIdx), version: s.substring(atIdx + 1) };
+  }
+  const atIdx = s.indexOf('@');
+  if (atIdx === -1) return { name: s, version: '' };
+  return { name: s.substring(0, atIdx), version: s.substring(atIdx + 1) };
+}
+
+// ---------------------------------------------------------------------------
 // Test seams (production code never touches these)
 // ---------------------------------------------------------------------------
 

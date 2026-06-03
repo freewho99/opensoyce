@@ -42,7 +42,7 @@ import { signReport } from '../src/shared/reportSigning.js';
 import { resolvePolicy, extractPolicyMetadata, parseYamlPolicy, DEFAULT_POLICY } from '../src/shared/policyInheritance.js';
 import { detectOtsPatternsForRow } from '../src/shared/otsPatterns.js';
 import { npmHighImpact } from 'npm-high-impact';
-import { resolvePackages, liveFetchPackage } from '../src/shared/packageRegistryQuery.js';
+import { resolvePackages, liveFetchPackage, splitPackageVersion } from '../src/shared/packageRegistryQuery.js';
 import { queryOsvBatch, detailPatchFromOsv } from '../src/shared/osvFastPath.js';
 
 
@@ -1051,20 +1051,15 @@ async function handleComplianceGate(req, res) {
   // DEPS_REGISTRY remains the demo-package fixture path used by tests and
   // by the in-repo dogfood gate; we consult it as a final tier when the
   // resolver returned `fallback`.
+  // Strip @version suffix for OSV/resolver lookups (`lodash@4.17.20` → `lodash`).
+  // The version is still used downstream for pattern detection (rowForPatterns).
+  // splitPackageVersion is the single source of truth for this — the per-dep
+  // loop below MUST use the same stripping when keying into resolverMap /
+  // osvMap, otherwise versioned inputs fall through to FALLBACK_DEFAULTS even
+  // when the maps have correct data for the bare name.
   const cleanNames = dependencies
     .filter(d => typeof d === 'string' && d.trim())
-    .map(d => {
-      const trimmed = d.trim().toLowerCase();
-      // For OSV/resolver lookups, strip an inline @version suffix
-      // (`lodash@4.17.20` → `lodash`). The version is still used downstream
-      // for pattern detection (rowForPatterns).
-      if (trimmed.startsWith('@')) {
-        const atIdx = trimmed.indexOf('@', 1);
-        return atIdx === -1 ? trimmed : trimmed.substring(0, atIdx);
-      }
-      const atIdx = trimmed.indexOf('@');
-      return atIdx === -1 ? trimmed : trimmed.substring(0, atIdx);
-    });
+    .map(d => splitPackageVersion(d.trim().toLowerCase()).name);
 
   // Phase 3: OSV fast-path. One bulk query (api.osv.dev) covers the
   // worst cold-path failure mode: a brand-new malicious package with
@@ -1089,7 +1084,12 @@ async function handleComplianceGate(req, res) {
     if (typeof dep !== 'string' || !dep.trim()) continue;
     const name = dep.trim();
     const nameLower = name.toLowerCase();
-    let resolved = resolverMap.get(nameLower) || {
+    // Map lookups must use the STRIPPED name — resolverMap and osvMap are
+    // both keyed by `cleanNames` (above), which strips @version. Looking
+    // up `lodash@4.17.20` directly returns undefined and the gate falls
+    // through to FALLBACK_DEFAULTS even when real data exists for `lodash`.
+    const lookupKey = splitPackageVersion(nameLower).name;
+    let resolved = resolverMap.get(lookupKey) || {
       score: 8.0,
       license: 'MIT',
       verdict: 'stable',
@@ -1104,7 +1104,7 @@ async function handleComplianceGate(req, res) {
     // remain authoritative for tests + dogfood. Tag the result so the
     // cache field still reflects "we had real data" vs "we returned 8.0".
     if (resolved.source === 'fallback') {
-      const demoEntry = DEPS_REGISTRY[name] || DEPS_REGISTRY[nameLower];
+      const demoEntry = DEPS_REGISTRY[lookupKey] || DEPS_REGISTRY[name] || DEPS_REGISTRY[nameLower];
       if (demoEntry) {
         resolved = {
           score: demoEntry.score,
@@ -1125,7 +1125,8 @@ async function handleComplianceGate(req, res) {
     // resolver returned fallback) and surface the IDs to the pattern row
     // below. OSV does NOT affect the cache field: it's an enrichment
     // layer, not a verdict source for license/score/freshness.
-    const osvSummary = osvMap.get(nameLower);
+    // osvMap is keyed by cleanNames (stripped) — same lookupKey applies.
+    const osvSummary = osvMap.get(lookupKey);
     const osvPatch = detailPatchFromOsv(osvSummary);
     const details = osvPatch
       ? {
@@ -1184,17 +1185,13 @@ async function handleComplianceGate(req, res) {
       blockedCount++;
     }
 
-    let pkgNameForPatterns = name;
-    let pkgVersionForPatterns = '';
-    if (name.includes('@') && !name.startsWith('@')) {
-      const parts = name.split('@');
-      pkgNameForPatterns = parts[0];
-      pkgVersionForPatterns = parts[1];
-    } else if (name.startsWith('@') && name.indexOf('@', 1) !== -1) {
-      const idx = name.indexOf('@', 1);
-      pkgVersionForPatterns = name.substring(idx + 1);
-      pkgNameForPatterns = name.substring(0, idx);
-    }
+    // Same split helper as the lookupKey above — produces the bare package
+    // name plus the version suffix for downstream pattern detection. Single
+    // source of truth so the lookup key and the pattern row stay consistent
+    // (handles scoped `@scope/pkg@1.0.0` correctly).
+    const splitForPatterns = splitPackageVersion(name);
+    const pkgNameForPatterns = splitForPatterns.name;
+    const pkgVersionForPatterns = splitForPatterns.version;
 
     // Production gate row. Honesty pass: removed the hardcoded
     // demo synthesis (axios → '1.14.1', hasInstallScript:axios|malicious-pkg,
