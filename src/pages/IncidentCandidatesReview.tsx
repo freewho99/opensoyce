@@ -6,6 +6,7 @@ import {
   AlertTriangle, RefreshCw, ShieldAlert, ExternalLink, Package,
   Hash, Tag, Newspaper, Sparkles, AlertOctagon,
 } from 'lucide-react';
+import { PromoteIncidentForm, type PromoteIncidentPayload } from '../components/PromoteIncidentForm';
 
 // Mirrors public.incident_candidates (migration 0004). Keep in sync with
 // api/exceptions.js handleCandidatesList SELECT list.
@@ -73,6 +74,8 @@ export default function IncidentCandidatesReview() {
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<Record<string, string>>({});
+  // Which candidate's promote form is open (one at a time). null = none.
+  const [promotingId, setPromotingId] = useState<string | null>(null);
 
   const [filter, setFilter] = useState<Filter>('pending');
 
@@ -172,7 +175,12 @@ export default function IncidentCandidatesReview() {
     return defaults;
   };
 
-  const apiFetch = async (url: string, init?: RequestInit): Promise<Response> => {
+  // Memoize on [isSandbox] — without this, apiFetch is rebuilt every
+  // render and any consumer callback whose own dep array doesn't change
+  // at the moment sandbox activates ends up holding a stale closure that
+  // still routes to the real backend. handlePromote (deps `[]`) is the
+  // worst case; handleReject was vulnerable too.
+  const apiFetch = useCallback(async (url: string, init?: RequestInit): Promise<Response> => {
     if (!isSandbox) {
       return window.fetch(url, init);
     }
@@ -213,9 +221,34 @@ export default function IncidentCandidatesReview() {
       localStorage.setItem(SANDBOX_STORAGE_KEY, JSON.stringify(next));
       return jsonResponse({ ok: true, candidate: updated });
     }
+    if (action === 'candidate-promote') {
+      // Sandbox does NOT actually open a PR — it returns a mock URL so the
+      // reviewer can see the full UI flow end-to-end. The candidate flips
+      // locally; nothing leaves the browser.
+      const body = JSON.parse(init?.body as string);
+      const mockPrNumber = Math.floor(Math.random() * 900) + 100;
+      const mockPrUrl = `https://github.com/freewho99/opensoyce/pull/${mockPrNumber}#sandbox-mock`;
+      let updated: CandidateRow | null = null;
+      const next = store.map((c) => {
+        if (c.id === body.id && c.status === 'pending') {
+          updated = {
+            ...c,
+            status: 'promoted',
+            promoted_to_incident_id: mockPrUrl,
+            reviewed_by: 'freewho99',
+            reviewed_at: new Date().toISOString(),
+            review_notes: body.review_notes || null,
+          };
+          return updated;
+        }
+        return c;
+      });
+      localStorage.setItem(SANDBOX_STORAGE_KEY, JSON.stringify(next));
+      return jsonResponse({ ok: true, candidate: updated, pr: { url: mockPrUrl, number: mockPrNumber } });
+    }
 
     return window.fetch(url, init);
-  };
+  }, [isSandbox]);
 
   // Bootstrap auth — identical model to AppealsReview.
   useEffect(() => {
@@ -266,9 +299,50 @@ export default function IncidentCandidatesReview() {
     } finally {
       setLoading(false);
     }
-  }, [phase]);
+  }, [phase, apiFetch]);
 
   useEffect(() => { fetchCandidates(); }, [fetchCandidates]);
+
+  const handlePromote = useCallback(async (
+    candidateId: string,
+    incident: PromoteIncidentPayload,
+    reviewNotes: string,
+  ): Promise<{ ok: boolean; prUrl?: string; error?: string }> => {
+    try {
+      const resp = await apiFetch('/api/exceptions?action=candidate-promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ id: candidateId, incident, review_notes: reviewNotes }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        return { ok: false, error: (body && body.message) || `Promote failed (${resp.status})` };
+      }
+      const body = await resp.json();
+      // DO NOT refetch the list or clear promotingId here. The form needs
+      // to stay mounted long enough to render its success UI (the
+      // "PROMOTE PR OPENED" panel with the clickable PR URL — this is
+      // the "repo remembers" handoff moment). Both side-effects unmount
+      // the form: setPromotingId(null) directly, and fetchCandidates()
+      // indirectly because the candidate's status flips to 'promoted'
+      // and isPending becomes false, dropping the form out of the
+      // pending-only render branch. They run in handlePromoteFormClose
+      // instead, when the reviewer dismisses the success UI.
+      return { ok: true, prUrl: body.pr && body.pr.url };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+    }
+  }, [apiFetch]);
+
+  // Wired as the form's onCancel: both the X/Cancel buttons (pre-submit)
+  // and the "Close form" button on the success UI (post-submit) route
+  // here. Always refetch — cheap, and the candidate's status changed
+  // server-side if the reviewer reached the success screen.
+  const handlePromoteFormClose = useCallback(() => {
+    setPromotingId(null);
+    void fetchCandidates();
+  }, [fetchCandidates]);
 
   const handleReject = useCallback(async (id: string, status: 'rejected' | 'duplicate') => {
     setActionError((prev) => ({ ...prev, [id]: '' }));
@@ -299,7 +373,7 @@ export default function IncidentCandidatesReview() {
     } finally {
       setReviewingId(null);
     }
-  }, [notesInput, fetchCandidates]);
+  }, [notesInput, fetchCandidates, apiFetch]);
 
   const stats = useMemo(
     () => ({
@@ -475,14 +549,13 @@ export default function IncidentCandidatesReview() {
         </div>
       </section>
 
-      {/* Doctrine banner — why Promote is disabled in #2a */}
+      {/* Doctrine banner — explains the promote-opens-a-PR contract */}
       <div className="bg-amber-50 border-b-4 border-amber-600">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-start gap-3">
           <AlertOctagon className="text-amber-700 shrink-0 mt-0.5" size={16} />
           <p className="text-[10px] font-bold uppercase tracking-widest text-amber-900 leading-relaxed">
-            PR #2a (intake only) — <strong>Reject</strong> works against the live queue.{' '}
-            <strong>Promote</strong> is intentionally disabled until PR #2b ships the
-            "promote-opens-a-PR" path into the public OTS_INCIDENTS catalog.
+            <strong>Promote</strong> opens a PR appending to <code className="bg-white px-1 border border-amber-700">src/data/promotedIncidents.json</code> — nothing is published until that PR is reviewed and merged.{' '}
+            <strong>Reject</strong> and <strong>Mark Duplicate</strong> close the candidate locally without touching the public catalog.
           </p>
         </div>
       </div>
@@ -725,19 +798,18 @@ export default function IncidentCandidatesReview() {
                         )}
 
                         <div className="flex flex-wrap gap-3">
-                          {/* Promote — VISIBLE but DISABLED until PR #2b */}
+                          {/* Promote — opens inline form that submits to the bot-PR API (PR #2b) */}
                           <button
                             type="button"
-                            disabled
-                            title="Promote is queued for PR #2b (Promote opens a PR adding this incident to the public OTS_INCIDENTS catalog)"
-                            className="bg-emerald-500/40 text-white px-5 py-2.5 text-[10px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000] opacity-50 cursor-not-allowed flex items-center gap-1.5"
+                            disabled={reviewingId !== null || promotingId !== null}
+                            onClick={() => setPromotingId(cand.id)}
+                            className="bg-emerald-500 text-white px-5 py-2.5 text-[10px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000] hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                           >
                             <CheckCircle2 size={12} /> Promote → Public Incident
-                            <span className="ml-2 bg-black text-white px-1.5 py-0.5 text-[8px] tracking-widest">PR #2b</span>
                           </button>
                           <button
                             type="button"
-                            disabled={reviewingId !== null}
+                            disabled={reviewingId !== null || promotingId !== null}
                             onClick={() => handleReject(cand.id, 'rejected')}
                             className="bg-soy-red text-white px-5 py-2.5 text-[10px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000] hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                           >
@@ -745,13 +817,30 @@ export default function IncidentCandidatesReview() {
                           </button>
                           <button
                             type="button"
-                            disabled={reviewingId !== null}
+                            disabled={reviewingId !== null || promotingId !== null}
                             onClick={() => handleReject(cand.id, 'duplicate')}
                             className="bg-black text-white px-5 py-2.5 text-[10px] font-black uppercase tracking-widest border-2 border-black shadow-[2px_2px_0px_#000] hover:bg-soy-bottle transition-colors disabled:opacity-50 flex items-center gap-1.5"
                           >
                             Mark Duplicate
                           </button>
                         </div>
+
+                        {/* Inline promote form — rendered only for the candidate the
+                            reviewer chose to promote. One open at a time. */}
+                        {promotingId === cand.id && (
+                          <PromoteIncidentForm
+                            candidate={{
+                              id: cand.id,
+                              title: cand.title,
+                              source_url: cand.source_url,
+                              parsed_package: cand.parsed_package,
+                              parsed_version: cand.parsed_version,
+                              parsed_ecosystem: cand.parsed_ecosystem,
+                            }}
+                            onSubmit={handlePromote}
+                            onCancel={handlePromoteFormClose}
+                          />
+                        )}
                       </div>
                     ) : (
                       <div className="pt-6 border-t-2 border-black/10 mt-6 bg-black/5 p-4 border border-black/5">
