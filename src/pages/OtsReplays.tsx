@@ -270,13 +270,34 @@ function ReplayCard({ replay, incident }: { replay: OtsIncidentReplay; incident:
             )}
           </section>
 
-          <section className="border-t-4 border-soy-bottle pt-6">
+          <section className="border-t-4 border-soy-bottle pt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link
               to={`/incidents/${incident.id}`}
               className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-soy-bottle hover:text-soy-red"
             >
               Read full case study <ArrowRight size={12} />
             </Link>
+            {replay.replayMode === 'live-detector' && (() => {
+              // Q1/A1: only add the gate link when the fixture row has a clean
+              // package + version pair that the gate handler can parse. Catalog-
+              // mapping replays (tj-actions, polyfill.io) don't reach this branch
+              // — they don't fit the gate's `name@version` input shape.
+              const pkg = replay.fixtureRow.package;
+              const ver = replay.fixtureRow.version;
+              if (typeof pkg !== 'string' || !pkg.trim() || typeof ver !== 'string' || !ver.trim()) {
+                return null;
+              }
+              const query = `${pkg.trim()}@${ver.trim()}`;
+              return (
+                <Link
+                  to={`/proof/gate?package=${encodeURIComponent(query)}`}
+                  className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-soy-red hover:text-soy-bottle"
+                  title={`Run the live production gate on ${query}`}
+                >
+                  Run live gate on this package <ArrowRight size={12} />
+                </Link>
+              );
+            })()}
           </section>
         </div>
       </div>

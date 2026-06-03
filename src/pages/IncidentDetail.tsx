@@ -16,10 +16,42 @@ const confidenceBadgeLabel: Record<string, string> = {
   unverified: 'UNVERIFIED',
 };
 
+// Q2/B2 — strict single-version target detection.
+// Multi-version incidents ("ua-parser-js 0.7.29 / 0.8.0 / 1.0.0", "xz-utils 5.6.0
+// and 5.6.1", "@ledgerhq/connect-kit 1.1.5 / 1.1.6 / 1.1.7") must NOT show the
+// gate CTA — picking one of N malicious versions as "the target" would be a
+// multi-version guess. Per the PR #41 design, we only surface the CTA when the
+// incident's target string lists a single clean version (currently only
+// event-stream 3.3.6 passes among the six replay-backed incidents).
+function isUnambiguousSinglePackageVersionTarget(target: string): boolean {
+  const hasSlashedVersions = /\d+\.\d+(\.\d+)?\s*\/\s*\d+\.\d+/.test(target);
+  const hasAndedVersions = /\d+\.\d+(\.\d+)?\s+and\s+\d+\.\d+/i.test(target);
+  return !hasSlashedVersions && !hasAndedVersions;
+}
+
 export default function IncidentDetail() {
   const { incidentId } = useParams<{ incidentId: string }>();
   const incident = incidentId ? getOtsIncident(incidentId) : undefined;
-  const hasReplay = incidentId ? !!getOtsIncidentReplay(incidentId) : false;
+  const replay = incidentId ? getOtsIncidentReplay(incidentId) : undefined;
+  const hasReplay = !!replay;
+
+  // Q2/B2 — gate CTA only when:
+  //   (a) the incident has a live-detector replay (catalog-mapping replays
+  //       don't fit the gate's name@version input shape)
+  //   (b) the replay fixture row has clean package + version strings
+  //   (c) the incident's target string is unambiguous (single version)
+  let gateQuery: string | null = null;
+  if (incident && replay && replay.replayMode === 'live-detector') {
+    const pkg = replay.fixtureRow.package;
+    const ver = replay.fixtureRow.version;
+    if (
+      typeof pkg === 'string' && pkg.trim() &&
+      typeof ver === 'string' && ver.trim() &&
+      isUnambiguousSinglePackageVersionTarget(incident.target)
+    ) {
+      gateQuery = `${pkg.trim()}@${ver.trim()}`;
+    }
+  }
 
   if (!incident) {
     return (
@@ -86,15 +118,27 @@ export default function IncidentDetail() {
               <ExternalLink size={12} />
             </a>
           </div>
-          {hasReplay && (
-            <div className="mt-6">
-              <Link
-                to={`/proof/ots-replays#${incident.id}`}
-                className="inline-flex items-center gap-2 bg-soy-red text-white px-6 py-3 border-4 border-soy-bottle font-black uppercase italic tracking-widest text-sm shadow-[4px_4px_0px_#302C26] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-              >
-                <FlaskConical size={16} /> REPLAY WITH OTS
-                <ArrowRight size={16} />
-              </Link>
+          {(hasReplay || gateQuery) && (
+            <div className="mt-6 flex flex-wrap gap-3">
+              {hasReplay && (
+                <Link
+                  to={`/proof/ots-replays#${incident.id}`}
+                  className="inline-flex items-center gap-2 bg-soy-red text-white px-6 py-3 border-4 border-soy-bottle font-black uppercase italic tracking-widest text-sm shadow-[4px_4px_0px_#302C26] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
+                >
+                  <FlaskConical size={16} /> REPLAY WITH OTS
+                  <ArrowRight size={16} />
+                </Link>
+              )}
+              {gateQuery && (
+                <Link
+                  to={`/proof/gate?package=${encodeURIComponent(gateQuery)}`}
+                  className="inline-flex items-center gap-2 bg-white text-soy-bottle px-6 py-3 border-4 border-soy-bottle font-black uppercase italic tracking-widest text-sm shadow-[4px_4px_0px_#302C26] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
+                  title={`Run the live production gate on ${gateQuery}`}
+                >
+                  RUN LIVE GATE
+                  <ArrowRight size={16} />
+                </Link>
+              )}
             </div>
           )}
         </div>
