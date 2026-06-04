@@ -66,11 +66,13 @@ That is a different category.
 
 ## Current Proof State
 
+- **Arc status: closed** (see [Phase Closeout](proof/phase-closeout.md))
 - Score: 90 / 100
-- Tests: 105 passing
+- Tests: 158 passing across both shipped arcs
 - Gate-active patterns: 20 / 31
 - Workflow scan: live on real repositories
 - OSV overlay: integrated, with severity normalization (PR #28 — bulk + detail enrichment, max-of-both severity) and compromise-indicator enrichment (PR #30 — CWE-829/CWE-912 → install-script + remote-execution + maintainer-compromise signals on production rows)
+- Public deployed gate UI: `/proof/gate?package=name@version` shipped (PR #32); production-parity bug surfaced and fixed (PR #33); discoverability links shipped (PR #41)
 - Synthetic demo signals: isolated
 - Evidence display: operator-readable
 - Coverage disclosure: honest by design
@@ -102,6 +104,7 @@ The proof package is a parent index. Each artifact lands as its own file under `
 3. **[Enterprise Trust Narrative](proof/enterprise-trust-narrative.md)** — buyer-facing long-form: the trust-decision problem, the OTS loop, why honesty is the product. Shipped.
 4. **[Demo Script](proof/demo-script.md)** — two-path runnable walkthrough: `ua-parser-js` honesty path + workflow origin precision path. Shipped (markdown-only; `.mjs` driver deferred).
 5. **[Production Walkthrough](proof/production-walkthrough.md)** — screenshot-grounded record of an end-to-end run against `opensoyce-f336.vercel.app`. Captured 2026-06-01. Nine numbered slots filled plus GUARD probe documented. Shipped.
+6. **[Phase Closeout](proof/phase-closeout.md)** — the "we shipped the phase" doc. Captures the full arc (PRs #19 → #41 + the handoff folder + this closeout), names all four engineering gaps as closed, records the four doctrine transitions on `ua-parser-js@0.7.29`, names the future phases as out of scope. The OTS engineering arc is closed. Shipped.
 
 ## The Story
 

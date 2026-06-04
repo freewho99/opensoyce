@@ -14,7 +14,7 @@ For cross-arc rules (forbidden ops, working style, getting-started), see [README
 - **111 tests passing** in OTS-relevant suites (governor 15 + patterns 25 + replays 7 + resolver 18 + osv 18 + workflows 15 + repo-scan 13). Combined with the candidate arc's tests, the full `npm run test:ci` reports **158 passing**.
 - **Doctrine**: *A pattern can be educational before it is enforceable. The product always says which is which.* Plus: *Detection, evidence, policy, and enforcement are separate layers.*
 - **All four named engineering gaps are closed.** No queued OTS engineering follow-ups remain in this arc.
-- **Two small docs/UX follow-ups still queued.** PR #41 (discoverability cross-links), PR #42 (phase closeout). PR #40 (doc repair recording the PR #32/#33 cycle) is the PR introducing this update. Don't pull next-phase work forward without explicit user call.
+- **All planned arc work shipped.** PR #41 (discoverability cross-links) and PR #42 (phase closeout) both landed; this update was introduced by PR #42 itself. No queued OTS arc work remains. Don't pull next-phase work forward without explicit user call.
 
 ---
 
@@ -150,10 +150,9 @@ The deployed `/proof/gate` page at `src/pages/Gate.tsx` calls this endpoint with
 
 | Item | Why it needs a decision |
 |---|---|
-| **PR #41 — discoverability cross-links** | Add links from `/proof/ots-replays` and `/incidents/*` to `/proof/gate?package=...`. Add to `/proof` page artifact list. Possibly sidebar nav entry. UX decisions on placement need user sign-off. |
-| **PR #42 — phase closeout doc** | Captures the full arc shipped (PRs #19–#33) as the "we shipped the phase" doc. Closes out the engineering arc cleanly so next-phase work has a clean start. |
 | **Version-aware OSV queries (Phase 3.5)** | OSV v1 path is documented as package-level. Adding version awareness narrows compromise indicators but is a real product decision (false-positives-preferred is the current doctrine; version awareness changes that). |
-| **Trust Timeline / Repo Trust Dashboard / Open Source Trust Center / Vanta-Drata export / Trust Agent** | All named by user as "next phase, not urgent." Do not start any of these without explicit user call. The current arc needs to land cleanly first. |
+| **Trust Timeline / Repo Trust Dashboard / Open Source Trust Center / Vanta-Drata export / Trust Agent** | All named by user as "next phase, not urgent." Do not start any of these without explicit user call. The current arc closed clean; the next phase needs its own architecture-first sketch before code. |
+| **A3 follow-up — gate on deployed `/proof` marketing page** | Deferred in PR #41 because `/proof` is product-capability marketing, not a proof-package artifact index. If a real deployed proof-artifact index page is ever built, gate belongs in it. Don't add to the existing marketing layout without explicit direction. |
 
 ### Forbidden without explicit user authorization
 
@@ -220,25 +219,14 @@ The candidate-pipeline arc's `threat_feed` table debt is unrelated to OTS — se
 
 ## Backlog (for future PRs, do NOT start without explicit user call)
 
-### PR #41 — discoverability cross-links
+### Arc-completion log (all shipped — kept here as historical record)
 
-Add links from `/proof/ots-replays`, `/incidents/*`, and the `/proof` page artifact list to `/proof/gate?package=...`. Possibly a sidebar nav entry. Small UX PR; placement decisions need user sign-off.
-
-### PR #42 — phase closeout doc
-
-The "we shipped the phase" doc. Captures the full arc shipped:
-
-- PR #20 baseline evidence (ALLOW, 1 pattern medium)
-- PR #28 decision changed via OSV severity normalization (BLOCK, 1 pattern critical)
-- PR #30 firing set changed via row enrichment (BLOCK, 4 patterns)
-- PR #32 public gate UI closed original Step-4 seam
-- PR #33 surfaced and fixed the production version-suffix lookup bug
-
-Should explicitly mark the OTS engineering arc as closed and name the queued future phases (version-aware OSV, Trust Timeline, etc.) without scope-creeping into them.
+- **PR #41** — discoverability cross-links from `/proof/ots-replays` (per-card on live-detector cards) and `/incidents/:id` (single-version targets only) to `/proof/gate?package=...`. Shipped. A3 (gate on `/proof` marketing page) intentionally skipped — see the deferred-decision note in the table above.
+- **PR #42** — phase closeout doc at `docs/proof/phase-closeout.md`. Shipped. Captures the full arc, names all four engineering gaps closed, lists future phases as out of scope.
 
 ### What is NOT urgent yet (do not pull forward)
 
-Same as the user's standing direction: version-aware OSV, Trust Timeline, Repo Trust Dashboard, Open Source Trust Center, Vanta/Drata export, Trust Agent. All real, all next-phase. Current arc needs a clean landing first.
+Same as the user's standing direction: version-aware OSV, Trust Timeline, Repo Trust Dashboard, Open Source Trust Center, Vanta/Drata export, Trust Agent. All real, all next-phase. The current arc closed clean; the next phase needs its own architecture-first sketch before code.
 
 ---
 
