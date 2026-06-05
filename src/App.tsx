@@ -43,6 +43,7 @@ import PatternDetail from './pages/PatternDetail';
 import IncidentDetail from './pages/IncidentDetail';
 import OtsReplays from './pages/OtsReplays';
 import Gate from './pages/Gate';
+import TrustTimeline from './pages/TrustTimeline';
 import AppealsReview from './pages/AppealsReview';
 import IncidentCandidatesReview from './pages/IncidentCandidatesReview';
 
@@ -77,6 +78,7 @@ export function AppRoutes() {
         <Route path="/proof" element={<Proof />} />
         <Route path="/proof/ots-replays" element={<OtsReplays />} />
         <Route path="/proof/gate" element={<Gate />} />
+        <Route path="/proof/timeline" element={<TrustTimeline />} />
         <Route path="/patterns" element={<Patterns />} />
         <Route path="/patterns/:patternId" element={<PatternDetail />} />
         <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
