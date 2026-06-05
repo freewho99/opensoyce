@@ -254,6 +254,12 @@ export default function TrustTimeline() {
             <Link to="/proof/gate" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">/proof/gate</Link> — live production gate, verbatim API mirror.
           </li>
           <li>
+            <Link to="/projects/freewho99/opensoyce/trust" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">/projects/freewho99/opensoyce/trust</Link> — per-repo trust posture (static MVP).
+          </li>
+          <li>
+            <Link to="/opensource-trust" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">/opensource-trust</Link> — public Open Source Trust Center: proof-anchored summary of every shipped surface.
+          </li>
+          <li>
             <a
               href="https://github.com/freewho99/opensoyce/blob/main/docs/proof/doctrine-pattern-enforcement.md"
               target="_blank"

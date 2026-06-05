@@ -424,6 +424,12 @@ export default function Gate() {
             — static Repo Trust Dashboard MVP for the one supported repo.
           </li>
           <li>
+            <Link to="/opensource-trust" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">
+              /opensource-trust
+            </Link>{' '}
+            — public Open Source Trust Center: the proof-anchored summary of every shipped trust surface.
+          </li>
+          <li>
             <a
               href="https://github.com/freewho99/opensoyce/blob/main/docs/proof/before-after-risk-example.md"
               target="_blank"

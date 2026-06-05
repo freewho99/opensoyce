@@ -1,0 +1,303 @@
+#!/usr/bin/env node
+/**
+ * Structural invariants for the static Open Source Trust Center MVP.
+ *
+ * Doctrine enforced (matches §9 of the merged sketch in
+ * docs/architecture/open-source-trust-center-sketch.md):
+ *   - exactly one subject (the only subject the MVP supports)
+ *   - that subject is freewho99/opensoyce
+ *   - every claim's sectionId is one of the seven §5 section types
+ *   - every section has at least one claim
+ *   - every claim has a non-empty headline under 80 chars
+ *   - every claim has a non-empty body under 280 chars
+ *   - every claim has an audience from the five-audience vocabulary
+ *   - every claim has a non-empty proofAnchors array
+ *   - every proofAnchor has a known proofType + non-empty label + non-empty href
+ *   - every proofAnchor with proofType === 'pr' has a positive integer pr +
+ *     a 7- or 40-char hex sha
+ *   - no claim contains a banned marketing substring
+ *   - no claim contains a future-tense marketing tell
+ *   - no claim has a `visibility` field (would telegraph private scope creep)
+ *   - every PR cited by a proofAnchor either exists in TRUST_TIMELINE_EVENTS
+ *     or is documented exceptionally inline
+ *   - shared/data/page files do not contain unauthorized scope leakage
+ *     (SOC 2 / Vanta / Drata / threat_feed / Trust Vault / Trust Agent)
+ *   - /opensource-trust route is registered in src/App.tsx
+ *   - cross-links from /proof/gate, /proof/timeline, and the Dashboard
+ *     each point at /opensource-trust
+ *   - package.json wires the test into test:ci
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  OPEN_SOURCE_TRUST_CENTER_SUBJECTS,
+  OPEN_SOURCE_TRUST_CENTER_SECTION_IDS,
+  OPEN_SOURCE_TRUST_CENTER_AUDIENCES,
+  OPEN_SOURCE_TRUST_CENTER_PROOF_TYPES,
+  OPEN_SOURCE_TRUST_CENTER_POSTURE_LABELS,
+  OPEN_SOURCE_TRUST_CENTER_BANNED_SUBSTRINGS,
+  OPEN_SOURCE_TRUST_CENTER_FUTURE_TENSE_TELLS,
+  OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT,
+  getOpenSourceTrustCenterSubject,
+  groupClaimsBySection,
+} from '../src/shared/openSourceTrustCenter.js';
+import {
+  TRUST_TIMELINE_EVENTS,
+} from '../src/shared/trustTimeline.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '..');
+
+let passed = 0;
+let failed = 0;
+const pending = [];
+
+function test(name, fn) {
+  pending.push(() => {
+    try {
+      fn();
+      console.log(`PASS  ${name}`);
+      passed += 1;
+    } catch (e) {
+      console.log(`FAIL  ${name} -- ${e.message}\n${e.stack}`);
+      failed += 1;
+    }
+  });
+}
+
+function ok(c, msg) {
+  if (!c) throw new Error(msg || 'assertion failed');
+}
+function eq(a, b, msg) {
+  if (a !== b) throw new Error(`${msg}: expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+function read(rel) {
+  return fs.readFileSync(path.join(root, rel), 'utf8');
+}
+
+// PRs that the MVP cites but that legitimately do not appear inside
+// TRUST_TIMELINE_EVENTS as event entries. PR #45 added the Timeline data
+// itself; PR #47 added the Dashboard MVP. Both are merged on main; both
+// are public PR + SHA evidence; neither is a Timeline event row.
+const PR_REFERENCE_EXCEPTIONS = new Set([45, 47]);
+
+const subject = OPEN_SOURCE_TRUST_CENTER_SUBJECTS[0];
+const timelinePrs = new Set(TRUST_TIMELINE_EVENTS.map((ev) => ev.pr));
+
+// ---------------------------------------------------------------------------
+
+test('MVP contains exactly one Trust Center subject', () => {
+  eq(OPEN_SOURCE_TRUST_CENTER_SUBJECTS.length, 1, 'subject count');
+  eq(OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT.owner, 'freewho99', 'MVP subject owner');
+  eq(OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT.repo, 'opensoyce', 'MVP subject repo');
+  eq(subject.owner, OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT.owner, 'subject owner');
+  eq(subject.repo, OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT.repo, 'subject repo');
+});
+
+test('subject lookup is case-insensitive and gates unknown subjects', () => {
+  ok(getOpenSourceTrustCenterSubject('FREEWHO99', 'OPENSOYCE'), 'lookup should be case-insensitive');
+  eq(getOpenSourceTrustCenterSubject('freewho99', 'not-opensoyce'), null, 'unknown subject');
+  eq(getOpenSourceTrustCenterSubject('', ''), null, 'empty inputs');
+});
+
+test('subject uses the fixed posture vocabulary and concise summary', () => {
+  ok(OPEN_SOURCE_TRUST_CENTER_POSTURE_LABELS.includes(subject.postureLabel), `bad posture ${subject.postureLabel}`);
+  ok(typeof subject.postureSummary === 'string' && subject.postureSummary.length > 0, 'missing postureSummary');
+  ok(subject.postureSummary.length < 280, `postureSummary too long: ${subject.postureSummary.length}`);
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(subject.lastEvaluated), `bad lastEvaluated ${subject.lastEvaluated}`);
+  ok(typeof subject.primaryCta.label === 'string' && subject.primaryCta.label.length > 0, 'missing CTA label');
+  ok(subject.primaryCta.href.startsWith('/proof/gate'), 'primary CTA must point at the live gate');
+});
+
+test('every section ID is from the §5 vocabulary', () => {
+  for (const claim of subject.claims) {
+    ok(OPEN_SOURCE_TRUST_CENTER_SECTION_IDS.includes(claim.sectionId), `bad sectionId ${claim.sectionId} on claim ${claim.id}`);
+  }
+});
+
+test('every section has at least one claim', () => {
+  const grouped = groupClaimsBySection(subject);
+  eq(grouped.length, OPEN_SOURCE_TRUST_CENTER_SECTION_IDS.length, 'section group count');
+  for (const { sectionId, claims } of grouped) {
+    ok(claims.length > 0, `section ${sectionId} has no claims`);
+  }
+});
+
+test('every claim has a non-empty headline under 80 chars', () => {
+  for (const claim of subject.claims) {
+    ok(typeof claim.headline === 'string' && claim.headline.length > 0, `claim ${claim.id}: missing headline`);
+    ok(claim.headline.length < 80, `claim ${claim.id}: headline too long (${claim.headline.length})`);
+  }
+});
+
+test('every claim has a non-empty body under 280 chars', () => {
+  for (const claim of subject.claims) {
+    ok(typeof claim.body === 'string' && claim.body.length > 0, `claim ${claim.id}: missing body`);
+    ok(claim.body.length < 280, `claim ${claim.id}: body too long (${claim.body.length})`);
+  }
+});
+
+test('every claim audience is in the five-audience vocabulary', () => {
+  for (const claim of subject.claims) {
+    ok(OPEN_SOURCE_TRUST_CENTER_AUDIENCES.includes(claim.audience), `claim ${claim.id}: bad audience ${claim.audience}`);
+  }
+});
+
+test('every claim has a non-empty proofAnchors array with valid types', () => {
+  for (const claim of subject.claims) {
+    ok(Array.isArray(claim.proofAnchors) && claim.proofAnchors.length > 0, `claim ${claim.id}: empty proofAnchors`);
+    for (const anchor of claim.proofAnchors) {
+      ok(OPEN_SOURCE_TRUST_CENTER_PROOF_TYPES.includes(anchor.proofType), `claim ${claim.id}: bad proofType ${anchor.proofType}`);
+      ok(typeof anchor.label === 'string' && anchor.label.length > 0, `claim ${claim.id}: empty label`);
+      ok(typeof anchor.href === 'string' && anchor.href.length > 0, `claim ${claim.id}: empty href`);
+    }
+  }
+});
+
+test('every PR proofAnchor carries pr + 7-or-40-char hex sha', () => {
+  for (const claim of subject.claims) {
+    for (const anchor of claim.proofAnchors) {
+      if (anchor.proofType !== 'pr') continue;
+      ok(typeof anchor.pr === 'number' && Number.isInteger(anchor.pr) && anchor.pr > 0, `claim ${claim.id}: bad pr`);
+      ok(typeof anchor.sha === 'string' && /^([0-9a-f]{7}|[0-9a-f]{40})$/.test(anchor.sha), `claim ${claim.id}: bad sha ${anchor.sha}`);
+    }
+  }
+});
+
+test('no claim contains a banned marketing substring', () => {
+  for (const claim of subject.claims) {
+    const text = `${claim.headline} ${claim.body}`.toLowerCase();
+    for (const banned of OPEN_SOURCE_TRUST_CENTER_BANNED_SUBSTRINGS) {
+      ok(!text.includes(banned.toLowerCase()), `claim ${claim.id}: contains banned substring "${banned}"`);
+    }
+  }
+});
+
+test('no claim contains a future-tense marketing tell', () => {
+  for (const claim of subject.claims) {
+    const text = `${claim.headline} ${claim.body}`.toLowerCase();
+    for (const tell of OPEN_SOURCE_TRUST_CENTER_FUTURE_TENSE_TELLS) {
+      ok(!text.includes(tell.toLowerCase()), `claim ${claim.id}: contains future-tense tell "${tell}"`);
+    }
+  }
+});
+
+test('no claim record carries a visibility field (private-scope creep guard)', () => {
+  for (const claim of subject.claims) {
+    ok(!Object.prototype.hasOwnProperty.call(claim, 'visibility'), `claim ${claim.id}: unexpected visibility field`);
+  }
+});
+
+test('every PR proofAnchor cites a Timeline event or a documented exception', () => {
+  for (const claim of subject.claims) {
+    for (const anchor of claim.proofAnchors) {
+      if (anchor.proofType !== 'pr') continue;
+      const known = timelinePrs.has(anchor.pr) || PR_REFERENCE_EXCEPTIONS.has(anchor.pr);
+      ok(known, `claim ${claim.id}: PR #${anchor.pr} is neither in Trust Timeline nor in PR_REFERENCE_EXCEPTIONS`);
+    }
+  }
+});
+
+test('every deployed-surface anchor resolves to a known proof surface family', () => {
+  const allowedSurfacePrefixes = ['/proof/gate', '/proof/timeline', '/projects/', '/patterns', '/opensource-trust'];
+  for (const claim of subject.claims) {
+    for (const anchor of claim.proofAnchors) {
+      if (anchor.proofType !== 'live-surface') continue;
+      ok(
+        allowedSurfacePrefixes.some((p) => anchor.href.startsWith(p)),
+        `claim ${claim.id}: anchor ${anchor.href} not in allowed surface families`,
+      );
+    }
+  }
+});
+
+test('shared/data/page files do not leak unauthorized scope', () => {
+  const sharedPath = 'src/shared/openSourceTrustCenter.js';
+  const dataPath = 'src/data/openSourceTrustCenter.ts';
+  const pagePath = 'src/pages/OpenSourceTrustCenter.tsx';
+  const sharedSrc = read(sharedPath);
+  const dataSrc = read(dataPath);
+  const pageSrc = read(pagePath);
+  const combined = `${sharedSrc}\n${dataSrc}\n${pageSrc}`;
+
+  // The page surface itself must never carry these — page copy reaches users.
+  for (const banned of ['Trust Vault', 'Trust Agent', 'threat_feed']) {
+    ok(!pageSrc.includes(banned), `forbidden scope leaked into page surface: ${banned}`);
+  }
+
+  // The shared / data modules may name future-ADR scope ONLY in module
+  // doctrine comments (so the rule itself can be encoded honestly).
+  // Reject any occurrence outside an "ADR" / "doctrine" / "banned" context window.
+  for (const banned of ['Trust Vault', 'Trust Agent', 'threat_feed']) {
+    const lower = combined.toLowerCase();
+    let from = 0;
+    while (true) {
+      const idx = lower.indexOf(banned.toLowerCase(), from);
+      if (idx === -1) break;
+      const win = combined.slice(Math.max(0, idx - 200), Math.min(combined.length, idx + 200));
+      const allowed = ['ADR', 'adr', 'doctrine', 'banned', 'future-tense', 'unauthorized'];
+      ok(
+        allowed.some((c) => win.includes(c)),
+        `"${banned}" appears outside a doctrine / ADR / banned-vocabulary comment in shared/data/page files`,
+      );
+      from = idx + banned.length;
+    }
+  }
+
+  // Anti-marketing banned substrings: same windowing rule.
+  for (const banned of OPEN_SOURCE_TRUST_CENTER_BANNED_SUBSTRINGS) {
+    const lower = combined.toLowerCase();
+    let from = 0;
+    while (true) {
+      const idx = lower.indexOf(banned.toLowerCase(), from);
+      if (idx === -1) break;
+      const win = combined.slice(Math.max(0, idx - 200), Math.min(combined.length, idx + 200));
+      const allowed = ['OPEN_SOURCE_TRUST_CENTER_BANNED_SUBSTRINGS', 'banned', 'doctrine', 'ADR'];
+      ok(
+        allowed.some((c) => win.includes(c)),
+        `"${banned}" appears outside the banned-vocabulary or doctrine context in shared/data/page files`,
+      );
+      from = idx + banned.length;
+    }
+  }
+});
+
+test('route, page registration, and cross-link wiring are present', () => {
+  const app = read('src/App.tsx');
+  const gate = read('src/pages/Gate.tsx');
+  const timeline = read('src/pages/TrustTimeline.tsx');
+  const dashboard = read('src/pages/RepoTrustDashboard.tsx');
+  const page = read('src/pages/OpenSourceTrustCenter.tsx');
+
+  ok(app.includes('path="/opensource-trust"'), '/opensource-trust route missing');
+  ok(app.includes('OpenSourceTrustCenter'), 'OpenSourceTrustCenter import missing in App.tsx');
+  ok(gate.includes('/opensource-trust'), 'Gate cross-link to /opensource-trust missing');
+  ok(timeline.includes('/opensource-trust'), 'Timeline cross-link to /opensource-trust missing');
+  ok(dashboard.includes('/opensource-trust'), 'Dashboard cross-link to /opensource-trust missing');
+
+  // The page is read-only by doctrine: no fetch / no API calls.
+  ok(!page.includes('fetch('), 'Trust Center page must not call any API');
+});
+
+test('package.json wires test:ci and the dedicated script', () => {
+  const pkg = JSON.parse(read('package.json'));
+  ok(pkg.scripts['test:open-source-trust-center'], 'missing test:open-source-trust-center script');
+  ok(
+    pkg.scripts['test:open-source-trust-center'].includes('scripts/test-open-source-trust-center.mjs'),
+    'bad open-source-trust-center script wiring',
+  );
+  ok(
+    pkg.scripts['test:ci'].includes('scripts/test-open-source-trust-center.mjs'),
+    'test:ci must include the Trust Center invariants test',
+  );
+});
+
+// ---------------------------------------------------------------------------
+
+(async () => {
+  for (const fn of pending) await fn();
+  console.log(`\nOpen Source Trust Center tests: ${passed} passed, ${failed} failed`);
+  process.exit(failed > 0 ? 1 : 0);
+})();

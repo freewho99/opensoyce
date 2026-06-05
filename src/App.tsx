@@ -45,6 +45,7 @@ import OtsReplays from './pages/OtsReplays';
 import Gate from './pages/Gate';
 import TrustTimeline from './pages/TrustTimeline';
 import RepoTrustDashboard from './pages/RepoTrustDashboard';
+import OpenSourceTrustCenter from './pages/OpenSourceTrustCenter';
 import AppealsReview from './pages/AppealsReview';
 import IncidentCandidatesReview from './pages/IncidentCandidatesReview';
 
@@ -80,6 +81,7 @@ export function AppRoutes() {
         <Route path="/proof/ots-replays" element={<OtsReplays />} />
         <Route path="/proof/gate" element={<Gate />} />
         <Route path="/proof/timeline" element={<TrustTimeline />} />
+        <Route path="/opensource-trust" element={<OpenSourceTrustCenter />} />
         <Route path="/patterns" element={<Patterns />} />
         <Route path="/patterns/:patternId" element={<PatternDetail />} />
         <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
