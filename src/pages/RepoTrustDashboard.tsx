@@ -405,6 +405,10 @@ function CrossLinkPanel({ posture }: { posture: RepoTrustPosture }) {
           <Link to="/proof/ots-replays" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">/proof/ots-replays</Link>{' '}
           — live-detector replays of cited public incidents.
         </li>
+        <li>
+          <Link to="/opensource-trust" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">/opensource-trust</Link>{' '}
+          — public Open Source Trust Center: proof-anchored summary of every shipped surface.
+        </li>
       </ul>
       <p className="text-[10px] font-bold text-soy-bottle/50 uppercase tracking-wider mt-4">
         Risk does not lose its name because someone needed to ship.

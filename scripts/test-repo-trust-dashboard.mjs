@@ -149,6 +149,11 @@ test('route, project inbound link, and gate cross-link are wired', () => {
   ok(gate.includes('/projects/freewho99/opensoyce/trust'), 'Gate cross-link missing');
 });
 
+test('dashboard outbound cross-link to Open Source Trust Center is wired', () => {
+  const dashboard = read('src/pages/RepoTrustDashboard.tsx');
+  ok(dashboard.includes('/opensource-trust'), 'Dashboard cross-link to Open Source Trust Center missing');
+});
+
 test('package test:ci wires the structural invariant test', () => {
   const pkg = JSON.parse(read('package.json'));
   ok(pkg.scripts['test:repo-trust-dashboard'], 'missing test:repo-trust-dashboard script');
@@ -163,7 +168,13 @@ test('scope guardrails stay out of the dashboard files', () => {
     'src/pages/RepoTrustDashboard.tsx',
   ];
   const combined = files.map(read).join('\n');
-  for (const banned of ['threat_feed', 'Trust Center', 'Vanta', 'Drata', 'Trust Agent']) {
+  // Note: 'Trust Center' was on this banned list until PR #49 shipped the
+  // public Open Source Trust Center. Per the sketch doctrine (§4 of
+  // open-source-trust-center-sketch.md), the banned-substring list updates
+  // in the same PR that ships the underlying capability, never separately.
+  // The dashboard's cross-link panel may reference /opensource-trust now;
+  // Vanta / Drata / Trust Agent remain unauthorized scope.
+  for (const banned of ['threat_feed', 'Vanta', 'Drata', 'Trust Agent']) {
     ok(!combined.includes(banned), `forbidden scope leaked into dashboard files: ${banned}`);
   }
 });
