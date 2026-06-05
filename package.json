@@ -11,7 +11,7 @@
     "lint": "tsc --noEmit",
     "check:mojibake": "node scripts/check-mojibake.mjs",
     "test": "npm run lint && node scripts/test-governor-gate.mjs && node scripts/test-ots-patterns.mjs",
-    "test:ci": "npm run lint && node scripts/test-governor-gate.mjs && node scripts/test-ots-patterns.mjs && node scripts/test-ots-replays.mjs && node scripts/test-package-registry-query.mjs && node scripts/test-osv-fast-path.mjs && node scripts/test-github-workflow-signals.mjs && node scripts/test-project-workflow-scan.mjs && node scripts/test-incident-candidates.mjs && node scripts/test-incident-candidate-review.mjs && node scripts/test-incident-candidate-promote.mjs && node scripts/test-trust-timeline.mjs",
+    "test:ci": "npm run lint && node scripts/test-governor-gate.mjs && node scripts/test-ots-patterns.mjs && node scripts/test-ots-replays.mjs && node scripts/test-package-registry-query.mjs && node scripts/test-osv-fast-path.mjs && node scripts/test-github-workflow-signals.mjs && node scripts/test-project-workflow-scan.mjs && node scripts/test-incident-candidates.mjs && node scripts/test-incident-candidate-review.mjs && node scripts/test-incident-candidate-promote.mjs && node scripts/test-trust-timeline.mjs && node scripts/test-repo-trust-dashboard.mjs",
     "test:incident-candidates": "node scripts/test-incident-candidates.mjs",
     "test:incident-candidate-review": "node scripts/test-incident-candidate-review.mjs",
     "test:incident-candidate-promote": "node scripts/test-incident-candidate-promote.mjs",
@@ -30,7 +30,8 @@
     "test:governor-gate": "node scripts/test-governor-gate.mjs",
     "test:ots-patterns": "node scripts/test-ots-patterns.mjs",
     "test:ots-replays": "node scripts/test-ots-replays.mjs",
-    "test:trust-timeline": "node scripts/test-trust-timeline.mjs"
+    "test:trust-timeline": "node scripts/test-trust-timeline.mjs",
+    "test:repo-trust-dashboard": "node scripts/test-repo-trust-dashboard.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

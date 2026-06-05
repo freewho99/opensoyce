@@ -44,6 +44,7 @@ import IncidentDetail from './pages/IncidentDetail';
 import OtsReplays from './pages/OtsReplays';
 import Gate from './pages/Gate';
 import TrustTimeline from './pages/TrustTimeline';
+import RepoTrustDashboard from './pages/RepoTrustDashboard';
 import AppealsReview from './pages/AppealsReview';
 import IncidentCandidatesReview from './pages/IncidentCandidatesReview';
 
@@ -101,6 +102,7 @@ export function AppRoutes() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
         <Route path="/project/:owner/:repo" element={<ProjectDetail />} />
+        <Route path="/projects/:owner/:repo/trust" element={<RepoTrustDashboard />} />
         <Route path="/projects/:owner/:repo/fork" element={<ForkProject />} />
         <Route path="/project/:owner/:repo/fork" element={<ForkProject />} />
         {/* Fallback or other pages */}
