@@ -412,6 +412,12 @@ export default function Gate() {
             — live-detector replays of cited public supply-chain incidents, with the fixture row shown above each result.
           </li>
           <li>
+            <Link to="/proof/timeline" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">
+              /proof/timeline
+            </Link>{' '}
+            — static record of how trust decisions changed across the closed OTS proof-package arc.
+          </li>
+          <li>
             <a
               href="https://github.com/freewho99/opensoyce/blob/main/docs/proof/before-after-risk-example.md"
               target="_blank"
