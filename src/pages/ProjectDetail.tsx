@@ -17,6 +17,7 @@ import { CATEGORIES } from '../data/categories';
 import { trackEvent } from '../utils/analytics';
 import { detectOtsPatternsForRow, otsPatternVerdict } from '../shared/otsPatterns.js';
 import { getOtsPatternDefinition } from '../data/patterns';
+import { REPO_TRUST_MVP_FOCUS } from '../data/repoTrustDashboard';
 
 export default function ProjectDetail() {
   const { owner, repo } = useParams();
@@ -90,6 +91,9 @@ export default function ProjectDetail() {
   }, [owner, repo]);
 
   const project = liveData || localProject;
+  const isTrustDashboardFocusRepo = !!project
+    && project.owner.toLowerCase() === REPO_TRUST_MVP_FOCUS.owner
+    && project.name.toLowerCase() === REPO_TRUST_MVP_FOCUS.repo;
 
   const mockVersion = project && project.name.toLowerCase() === 'axios' ? '1.14.1' : '1.0.0';
   const rowForPatterns = project ? {
@@ -240,6 +244,27 @@ export default function ProjectDetail() {
                 <p className="text-2xl md:text-3xl font-medium leading-tight mb-12 opacity-80 max-w-4xl">
                   {project.description}
                 </p>
+
+                {isTrustDashboardFocusRepo && (
+                  <div className="border-4 border-black bg-white p-5 mb-8 shadow-[6px_6px_0px_#000]">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div>
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-soy-red mb-2">
+                          Repo Trust Dashboard
+                        </h3>
+                        <p className="text-sm font-bold text-soy-bottle/70 leading-relaxed">
+                          Static MVP posture for this repo: gate example, workflow risk, timeline preview, and exception placeholder.
+                        </p>
+                      </div>
+                      <Link
+                        to={`/projects/${project.owner}/${project.name}/trust`}
+                        className="inline-flex items-center justify-center gap-2 bg-black text-white px-5 py-3 text-[11px] font-black uppercase tracking-widest hover:bg-soy-red transition-all"
+                      >
+                        View Trust Dashboard <ArrowUpRight size={13} />
+                      </Link>
+                    </div>
+                  </div>
+                )}
 
                 {/* 3. WHY IT'S HOT (red band) — only when there's a real editorial note. */}
                 {whyItsHot && (

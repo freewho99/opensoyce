@@ -418,6 +418,12 @@ export default function Gate() {
             — static record of how trust decisions changed across the closed OTS proof-package arc.
           </li>
           <li>
+            <Link to="/projects/freewho99/opensoyce/trust" className="text-soy-red font-black underline decoration-2 underline-offset-2 hover:no-underline">
+              /projects/freewho99/opensoyce/trust
+            </Link>{' '}
+            — static Repo Trust Dashboard MVP for the one supported repo.
+          </li>
+          <li>
             <a
               href="https://github.com/freewho99/opensoyce/blob/main/docs/proof/before-after-risk-example.md"
               target="_blank"
