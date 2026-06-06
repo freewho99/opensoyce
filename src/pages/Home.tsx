@@ -163,12 +163,21 @@ export default function Home() {
       <section className="relative overflow-hidden border-b-4 border-soy-bottle py-20 px-4 bg-white">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-7 z-10 text-center lg:text-left">
+            {/*
+              POST-SPINE HERO COPY (Phase 3 launch narrative)
+              Per docs/architecture/launch-narrative-positioning-adr.md §3.1.
+              Upgrades the Nutrition Label metaphor into a trust record claim.
+              Copy is present-tense, free of banned-substring vocabulary,
+              free of future-tense tells, free of soft-banned marketing verbs,
+              and free of Phase-3 launch banned phrases. Enforced by
+              scripts/test-open-source-trust-center.mjs.
+            */}
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               className="mb-6 bg-soy-red text-white text-[10px] font-black px-4 py-1.5 uppercase tracking-[0.2em] inline-block shadow-[4px_4px_0px_#000]"
             >
-              The Trust Layer is Here
+              PROOF-BACKED OPEN-SOURCE TRUST
             </motion.div>
             <motion.h1
               initial={{ opacity: 0, y: 15 }}
@@ -176,7 +185,7 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-6xl md:text-[5.5rem] font-bold uppercase tracking-tighter italic leading-[0.9] mb-8"
             >
-              BEFORE YOU BUILD ON <span className="text-soy-red">OPEN SOURCE,</span><br/>CHECK THE LABEL.
+              THE NUTRITION LABEL<br/>THAT BECOMES A <span className="text-soy-red">TRUST RECORD.</span>
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -184,7 +193,7 @@ export default function Home() {
               transition={{ delay: 0.2 }}
               className="text-xl md:text-2xl font-normal max-w-2xl mx-auto lg:mx-0 mb-8 leading-snug opacity-80"
             >
-              OpenSoyce ranks open-source projects by health, forkability, momentum, and adoption readiness — so builders can decide what to use, remix, or avoid.
+              Read open-source projects like a label. Trust them like a record. Every claim links to a deployed surface, a merged PR, or a doctrine doc on <code className="font-mono text-[0.92em]">main</code>.
             </motion.p>
 
             {/* Hero Search Input with Micro-copy */}
@@ -219,6 +228,15 @@ export default function Home() {
               </div>
             </motion.form>
 
+            {/*
+              POST-SPINE HERO CTAs (Phase 3 launch narrative).
+              Per the launch-narrative ADR section on hero direction.
+              Primary CTA stays the hero search ("SCAN REPO FREE", above).
+              Secondary CTA points at the live gate decision.
+              Tertiary CTA points at the public Trust Center.
+              CTA verb chosen to satisfy the PR #52 soft-banned-verb
+              hygiene invariant near Trust Center links.
+            */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -226,18 +244,18 @@ export default function Home() {
               className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center lg:justify-start"
             >
               <Link
-                to="/leaderboards"
-                onClick={() => trackEvent('hero_explore_click', { source: 'home' })}
+                to="/proof/gate?package=ua-parser-js@0.7.29"
+                onClick={() => trackEvent('hero_live_gate_click', { source: 'home' })}
                 className="bg-black text-[#F5F0E8] px-10 py-5 text-sm font-black uppercase tracking-widest hover:bg-soy-red transition-all flex items-center justify-center gap-3 shadow-[6px_6px_0px_#000]"
               >
-                EXPLORE LEADERBOARDS →
+                SEE A LIVE TRUST DECISION →
               </Link>
               <Link
-                to="/guard/install"
-                onClick={() => trackEvent('hero_install_guard_click', { source: 'home' })}
+                to="/opensource-trust"
+                onClick={() => trackEvent('hero_trust_center_click', { source: 'home' })}
                 className="bg-soy-red text-white border-2 border-black px-10 py-5 text-sm font-black uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-[6px_6px_0px_#000]"
               >
-                INSTALL GUARD
+                VIEW TRUST CENTER →
               </Link>
             </motion.div>
 

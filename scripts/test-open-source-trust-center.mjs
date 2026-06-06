@@ -39,6 +39,7 @@ import {
   OPEN_SOURCE_TRUST_CENTER_POSTURE_LABELS,
   OPEN_SOURCE_TRUST_CENTER_BANNED_SUBSTRINGS,
   OPEN_SOURCE_TRUST_CENTER_FUTURE_TENSE_TELLS,
+  OPEN_SOURCE_TRUST_CENTER_PHASE_3_LAUNCH_BANNED_SUBSTRINGS,
   OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT,
   getOpenSourceTrustCenterSubject,
   groupClaimsBySection,
@@ -301,8 +302,26 @@ test('route, page registration, and cross-link wiring are present', () => {
 // suite should be extended to enforce the same hygiene on Layout.tsx.
 // ---------------------------------------------------------------------------
 
+// LINKING_PAGES.mode controls how copy hygiene is scoped per linking page:
+//   - 'window': use a ±400 char window around each /opensource-trust
+//     occurrence (correct for page-level surfaces where authored copy
+//     surrounds the link).
+//   - 'line':   extract just the line containing /opensource-trust
+//     (correct for config-array files like Layout.tsx, where adjacent
+//     NavItem entries are unrelated authored copy that ADR §3.4 names
+//     as legacy debt deferred to a separate PR — especially the SOC 2
+//     nav slot which the Phase 3 launch-narrative ADR explicitly
+//     leaves untouched).
+//
+// When the legacy-copy decision PR lands (per launch-narrative ADR §7.2),
+// 'line' mode on Layout.tsx should be revisited: either widen back to
+// 'window' (after legacy SOC 2 nav/testimonial copy is rewritten) or
+// keep 'line' if quarantine is the chosen resolution. Either change is
+// part of that PR, not this one.
 const LINKING_PAGES = [
-  { path: 'src/pages/Proof.tsx', label: 'Proof' },
+  { path: 'src/pages/Proof.tsx', label: 'Proof', mode: 'window' },
+  { path: 'src/pages/Home.tsx', label: 'Home', mode: 'window' },
+  { path: 'src/components/Layout.tsx', label: 'Layout', mode: 'line' },
 ];
 
 const SOFT_BANNED_VERBS = ['Learn more', 'Discover', 'Explore', 'Unlock'];
@@ -321,6 +340,26 @@ function copyWindowsAround(source, marker, radius) {
   return windows;
 }
 
+function lineWindowsAround(source, marker) {
+  const windows = [];
+  let from = 0;
+  while (true) {
+    const idx = source.indexOf(marker, from);
+    if (idx === -1) break;
+    const lineStart = source.lastIndexOf('\n', idx) + 1;
+    const lineEndRaw = source.indexOf('\n', idx);
+    const lineEnd = lineEndRaw === -1 ? source.length : lineEndRaw;
+    windows.push({ idx, snippet: source.slice(lineStart, lineEnd) });
+    from = idx + marker.length;
+  }
+  return windows;
+}
+
+function hygieneWindowsFor(linkingPage, source) {
+  if (linkingPage.mode === 'line') return lineWindowsAround(source, '/opensource-trust');
+  return copyWindowsAround(source, '/opensource-trust', 400);
+}
+
 test('every linking page contains a link to /opensource-trust', () => {
   for (const { path: rel, label } of LINKING_PAGES) {
     const src = read(rel);
@@ -331,7 +370,7 @@ test('every linking page contains a link to /opensource-trust', () => {
 test('linking-page copy near each link is free of banned marketing substrings', () => {
   for (const { path: rel, label } of LINKING_PAGES) {
     const src = read(rel);
-    const windows = copyWindowsAround(src, '/opensource-trust', 400);
+    const windows = hygieneWindowsFor(LINKING_PAGES.find(p => p.path === rel), src);
     ok(windows.length > 0, `${label} page (${rel}) has no /opensource-trust occurrences`);
     for (const { idx, snippet } of windows) {
       const lower = snippet.toLowerCase();
@@ -348,7 +387,7 @@ test('linking-page copy near each link is free of banned marketing substrings', 
 test('linking-page copy near each link is free of future-tense marketing tells', () => {
   for (const { path: rel, label } of LINKING_PAGES) {
     const src = read(rel);
-    const windows = copyWindowsAround(src, '/opensource-trust', 400);
+    const windows = hygieneWindowsFor(LINKING_PAGES.find(p => p.path === rel), src);
     for (const { idx, snippet } of windows) {
       const lower = snippet.toLowerCase();
       for (const tell of OPEN_SOURCE_TRUST_CENTER_FUTURE_TENSE_TELLS) {
@@ -367,7 +406,7 @@ test('linking-page copy near each link avoids soft-banned marketing verbs', () =
   // "explorer", etc.
   for (const { path: rel, label } of LINKING_PAGES) {
     const src = read(rel);
-    const windows = copyWindowsAround(src, '/opensource-trust', 400);
+    const windows = hygieneWindowsFor(LINKING_PAGES.find(p => p.path === rel), src);
     for (const { idx, snippet } of windows) {
       for (const verb of SOFT_BANNED_VERBS) {
         const re = new RegExp(`\\b${verb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
@@ -380,16 +419,42 @@ test('linking-page copy near each link avoids soft-banned marketing verbs', () =
   }
 });
 
+test('linking-page copy near each link is free of Phase-3 launch banned substrings', () => {
+  // Per docs/architecture/launch-narrative-positioning-adr.md §6.2.
+  // Bans "zero noise", "drop-in", "auto-fix", "autonomous agent", etc. near
+  // every /opensource-trust occurrence. These come off the list in the same
+  // PR that ships the underlying capability (Phase 6 / 7 / 9), never
+  // separately.
+  for (const { path: rel, label } of LINKING_PAGES) {
+    const src = read(rel);
+    const windows = hygieneWindowsFor(LINKING_PAGES.find(p => p.path === rel), src);
+    for (const { idx, snippet } of windows) {
+      const lower = snippet.toLowerCase();
+      for (const banned of OPEN_SOURCE_TRUST_CENTER_PHASE_3_LAUNCH_BANNED_SUBSTRINGS) {
+        ok(
+          !lower.includes(banned.toLowerCase()),
+          `${label} page (${rel}) link copy near offset ${idx} contains Phase-3 banned substring "${banned}"`,
+        );
+      }
+    }
+  }
+});
+
 test('global Layout footer carries no /opensource-trust link in this phase', () => {
-  // Deferred per ADR §3.8 / §4 — the global footer's Tools / Discover /
-  // Company clusters do not include a proof / trust cluster, so a one-off
-  // /opensource-trust footer link would land outside the recommended
-  // promotion shape. When the footer is restructured (own ADR), this
-  // assertion should be removed in the same PR that ships the cluster.
+  // Deferred per discoverability ADR §3.8 / §4 — the global footer's Tools /
+  // Discover / Company columns still do not group proof / trust together, so
+  // the conditional footer link from that ADR remains deferred. The Phase 3
+  // launch-narrative ADR §4 resolved D4 for the sidebar nav (TRUST group),
+  // but did NOT lift the footer deferral. Scoped to the actual <footer>
+  // element so the new nav-group entry is allowed.
   const layout = read('src/components/Layout.tsx');
+  const footerStart = layout.indexOf('<footer');
+  const footerEnd = layout.indexOf('</footer>', footerStart);
+  ok(footerStart !== -1 && footerEnd !== -1, 'Layout.tsx must contain a <footer> element to scope this check');
+  const footerSrc = layout.slice(footerStart, footerEnd);
   ok(
-    !layout.includes('/opensource-trust'),
-    'Layout.tsx footer link to /opensource-trust ships outside the discoverability ADR — deferred until a proof/trust footer cluster lands',
+    !footerSrc.includes('/opensource-trust'),
+    'Layout.tsx <footer> contains a /opensource-trust link outside the discoverability ADR — deferred until a proof/trust footer cluster lands',
   );
 });
 
