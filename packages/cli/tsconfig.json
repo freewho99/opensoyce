@@ -18,5 +18,12 @@
     "noUnusedParameters": false
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "../../node_modules",
+    "../../../**/node_modules",
+    "../../../angular-tradebuddy-admin",
+    "../../../**/libs"
+  ]
 }
