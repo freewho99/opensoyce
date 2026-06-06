@@ -95,6 +95,41 @@ export default function Proof() {
         </div>
       </section>
 
+      {/*
+        TRUST CENTER CTA — single restrained card.
+        Per docs/architecture/public-trust-spine-discoverability-adr.md §5
+        (A3 resolution). Copy is factual, present-tense, and free of the
+        Open Source Trust Center's banned-substring + future-tense
+        vocabulary. Enforced by scripts/test-open-source-trust-center.mjs.
+      */}
+      <section className="py-20 px-4">
+        <div className="max-w-4xl mx-auto">
+          <Link
+            to="/opensource-trust"
+            onClick={() => trackEvent('proof_trust_center_click', { source: 'proof_cta_card' })}
+            className="block bg-white border-4 border-black p-8 md:p-10 shadow-[10px_10px_0px_#000] hover:shadow-[14px_14px_0px_#E63322] transition-all group"
+          >
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div className="flex-1">
+                <span className="inline-block bg-soy-bottle text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.3em] mb-4">
+                  OPEN SOURCE TRUST CENTER
+                </span>
+                <h3 className="text-2xl md:text-3xl font-black uppercase italic tracking-tight mb-4 leading-tight">
+                  The public summary of how OpenSoyce handles open-source supply-chain trust.
+                </h3>
+                <p className="text-sm md:text-base font-medium opacity-80 leading-relaxed max-w-2xl">
+                  Every claim links to a deployed surface, a merged PR, or a doctrine doc on <code className="font-mono text-[13px]">main</code>. Same evidence as the cards above, presented as one proof-anchored page for outside readers.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-soy-red font-black uppercase text-xs tracking-widest whitespace-nowrap self-start md:self-center">
+                /opensource-trust
+                <ArrowRight size={18} strokeWidth={2.5} className="transition-transform group-hover:translate-x-1" />
+              </div>
+            </div>
+          </Link>
+        </div>
+      </section>
+
       {/* TESTING STRIP */}
       <section className="py-24 px-4 bg-black text-white border-y-4 border-black">
         <div className="max-w-7xl mx-auto">
