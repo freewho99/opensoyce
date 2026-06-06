@@ -281,6 +281,118 @@ test('route, page registration, and cross-link wiring are present', () => {
   ok(!page.includes('fetch('), 'Trust Center page must not call any API');
 });
 
+// ---------------------------------------------------------------------------
+// Linking-page copy hygiene
+//
+// Per docs/architecture/public-trust-spine-discoverability-adr.md §7, every
+// page that links to /opensource-trust inherits the Trust Center's
+// anti-marketing banned-substring + future-tense vocabulary. The test
+// enforces that hygiene on the paragraph surrounding each link, so the
+// linking layer cannot make claims the Trust Center itself refuses.
+//
+// Linking pages enforced today:
+//   - src/pages/Proof.tsx (A3 resolution: one CTA card)
+//
+// The global Layout footer (src/components/Layout.tsx) does NOT carry a
+// /opensource-trust link in this phase — its existing footer columns
+// (Tools / Discover / Company) do not include a proof / trust cluster, so
+// the conditional footer link from ADR §3.8 / §4 is deferred. If a future
+// PR adds a proof/trust cluster + a /opensource-trust footer link, this
+// suite should be extended to enforce the same hygiene on Layout.tsx.
+// ---------------------------------------------------------------------------
+
+const LINKING_PAGES = [
+  { path: 'src/pages/Proof.tsx', label: 'Proof' },
+];
+
+const SOFT_BANNED_VERBS = ['Learn more', 'Discover', 'Explore', 'Unlock'];
+
+function copyWindowsAround(source, marker, radius) {
+  const windows = [];
+  let from = 0;
+  while (true) {
+    const idx = source.indexOf(marker, from);
+    if (idx === -1) break;
+    const start = Math.max(0, idx - radius);
+    const end = Math.min(source.length, idx + marker.length + radius);
+    windows.push({ idx, snippet: source.slice(start, end) });
+    from = idx + marker.length;
+  }
+  return windows;
+}
+
+test('every linking page contains a link to /opensource-trust', () => {
+  for (const { path: rel, label } of LINKING_PAGES) {
+    const src = read(rel);
+    ok(src.includes('/opensource-trust'), `${label} page (${rel}) missing /opensource-trust link`);
+  }
+});
+
+test('linking-page copy near each link is free of banned marketing substrings', () => {
+  for (const { path: rel, label } of LINKING_PAGES) {
+    const src = read(rel);
+    const windows = copyWindowsAround(src, '/opensource-trust', 400);
+    ok(windows.length > 0, `${label} page (${rel}) has no /opensource-trust occurrences`);
+    for (const { idx, snippet } of windows) {
+      const lower = snippet.toLowerCase();
+      for (const banned of OPEN_SOURCE_TRUST_CENTER_BANNED_SUBSTRINGS) {
+        ok(
+          !lower.includes(banned.toLowerCase()),
+          `${label} page (${rel}) link copy near offset ${idx} contains banned substring "${banned}"`,
+        );
+      }
+    }
+  }
+});
+
+test('linking-page copy near each link is free of future-tense marketing tells', () => {
+  for (const { path: rel, label } of LINKING_PAGES) {
+    const src = read(rel);
+    const windows = copyWindowsAround(src, '/opensource-trust', 400);
+    for (const { idx, snippet } of windows) {
+      const lower = snippet.toLowerCase();
+      for (const tell of OPEN_SOURCE_TRUST_CENTER_FUTURE_TENSE_TELLS) {
+        ok(
+          !lower.includes(tell.toLowerCase()),
+          `${label} page (${rel}) link copy near offset ${idx} contains future-tense tell "${tell}"`,
+        );
+      }
+    }
+  }
+});
+
+test('linking-page copy near each link avoids soft-banned marketing verbs', () => {
+  // Word-boundary match so "Discover" (verb) is caught but "discoverability"
+  // (path segment in the ADR reference URL) is not. Same for "Explore" vs.
+  // "explorer", etc.
+  for (const { path: rel, label } of LINKING_PAGES) {
+    const src = read(rel);
+    const windows = copyWindowsAround(src, '/opensource-trust', 400);
+    for (const { idx, snippet } of windows) {
+      for (const verb of SOFT_BANNED_VERBS) {
+        const re = new RegExp(`\\b${verb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        ok(
+          !re.test(snippet),
+          `${label} page (${rel}) link copy near offset ${idx} contains soft-banned verb "${verb}" (implies marketing reveal)`,
+        );
+      }
+    }
+  }
+});
+
+test('global Layout footer carries no /opensource-trust link in this phase', () => {
+  // Deferred per ADR §3.8 / §4 — the global footer's Tools / Discover /
+  // Company clusters do not include a proof / trust cluster, so a one-off
+  // /opensource-trust footer link would land outside the recommended
+  // promotion shape. When the footer is restructured (own ADR), this
+  // assertion should be removed in the same PR that ships the cluster.
+  const layout = read('src/components/Layout.tsx');
+  ok(
+    !layout.includes('/opensource-trust'),
+    'Layout.tsx footer link to /opensource-trust ships outside the discoverability ADR — deferred until a proof/trust footer cluster lands',
+  );
+});
+
 test('package.json wires test:ci and the dedicated script', () => {
   const pkg = JSON.parse(read('package.json'));
   ok(pkg.scripts['test:open-source-trust-center'], 'missing test:open-source-trust-center script');
