@@ -87,6 +87,41 @@ export const OPEN_SOURCE_TRUST_CENTER_FUTURE_TENSE_TELLS = Object.freeze([
   'in development',
 ]);
 
+/**
+ * Phase 3 launch-narrative-specific banned vocabulary.
+ *
+ * Per docs/architecture/launch-narrative-positioning-adr.md §6.2. Applied to
+ * the linking-page hygiene windows around every /opensource-trust occurrence
+ * in addition to the four prior vocabularies (banned substrings,
+ * future-tense tells, soft-banned marketing verbs, and visibility-field
+ * guard). The launch surface is the strictest copy surface yet.
+ *
+ * The entries protect against three drift patterns:
+ *   - "zero noise" framing of VEX / reachability (Phase 6 doctrine)
+ *   - "drop-in" / "auto-fix" / "auto-replace" / "remediate" framing
+ *     (Phase 7 + Phase 9 doctrine)
+ *   - "AI agent" / "agentic" framing of the public surface
+ *     (strategic-frame defense)
+ *
+ * These come off the list in the same PR that ships the underlying
+ * capability — never separately.
+ */
+export const OPEN_SOURCE_TRUST_CENTER_PHASE_3_LAUNCH_BANNED_SUBSTRINGS = Object.freeze([
+  'zero noise',
+  'noise-free',
+  'noise free',
+  'false-positive elimination',
+  'false positive elimination',
+  'drop-in',
+  'drop in replacement',
+  'auto-fix',
+  'auto fix',
+  'auto-replace',
+  'auto replace',
+  'autonomous agent',
+  'agentic remediation',
+]);
+
 export const OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT = Object.freeze({
   owner: 'freewho99',
   repo: 'opensoyce',
