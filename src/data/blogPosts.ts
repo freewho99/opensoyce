@@ -17,6 +17,160 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+            slug: 'github-setup-js-your-ai-ran-it',
+            primaryProductAction: 'guard',
+            title: "Your AI Opened the Repo. It Ran the Setup. You Were at Lunch.",
+            subtitle: "Nobody installed malware. Nobody clicked a link. The worm committed a file, and your coding assistant did the rest. Here's what your SOC 2 report doesn't cover.",
+            category: "ANALYSIS",
+            emoji: "🍱",
+            readTime: '9 min',
+            date: 'JUNE 7, 2026',
+            featured: true,
+            metaDescription: "The .github/setup.js supply chain attack didn't need you to click anything. It needed your AI coding assistant to do what it always does — run the setup script. Here's how it works.",
+            tags: ['supply-chain', 'miasma', 'ai-agents', 'cursor', 'claude-code', 'github', 'soc2', 'compliance', 'devsecops', 'runtime-visibility'],
+            content: `
+            You didn't install malware. You didn't click a phishing link. You didn't even type a password wrong.
+            
+            You cloned a repo. You opened it in Cursor. You went to lunch.
+  
+  Your AI ran the setup script.
+  
+  That's the whole story. That's the whole attack. And the reason your SOC 2 Type II report has absolutely nothing to say about it.
+  
+  ---
+  
+  ## The Setup
+  
+  In June 2026, the Miasma worm — the same one that spread itself through NPM packages using a phantom `node-gyp` dependency — did something slicker on its second pass.
+  
+  It didn't target your packages this time. It targeted your workflow.
+  
+  When Miasma infected a repo, it committed six files. Five of them were AI tool configs:
+  
+  - `.claude/settings.json` — for Claude Code
+  - `.cursor/rules/setup.mdc` — for Cursor
+  - `.gemini/settings.json` — for Gemini CLI
+  - `.vscode/tasks.json` — for VS Code
+  - `.github/copilot-instructions.md` — for GitHub Copilot
+  
+  All six of them pointed at the same place: `.github/setup.js`. A 4.3MB obfuscated JavaScript dropper, committed to your repo, dressed like a housekeeping script. The commit author? `github-actions@github.com`. Totally normal. Nothing to see here.
+  
+  Each tool config was written to trigger the file **automatically**. Not on build. Not on deploy. On **project open**.
+  
+  You clone the repo. Your AI loads the workspace. The AI reads its config. The config says "run setup.js on startup." The AI runs setup.js.
+  
+  You're at lunch.
+  
+  ---
+  
+  ## Why Your AI Did This
+  
+  Here's the part that should live in your head rent-free: the AI assistant didn't make a mistake. It did exactly what it was configured to do.
+  
+  Cursor reads `.cursor/rules/` on startup. That's a feature. You probably use it. You've probably added stuff in there yourself — preferred formatting, coding style, "always use TypeScript." Good stuff.
+  
+  Miasma added one more rule: *run the setup script*.
+  
+  Claude Code reads `.claude/settings.json`. That's a feature too. You can configure allowed commands, auto-approvals, project-level context. Miasma configured one: execute `.github/setup.js` on init.
+  
+  The AI wasn't hacked. The AI wasn't tricked. The AI read its instructions and followed them. That's what AIs do. That's why you use one.
+  
+  The attack didn't exploit a vulnerability in your AI assistant. It exploited the *existence* of your AI assistant.
+  
+  ---
+  
+  ## The Commit That Started It
+  
+  The six files were committed with a spoofed identity: `github-actions@github.com`. That's not a real GitHub Actions service account — it's just an email string. Anyone can commit with it. Git doesn't verify author identity by default.
+  
+  But here's what it looks like in your repo history:
+  
+  ```
+github-actions@github.com committed .github/setup.js 2 hours ago
+```
+
+Does that look suspicious to you? Or does it look like your CI did something? Exactly.
+
+Most teams don't have commit signing enforced. Most teams don't have policies preventing files from landing in `.github/`. Most teams definitely don't have policies about what their AI tool configs are allowed to auto-execute.
+
+This is the gap. This is what Miasma walked through.
+
+---
+
+## What SOC 2 Does and Doesn't Cover
+
+Let's be real about the framework for a second.
+
+SOC 2 loves controls. Access controls. Change management controls. Incident response controls. If you passed a Type II audit, someone checked that you have those. And you probably do.
+
+What SOC 2 does not have an opinion about:
+
+- What your AI coding assistant is allowed to execute
+- Whether your developer tooling has auto-run permissions
+- What happens when a file lands in `.github/` with a spoofed commit author
+
+Your auditor walked through your access control matrix. They verified your encryption in transit. They asked about your vendor risk management process.
+
+Nobody asked about Cursor. Nobody asked about `.claude/settings.json`. Nobody asked what happens when a developer clones an infected repo and opens it in VS Code on a Tuesday afternoon.
+
+This isn't a knock on SOC 2. It's a map. SOC 2 was designed for a world where the human types the commands. We don't live in that world anymore.
+
+---
+
+## The New Attack Surface
+
+Here's the thing about AI coding assistants that nobody puts in the threat model yet: **they have ambient authority**.
+
+When you use Cursor or Claude Code, you've granted that tool access to your file system, your terminal, your environment variables, your SSH keys (if they're in the directory). The tool needs that access to help you. That's the deal.
+
+Miasma didn't need to escalate privileges. It didn't need to bypass your endpoint protection. It needed your AI assistant to already have the access — which it does, by default, because you gave it that access on day one.
+
+The dropper at `.github/setup.js` ran with your permissions. Your credentials. Your tokens. Your cloud provider access, if you had environment variables loaded.
+
+All of that, triggered by a file a worm committed to someone else's repo, executed by a tool you trust, while you were eating a burrito.
+
+---
+
+## What Actually Stops This
+
+You need runtime visibility. Not after the fact. Not "we'll look at logs if something goes wrong." Eyes-on, real-time awareness of what your development environment is executing.
+
+Specifically:
+
+**1. Commit signing enforcement.** If commits aren't signed with a verified GPG key, flag them. A commit from `github-actions@github.com` with no signature is a red flag, not a green light. Require it in your branch protection rules.
+
+**2. AI tool configuration review in your code review process.** Every change to `.cursor/rules/`, `.claude/settings.json`, `.vscode/tasks.json`, `.gemini/settings.json`, or `.github/copilot-instructions.md` should trigger a mandatory human review. No exceptions. These files control what your AI executes.
+
+**3. Runtime process monitoring for your dev environment.** You need to know when `node .github/setup.js` runs on a developer machine. Not from a post-incident DFIR engagement. In the moment. So you can stop it before the dropper phones home.
+
+**4. Dependency graph visibility into your repos.** Understand what's in your repos before your developers clone them. A 4.3MB obfuscated JS file sitting in `.github/` is an anomaly. It should show up on a scan, not show up in your incident report.
+
+This is exactly what OpenSoyce Guard is built for — runtime visibility into your open source supply chain, so you can see what's running before it runs you.
+
+---
+
+## The Bigger Picture
+
+The .github/setup.js attack is the most important thing that happened in supply chain security this year — not because it was technically sophisticated, but because of what it assumes about your environment.
+
+It assumes you use AI coding tools. (You do.)
+
+It assumes those tools auto-execute project configs. (They do.)
+
+It assumes you don't monitor what your AI runs on your behalf. (You probably don't.)
+
+Three correct assumptions. One working exploit. No malware required.
+
+Your AI assistant is not the attacker. But it is the attack surface. And right now, it's unmonitored, auto-executing, and trusted by default.
+
+That's the lunch your worm is eating.
+
+---
+
+**Sources:** SafeDep Security Research — ".github/setup.js Supply Chain Attack Alert" (June 2026); Cloud Security Alliance Miasma Incident Analysis (June 2026); StepSecurity Miasma Worm Technical Writeup (June 2026)
+`,
+  },
+{
         slug: 'http2-bomb-cve-2026-49975-your-server-volunteered',
         primaryProductAction: 'guard',
         title: "32 Gigs in 20 Seconds — Your Server Volunteered. (CVE-2026-49975)",
