@@ -28,7 +28,7 @@ export const blogPosts: BlogPost[] = [
         featured: true,
         metaDescription: "CVE-2026-49975, the HTTP/2 Bomb, lets a single client on a home connection pin 32GB of server memory in under 20 seconds using HPACK amplification and a Slowloris hold. Here's how it works and how to stop it before it reaches your app.",
         tags: ['http2', 'cve-2026-49975', 'dos', 'hpack', 'haproxy', 'nginx', 'apache', 'infrastructure', 'enterprise', 'edge-security'],
-        conte`Let me tell you something about your server.
+        content: `Let me tell you something about your server.
 
         Your server is not a fighter. Your server is not suspicious. Your server is not out here asking questions. Your server is *helpful*. Somebody knocks, your server opens the door. Somebody sends a request, your server says "absolutely, let me handle that for you." That's what you built it to do. You trained it to be agreeable.
 
