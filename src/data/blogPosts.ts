@@ -19,8 +19,8 @@ export const blogPosts: BlogPost[] = [
   {
         slug: 'miasma-npm-worm-you-installed-the-burglar',
         primaryProductAction: 'scanner',
-        title: "Nobody Broke In. You Installed the Burglar.",
-        subtitle: "The worm didn't beat your security. It walked through the door marked \"routine.\"",
+            title: "The Miasma Worm Didn't Break In — You Installed the Burglar.",
+            subtitle: "A 157-byte binding.gyp file — the 'Phantom Gyp' trick — walked past every install-script scanner you own. Here's the door you forgot you had.",
         category: "HOT TAKE",
         emoji: "🪱",
         readTime: '9 min',
