@@ -12,10 +12,114 @@ export type BlogPost = {
   metaDescription?: string;
   author?: string;
   featured?: boolean;
-  primaryProductAction?: 'scanner' | 'lookup' | 'methodology' | 'leaderboards' | 'compare' | 'guard';
+  primaryProductAction?: 'scanner' | 'lookup' | 'methodologhy' | 'leaderboards' | 'compare' | 'guard';
 };
 
 export const blogPosts: BlogPost[] = [
+  {
+        slug: 'http2-bomb-cve-2026-49975-your-server-volunteered',
+        primaryProductAction: 'guard',
+        title: "32 Gigs in 20 Seconds — Your Server Volunteered. (CVE-2026-49975)",
+        subtitle: "A single 1-byte frame. Your server read it, talked to itself, ate 32GB of memory, and collapsed. Nobody broke in. He just asked nicely.",
+        category: "SECURITY",
+        emoji: "💂",
+        readTime: '8 min',
+        date: 'JUNE 7, 2026',
+        featured: true,
+        metaDescription: "CVE-2026-49975, the HTTP/2 Bomb, lets a single client on a home connection pin 32GB of server memory in under 20 seconds using HPACK amplification and a Slowloris hold. Here's how it works and how to stop it before it reaches your app.",
+        tags: ['http2', 'cve-2026-49975', 'dos', 'hpack', 'haproxy', 'nginx', 'apache', 'infrastructure', 'enterprise', 'edge-security'],
+        content: `Let me tell you something about your server.
+
+        Your server is not a fighter. Your server is not suspicious. Your server is not out here asking questions. Your server is *helpful*. Somebody knocks, your server opens the door. Somebody sends a request, your server says "absolutely, let me handle that for you." That's what you built it to do. You trained it to be agreeable.
+
+        And one Tuesday, somebody figured that out.
+
+        Not a nation-state. Not a botnet with ten thousand machines. One person. On a regular home internet connection. Maybe a hundred megabits. The kind of setup you'd use to stream movies and argue with strangers online. And they sent your server — your expensive, enterprise-grade, load-balanced, monitored server — a *really small* request.
+
+        And your server said, "absolutely, let me handle that for you."
+
+        Thirty-two gigabytes of RAM. Gone. Twenty seconds. Server's on the floor. Orchestrator spins up a new one. That one goes down too. You're in a loop.
+
+        That is CVE-2026-49975. The HTTP/2 Bomb. And I need you to understand something before we go any further: **nothing went wrong**. Your server did exactly what it was supposed to do. It followed the rules perfectly. It just turns out somebody read the rulebook first.
+
+        [img:/blog/http2-bomb-hpack.png:One polite connection. Thirty-two gigabytes of server memory. Twenty seconds. Your server did exactly what you asked.]
+
+        ## The Scam
+
+        You know how HTTP/2 is faster than HTTP/1.1? Part of that is HPACK — a compression scheme for headers. Instead of sending the same headers over and over, you send them once, the server remembers them, and after that you just say "the usual." Like a regular at a diner. "Same thing as last time." Saves bandwidth. Smart.
+
+        Here's the thing. Every time the server "remembers" something, it allocates memory. That's just how remembering works — you need somewhere to put it. The attacker knows this.
+
+        So what they do is: they send a nearly empty header. Tiny. Like a sticky note with one word on it. The server files it away — memory allocation, small, no big deal. Then the attacker sends one-byte references to that header. Thousands of them. Each one says "remember that thing?" And the server goes to its filing cabinet, pulls out the folder, opens it, reads the one word, puts it back. Every single time. New allocation. Every. Single. Time.
+
+        The attacker is sending maybe a thousand bytes. The server is allocating *five million* bytes to process them. Five thousand seven hundred to one. That ratio is not a typo.
+
+        And here's why your alarms didn't fire: the server never received a *large* request. There was no flood of traffic. No anomaly in the size of what came in. The attack was *compact*. It looked like someone being *efficient*. Your monitoring tools were looking for the hammer. The attacker brought a really well-placed poke.
+
+        ## And Then He Froze the Clock
+
+        Okay so now the attacker has pinned thirty-two gigs of your server's memory. Great start for him, terrible start for you. But he's not done.
+
+        He advertises a zero-byte flow-control window.
+
+        If you don't know what that means: in HTTP/2, the client tells the server how much data it's ready to receive. Zero means "don't send me anything right now." It's a legitimate feature. Throttling exists for a reason. So the server, being helpful, holds its response. Waits. All that memory it allocated? Stays hot. Has to — the response isn't done yet. Can't free it.
+
+        Then, every few seconds, the attacker sends a one-byte update. "Okay, you can send one byte now." The server perks up, tries to respond, immediately hits the window limit, goes back to waiting. And crucially: this resets the timeout. The server's not allowed to give up — the connection is still alive. The client's still there. Just... not ready yet.
+
+        Your server is now holding thirty-two gigabytes of RAM in both hands, standing in a hallway, waiting for a guy who keeps saying "hold on, almost ready" and has no intention of ever being ready.
+
+        And it will stand there until it dies.
+
+        That's the HTTP/2 Bomb. Not a battering ram. A *hostage situation*. One client. One connection. Your whole server's memory, held at polite gunpoint, until the machine runs out of headroom, starts swapping to disk, slows to a crawl, and collapses.
+
+        [img:/blog/http2-bomb-timeline.png:No flood. No alarm. Just memory climbing one polite allocation at a time until there was nothing left.]
+
+        ## Who Got Hit
+
+        NGINX. Apache HTTPD. Microsoft IIS. Envoy. Cloudflare Pingora. The list of affected servers is basically a roll call of "things you trust to run your business."
+
+        Disclosure was June 2, 2026. Proof-of-concept code was public within hours. Vendor patches started dropping days later — but not all at once, and not for everyone. IIS, Envoy, Pingora didn't have patches immediately. For those, the official guidance was: disable HTTP/2 entirely. Go back to HTTP/1.1 and wait.
+
+        For NGINX, you're safe at 1.29.8 or later. For Apache, mod_http2 v2.0.41. If you're running anything older than that and HTTP/2 is on, you're a very polite server waiting in a very bad hallway.
+
+        ## What You Do About It
+
+        Here's where we stop being funny for exactly one minute, because this part matters.
+
+        **First question: what's actually in front of your server?**
+
+        Not "do I have a load balancer." Specifically: is there something between the internet and your backend that *terminates* HTTP/2 — reads it, decompresses it inside its own memory budget, and hands your app a clean HTTP/1.1 conversation?
+
+        If yes — if you're behind something like HAProxy that actually speaks HTTP/2 at the edge — you're already protected. The bomb lands on the proxy. The proxy's memory budget is fixed and tight by design. It doesn't get overwhelmed. Your app never sees the attack. Breathe.
+
+        If the answer is "I think so, but I'm not sure" — that's your answer. You're probably not.
+
+        A *forwarding* load balancer just passes the raw TCP stream to your backend. Your backend speaks HTTP/2. Your backend is the target. That's not a proxy. That's an expensive middleman with a perfect view of your problem.
+
+        **If you're exposed directly**, you have three moves, none of which are "wait and see":
+
+        Patch first: NGINX to 1.29.8, Apache mod_http2 to v2.0.41. Do it today.
+
+        Can't patch yet? Disable HTTP/2 on those servers. HTTP/1.1 is not vulnerable to this. Yes it's slower. Yes you'll know about it. But you'll be up.
+
+        In containers or cloud? Set memory limits tight enough that a bombed worker gets OOM-killed and respawned clean before the spiral reaches the host. A worker dying is recoverable. A host dying takes everything with it.
+
+        [img:/blog/http2-bomb-architecture.png:The edge terminates the bomb or passes it through. One of those is a wall. The other is a hallway your server stands in forever.]
+
+        ## The Part That's Actually About You
+
+        The protocol did this. Not a bug in your code. Not a misconfiguration. The *spec* — the thing designed by smart people to make HTTP better — created the conditions. HPACK is brilliant. Flow control is legitimate. The bomb is both of them working exactly as intended, pointed sideways.
+
+        Which means patching HTTP/2 doesn't save you from the next protocol that runs the same trick. QUIC has compression. Everything moving data efficiently has *some* scheme for "you know what I mean" — and every one of those schemes has a version of "what if someone abuses the memory on the receiving end."
+
+        The teams that got hit weren't negligent. They were running maintained software on modern protocols. They just didn't have anything watching behavior at the edge — anything that would notice "this single connection is allocating memory at a rate that has nothing to do with the data it's actually sending."
+
+        That's what OpenSoyce Guard watches. Not the version number. Not the CVE list from this morning. The *behavior*. Right now. Because the next one won't have a CVE yet. And your server will still be standing in that hallway, being helpful, waiting for someone who isn't coming.
+
+        **Sources:** HAProxy Technologies / Ron Northcutt, *Protecting against HTTP/2 Bomb vulnerability (CVE-2026-49975)*; Penligent, *CVE-2026-49975, Tiny HTTP/2 Headers That Pin...*; Red Hat Security Center; Amazon Linux Security Center; Reddit r/haproxy.
+
+        Stay brilliant.`,
+  },
   {
         slug: 'miasma-npm-worm-you-installed-the-burglar',
         primaryProductAction: 'scanner',
