@@ -15,6 +15,7 @@ import { computeMaintainerConcentration } from "./src/shared/maintainerConcentra
 import { getVendorSdk } from "./src/data/vendorSdks.js";
 import { detectMigration, makeFetchForks } from "./src/shared/detectMigration.js";
 import { verdictFor, detectExtensionExploitRisk, trustPostureFor } from "./src/shared/verdict.js";
+import { registerTrustBadgeRoutes } from "./src/server/badge/routes.js";
 // @ts-ignore — plain JS handler, no .d.ts
 import earlyAccessHandler from "./api/early-access.js";
 // @ts-ignore — plain JS handler, no .d.ts
@@ -313,6 +314,13 @@ async function startServer() {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Trust Badge v0 (Phase 4 PR-B2): GET /badge/:owner/:repo/posture.svg + .json.
+  // Distinct from the legacy /api/badge/:owner/:repo.svg score badge below.
+  // The Trust Badge reads the public per-repo posture from the shared
+  // Dashboard data; no scan, no auth, no analytics. See
+  // docs/architecture/trust-badge-architecture-sub-sketch.md.
+  registerTrustBadgeRoutes(app);
 
   app.get("/api/badge/:owner/:repo.svg", scoringLimiter, async (req, res) => {
     const { owner, repo } = req.params;
