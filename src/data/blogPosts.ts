@@ -12,7 +12,7 @@ export type BlogPost = {
   metaDescription?: string;
   author?: string;
   featured?: boolean;
-  primaryProductAction?: 'scanner' | 'lookup' | 'methodologhhy' | 'leaderboards' | 'compare' | 'guard';
+  primaryProductAction?: 'scanner' | 'lookup' | 'methodologhy' | 'leaderboards' | 'compare' | 'guard';
 };
 
 export const blogPosts: BlogPost[] = [
