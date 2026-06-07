@@ -52,9 +52,9 @@ The product spine is currently at Phase 2. Phases 3–9 are forward-looking and 
 |---|---|---|
 | 1 | Public Trust Spine | ✅ Closed (PRs #43 → #50, closeout at `7788edd`) |
 | 2 | Trust Spine Activation | ✅ Closed (PRs #51 → #52, last merge `5b61c3c`) |
-| 3 | Launch Narrative / Positioning | ✅ Closed (PRs #54 → #57, last impl merge `394690a`, closeout filed by this PR) |
-| 4 | OSS Distribution: CLI + Trust Badge | **Now** |
-| 5 | Trust Vault: private evidence + exceptions | Later |
+| 3 | Launch Narrative / Positioning | ✅ Closed (PRs #54 → #57, last impl merge `394690a`) |
+| 4 | OSS Distribution: CLI + Trust Badge | ✅ Closed (PRs #58 → #66, last impl merge `13e22cc`, closeout filed by this PR) |
+| 5 | Trust Vault: private evidence + exceptions | **Now** |
 | 6 | Signal Intelligence: VEX + reachability + sandbox evidence | Later |
 | 7 | Remediation Drafts | Later |
 | 8 | Enterprise Evidence Exports | Blocked until evidence exists |
@@ -86,7 +86,7 @@ Each phase below carries its own scope, its precondition, its `enters` event, an
 - No compliance posture claims.
 - No new shipped surface beyond copy + nav changes.
 
-### Phase 4 — OSS Distribution: CLI + Trust Badge (Now)
+### Phase 4 — OSS Distribution: CLI + Trust Badge (✅ Closed)
 
 **Scope:** Two distribution surfaces that reuse the existing proof spine.
 
@@ -232,9 +232,9 @@ The full table the user supplied, mapped to phases with current labels.
 | Idea | Phase | Label |
 |---|---|---|
 | Launch narrative / homepage positioning | 3 | ✅ Closed (PRs #54 → #57) |
-| OSS CLI | 4 | **Now** |
-| Health / Trust Badge | 4 | **Now** |
-| Trust Vault / exception evidence | 5 | Later |
+| OSS CLI | 4 | ✅ Closed (PRs #58 → #66) |
+| Health / Trust Badge | 4 | ✅ Closed (PRs #58 → #66) |
+| Trust Vault / exception evidence | 5 | **Now** |
 | VEX / reachability signals | 6 | Later |
 | Sandbox behavioral telemetry | 6 | Later |
 | Remediation drafts | 7 | Later |
@@ -242,7 +242,7 @@ The full table the user supplied, mapped to phases with current labels.
 | SOC 2 marketing claim activation | 8 | Do not claim publicly yet (lifts in the export PR) |
 | Drop-in replacement engine | 9 | Do not claim publicly yet |
 
-Nothing on this list is pre-authorized. The Phase 4 sketch is recommended; the user explicitly approves it before any work begins.
+Nothing on this list is pre-authorized. The Phase 5 sketch is recommended; the user explicitly approves it before any work begins.
 
 ## 5. Cross-cutting doctrine
 
@@ -306,7 +306,7 @@ The Phase 3 sketch is recommended, not pre-authorized. When the user calls "appr
 
 ## 8. Status
 
-Active roadmap. Phases 1 + 2 + 3 closed. Phase 4 is **Now**. Phases 5–9 each carry their label and their preconditions.
+Active roadmap. Phases 1 + 2 + 3 + 4 closed. Phase 5 is **Now**. Phases 6–9 each carry their label and their preconditions.
 
 No application code lands in this PR. No routes, no links, no copy changes, no test changes.
 
