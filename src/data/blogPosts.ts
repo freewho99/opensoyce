@@ -12,7 +12,7 @@ export type BlogPost = {
   metaDescription?: string;
   author?: string;
   featured?: boolean;
-  primaryProductAction?: 'scanner' | 'lookup' | 'methodologhy' | 'leaderboards' | 'compare' | 'guard';
+  primaryProductAction?: 'scanner' | 'lookup' | 'methodologhhy' | 'leaderboards' | 'compare' | 'guard';
 };
 
 export const blogPosts: BlogPost[] = [
@@ -85,9 +85,8 @@ export const blogPosts: BlogPost[] = [
   
   But here's what it looks like in your repo history:
   
-  ```
-github-actions@github.com committed .github/setup.js 2 hours ago
-```
+  > github-actions@github.com committed .github/setup.js 2 hours ago
+
 
 Does that look suspicious to you? Or does it look like your CI did something? Exactly.
 
