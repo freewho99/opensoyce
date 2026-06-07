@@ -17,6 +17,122 @@ export type BlogPost = {
 
 export const blogPosts: BlogPost[] = [
   {
+        slug: 'miasma-npm-worm-you-installed-the-burglar',
+        primaryProductAction: 'scanner',
+        title: "Nobody Broke In. You Installed the Burglar.",
+        subtitle: "The worm didn't beat your security. It walked through the door marked \"routine.\"",
+        category: "HOT TAKE",
+        emoji: "🪱",
+        readTime: '9 min',
+        date: 'JUNE 7, 2026',
+        featured: true,
+        heroImage: '/blog/npm-worm-hero.png',
+        metaDescription: "The Miasma npm worm used a 157-byte binding.gyp file to bypass every install-script check, steal CI secrets from runner memory, and spread on your own credentials. Here's how it worked and how to shut the door.",
+        tags: ['supply-chain', 'miasma', 'phantom-gyp', 'npm', 'ci-cd', 'runtime-visibility', 'live-query', 'devsecops'],
+        content: `It's 11:30 on a Tuesday night and you are asleep, which is exactly where you should be. You did everything right today. The PR was reviewed. The tests were green. The pipeline was humming when you closed the laptop. You earned this sleep.
+
+        Somewhere you'll never look, a man you'll never meet publishes a new version of @vapi-ai/server-sdk. A package you've installed a hundred times. A name on a list you stopped reading a long time ago, because reading the whole list is somebody else's job, or nobody's job, and either way the build is green so who cares.
+
+        You don't stir. Why would you. But your CI pipeline is awake, and your CI pipeline does not have your instincts. It doesn't get a bad feeling. It just runs npm install like you told it to — like you always tell it to — and somewhere in that install, a 157-byte file you've never heard of clears its throat and gets to work.
+
+        By the time your alarm goes off, here's what's already happened while you slept.
+
+        Your GitHub token has been read straight out of the runner's memory — not the masked version, the raw one — and shipped, encrypted, to a throwaway repo named nemean-hydra-34343. Your AWS keys went with it. Your Azure tokens. Anything in the environment your build could reach, packed up neat and dropped somewhere you can't follow, waiting for a stranger to come collect.
+
+        And you don't know yet. That's the part I need you to sit with. You're pouring coffee. The dashboards are green. The logs from last night look exactly like the logs from every other night. There is no alert, because nothing your tools were watching ever fired. You are, at this exact moment, completely robbed and completely calm.
+
+        [img:/blog/npm-worm-hidden.png:The install looked routine. Everything your tools watch stayed quiet. That silence was the product.]
+
+        Welcome to Miasma. The spreading blight. And that calm you're feeling right now reading this — certain it couldn't be you, your stack's clean, you'd know — that calm is the product. That's what they're selling. That's what got every single team that's already in this.
+
+        So let's walk through how it happened to you. Because it's worth understanding before it's your turn.
+
+        ## The door you forgot you had
+
+        You know the rule. Everybody knows the rule. Watch your preinstall and postinstall scripts. It's in every guide. It's the door you lock, the door your scanners watch, the door the whole industry is standing in front of with a flashlight and a clipboard.
+
+        Walk over to that door right now in your head. Got it? Good. The worm went around the house while you were standing there.
+
+        Your package.json had no install scripts. None. Spotless — which is exactly why you'd never have looked twice. What the package did have was a file called binding.gyp. It's a legitimate file; npm uses it for packages with native C/C++ addons. And here's the thing you probably never internalized, because why would you: the moment npm sees that file, it automatically runs node-gyp rebuild. Nobody declared it. Nobody asked you. It just happens, quietly, as a favor.
+
+        And node-gyp honors a little syntax — <!( ... ) — that means run this shell command and use whatever it prints as the filename. So the file said: run node index.js, dump the output in the trash, echo stub.c so nothing errors. Clean exit. The build goes green. You see green. You trust green.
+
+        Meanwhile node index.js had already pulled down a whole separate Bun runtime in under a second and launched the real payload through that — so even the process monitors you do have were watching Node while the knife went in through Bun.
+
+        You checked the scripts field. It was empty. You relaxed. The scripts field was never the door. It was the thing they put up so you'd stand in front of it.
+
+        ## What it took from you, in order
+
+        I want you to follow the timeline, because the speed is the horror. This isn't a slow burn. From the second npm install started, you had about thirteen seconds.
+
+        It scraped your environment first — AWS, GCP, Azure, Vault, GitHub. The easy stuff. Then it got ambitious: it escalated and read the GitHub Actions runner's process memory directly, and pulled your secrets out in their unmasked form. Every "secret" you carefully marked as a secret, sitting in memory in plain text, lifted clean. The masking you trusted was a privacy curtain in a room the worm could already see into.
+
+        Then it used your stolen token to find every other package your account maintains, bolted the same binding.gyp payload onto each one, forged the Sigstore provenance so the poisoned versions looked legitimately signed — the exact signature you'd point to and say "see, it's verified" — and republished them. In seconds. Your credentials, spreading the worm, under your name, with your face on it. You became patient zero for the next team while you slept.
+
+        [img:/blog/npm-worm-trust.png:The forged provenance made the reinfected packages look legitimately signed. The signature you'd point to as proof was the thing lying to you.]
+
+        And then it did the thing I genuinely need you to go check after you finish reading. It looked through your repos for .claude/settings.json, .cursor/rules/setup.mdc, .github/setup.js — seven different AI assistant config paths — and quietly committed backdoor files into them, signed to look like they came from github-actions@github.com. Not to take anything today. To be waiting the next time you open that project and your AI assistant runs its setup on launch.
+
+        It robbed the house, then made a copy of your key and slid it behind the drywall. So the next break-in doesn't even need a window.
+
+        You want to know who did this to you? They named their drop-repos after Dune — atreides, fedaykin, sardaukar — and left a message in the descriptions: "Shai-Hulud: Here We Go Again," spelled backwards, a taunt aimed straight at the researchers who'd exposed them two days earlier. They got caught, and they came back inside 48 hours with a brand-new trick built specifically to beat the people who caught them. That's who's on the other end of your npm install. Not losing any sleep over your WAF.
+
+        ## Here's the part that should make you angry
+
+        It was loud. The whole time. You just weren't listening on the frequency where it was screaming.
+
+        Fifty-seven packages, from related accounts, all bumping versions inside one two-hour window. Sit with that. That's not a release — that's a stampede, and a live registry monitor hears it the instant it starts. Your lockfile heard nothing, because your lockfile doesn't have ears. It has a memory. And in security, memory is just how yesterday's truth sneaks in dressed as today's.
+
+        The payload was practically waving at you. A 4.5MB root index.js, sitting right next to the real 27KB dist/index.js, never imported by a single line of your app, never declared as main. That's not a quirk you'd shrug at if you saw it. That's a body in the trunk. Anything actually looking at the tarball catches it on contact.
+
+        And the behavior — your npm install spawning curl, then unzip, then running a freshly downloaded binary out of /tmp to read your runner's memory. You don't need a threat-intel team to know that installing a dependency does not look like that. You need something that's still watching at 11:30 on a Tuesday. Which, last night, you weren't. Nobody is. That's the whole game.
+
+        [img:/blog/npm-worm-inline.png:Publish velocity, tarball shape, the provenance chain — alive and scored as it moves. The signal was there. Nothing was listening.]
+
+        This is the entire OpenSoyce thesis, standing in your pipeline with its hand in your pocket. Not "this version was clean back in March." Right now. Publish velocity, maintainer behavior, the shape of the tarball, the provenance chain — alive, moving, scored as it changes. The signal moves because the threat moves. Your lockfile just sits there glowing green, holding up a photograph of a world that stopped existing the second that package republished.
+
+        ## So here's what you do about it
+
+        Not theory. Things you can ship this week, roughly in the order they'll save you.
+
+        Go check your AI config directories first — tonight, before anything else. Open .claude/, .cursor/, .gemini/, .vscode/ across your repos right now. Anything in there your team didn't put there — a stray setup.mjs, a setup.js, a settings.json you don't recognize — that's the blight, already inside. Find the commit, find the token behind it, and burn everything that token could touch. This is the one that bites later, so handle it now.
+
+        Default your installs to --ignore-scripts. It shuts the preinstall/postinstall doors and shrinks your surface. It doesn't close binding.gyp alone, but it sets up the next move.
+
+        Turn off automatic node-gyp rebuilds. If you don't ship native addons, node-gyp has no reason to run during your installs — and that's the whole binding.gyp vector, gone. The day you genuinely need it, you turn it on on purpose, instead of inheriting it silently from a package you never read.
+
+        Fail the build on oversized non-main files. A multi-megabyte root index.js that isn't your declared entry point should hard-stop CI. The check is fifteen lines. You'll write it once and it'll watch forever.
+
+        Hold new versions in a cooldown. Miasma was live for hours before anyone named it. A 6-to-24-hour wait on brand-new versions — with a manual override for real fires — would have spared most of the teams that got hit. The worm was fast. It was not faster than a waiting room.
+
+        Scope your CI credentials to the bone. Stolen secrets only pay out if they're reachable and powerful. A token that can only publish, locked to specific packages, is not the master key the worm came shopping for. "I'll tighten it later" has a due date — and the worm knows the date before you do.
+
+        And the one that ties it all together: gate on live signal, not the lockfile. The lockfile told you the version was safe the day you wrote it down. The registry knows what that version is today. Ask the living one. Every build. About the version actually in your hands — not the one you photographed in spring and trusted to stay honest.
+
+        [img:/blog/npm-worm-verifiable.png:Behavior, not names. The worm hides from the things that stopped looking — never from the thing that keeps watching.]
+
+        ## The part nobody wants to say out loud
+
+        You're going to patch binding.gyp. The tools are going to add it to the list — probably by the time you finish this sentence. And it won't be enough, and I think somewhere you already know that.
+
+        Because the attacker was standing at preinstall, so you watched preinstall. They moved to binding.gyp. You'll watch binding.gyp. They'll move again — to the next gap, and the one after that — because the attack surface is anything that runs code during a build, and that list does not get shorter. A defense built on names is always one disclosure behind. You're not patching the attack. You're patching the last attack and signing up, in writing, to get hit by the next one in the same chair.
+
+        The only thing they can't leapfrog is watching behavior instead of names. Not "is this file on the blocklist" — but "why did this install download a runtime to /tmp and read process memory." Not "is this version flagged" — but "why is the root file 4.5MB." Not "do we trust this maintainer" — but "why did they just publish fifty-seven packages in ninety minutes."
+
+        Behavior. Live signal. Eyes that are still open at 11:30 on a Tuesday, when yours are closed and you've earned it.
+
+        The worm is genuinely brilliant at hiding from the things that stopped looking. It has never once worked out how to hide from the thing that keeps watching.
+
+        So treat every install like it's already lying to you. Because the green ones, the quiet ones, the boring routine ones you'd never look at twice — those are the ones that always are.
+
+        Stay brilliant.
+
+        ---
+
+        Sources & further reading: The technical details in this piece — the Phantom Gyp / binding.gyp technique, the 57 packages across 286 versions, the four-stage payload, the runner-memory secret theft, the liuende501 C2 infrastructure, and the AI-assistant config backdoors — are drawn from StepSecurity's threat-intel reporting on the Miasma campaign (June 2026), with corroborating coverage from Snyk, JFrog Security Research, Microsoft, and Chainguard. OpenSoyce analysis and commentary are our own.`,
+  },
+  
+  {
         slug: 'on-the-record-five-advisories-and-an-allow',
         primaryProductAction: 'scanner',
         title: "On the Record, No. 1 — Five Advisories and an ALLOW",
