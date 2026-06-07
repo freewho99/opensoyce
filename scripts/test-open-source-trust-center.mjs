@@ -330,6 +330,10 @@ const LINKING_PAGES = [
   { path: 'packages/cli/src/strings.ts', label: 'CLI strings', mode: 'window' },
   { path: 'packages/cli/src/help.ts', label: 'CLI help', mode: 'window' },
   { path: 'packages/cli/README.md', label: 'CLI README', mode: 'window' },
+  // Phase 4 (PR-B2): Trust Badge surfaces. Strings module + README embed
+  // documentation. Window mode — both files are narrowly authored.
+  { path: 'src/server/badge/strings.js', label: 'Badge strings', mode: 'window' },
+  { path: 'docs/badge.md', label: 'Badge docs', mode: 'window' },
 ];
 
 const SOFT_BANNED_VERBS = ['Learn more', 'Discover', 'Explore', 'Unlock'];
