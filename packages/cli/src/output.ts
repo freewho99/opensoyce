@@ -62,11 +62,17 @@ export interface LockfileEntryEvidence {
   proofAnchor: ProofAnchor;
 }
 
+export interface LockfileFailure {
+  package: string;
+  message: string;
+}
+
 export interface LockfileEvidence {
   command: 'lockfile';
   query: { lockfilePath: string };
   parserUsed: string;
   entries: LockfileEntryEvidence[];
+  failures: LockfileFailure[];
   summary: { allow: number; warn: number; block: number; notEvaluated: number };
   worstAction: GateAction;
   fetchedAt: string;
@@ -143,6 +149,14 @@ export function formatLockfile(ev: LockfileEvidence, args: ParsedArgs): string {
   for (const e of ev.entries) {
     if (e.action === 'ALLOW') continue;
     lines.push(`  ${STRINGS.actionCopy[e.action].padEnd(14)} ${e.package} (${e.firedPatternCount})`);
+  }
+  if (ev.failures.length > 0) {
+    lines.push('');
+    lines.push(`Network failures: ${ev.failures.length}`);
+    for (const f of ev.failures) {
+      lines.push(`  ${f.package}: ${f.message}`);
+    }
+    lines.push('Doctrine: any gate call that fails returns NETWORK_ERROR (exit 4).');
   }
   lines.push('');
   return lines.join('\n');

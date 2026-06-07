@@ -250,6 +250,37 @@ test('CLI static-data timeline mirrors every shared timeline event PR', () => {
 
 // -- package.json / bin ---------------------------------------------------
 
+test('lockfile command returns EXIT_NETWORK_ERROR on any partial network failure', () => {
+  // Doctrine: network errors never silently degrade. Any failed gate call
+  // inside `opensoyce lockfile` MUST drive the final exit code to
+  // EXIT_NETWORK_ERROR, even when other entries returned ALLOW/WARN/BLOCK.
+  //
+  // The structural check here is two-part:
+  //   1. lockfile.ts collects failures explicitly into a `failures` array
+  //      (not a boolean flag) so the JSON output can report them and the
+  //      exit-code branch is unmistakable.
+  //   2. lockfile.ts contains an unconditional `if (failures.length > 0)
+  //      return EXIT_NETWORK_ERROR;` BEFORE any exit-code-from-action path.
+  //
+  // Reject the silent-degrade shape: a boolean `networkErrored` flag paired
+  // with a `results.length === 0` guard, which lets partial successes
+  // mask network failures.
+  const src = read('packages/cli/src/commands/lockfile.ts');
+  ok(
+    src.includes('failures: LockfileFailure[]') ||
+      src.includes('const failures'),
+    'lockfile.ts must collect failures into a typed array, not a boolean flag',
+  );
+  ok(
+    /if\s*\(\s*failures\.length\s*>\s*0\s*\)\s*\{?\s*return\s+EXIT_NETWORK_ERROR;?/.test(src),
+    'lockfile.ts must return EXIT_NETWORK_ERROR when any callGate failure was recorded (any-partial-failure doctrine)',
+  );
+  ok(
+    !src.includes('networkErrored && results.length === 0'),
+    'lockfile.ts must not silently degrade partial network failures (forbidden pattern: "networkErrored && results.length === 0")',
+  );
+});
+
 test('CLI package.json bin entry points at dist/cli.js', () => {
   const pkg = JSON.parse(read('packages/cli/package.json'));
   eq(pkg.name, 'opensoyce', 'CLI package name');

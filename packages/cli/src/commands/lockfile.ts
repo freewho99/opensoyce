@@ -11,7 +11,7 @@ import {
 } from '../exit-codes.js';
 import { STRINGS } from '../strings.js';
 import type { ParsedArgs } from '../args.js';
-import { formatLockfile, type LockfileEntryEvidence } from '../output.js';
+import { formatLockfile, type LockfileEntryEvidence, type LockfileFailure } from '../output.js';
 import { detectFormat, parseNpmLockfile } from '../lib/lockfile-parser.js';
 
 export async function runLockfile(args: ParsedArgs): Promise<number> {
@@ -41,12 +41,17 @@ export async function runLockfile(args: ParsedArgs): Promise<number> {
   }
 
   const results: LockfileEntryEvidence[] = [];
-  let networkErrored = false;
+  // Doctrine: network errors never silently degrade. Any failed gate call
+  // makes the final exit code EXIT_NETWORK_ERROR, even when other entries
+  // returned a clean ALLOW/WARN/BLOCK. We still print the partial-success
+  // table so the reviewer sees what we DID learn from the gate, but the
+  // exit code reflects honestly that the scan was incomplete.
+  const failures: LockfileFailure[] = [];
   for (const { name, version } of entries) {
     const pkg = `${name}@${version}`;
     const res = await callGate(args.apiBase, pkg, args.timeoutMs);
     if (!res.ok) {
-      networkErrored = true;
+      failures.push({ package: pkg, message: res.message });
       continue;
     }
     const action = (res.data.action ?? 'NOT_EVALUATED') as GateAction;
@@ -60,10 +65,6 @@ export async function runLockfile(args: ParsedArgs): Promise<number> {
         href: `/proof/gate?package=${encodeURIComponent(pkg)}`,
       },
     });
-  }
-
-  if (networkErrored && results.length === 0) {
-    return EXIT_NETWORK_ERROR;
   }
 
   const summary = { allow: 0, warn: 0, block: 0, notEvaluated: 0 };
@@ -81,6 +82,7 @@ export async function runLockfile(args: ParsedArgs): Promise<number> {
       query: { lockfilePath: rel },
       parserUsed: format,
       entries: results,
+      failures,
       summary,
       worstAction: worst,
       fetchedAt: new Date().toISOString(),
@@ -90,7 +92,11 @@ export async function runLockfile(args: ParsedArgs): Promise<number> {
   );
   if (output) process.stdout.write(output);
 
-  if (worst === 'NOT_EVALUATED' && summary.notEvaluated === results.length) {
+  // Honest exit-code precedence: network failure beats every action.
+  if (failures.length > 0) {
+    return EXIT_NETWORK_ERROR;
+  }
+  if (worst === 'NOT_EVALUATED' && summary.notEvaluated === results.length && results.length > 0) {
     return EXIT_NOT_EVALUATED;
   }
   return exitCodeForAction(worst);
