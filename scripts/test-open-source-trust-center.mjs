@@ -40,6 +40,8 @@ import {
   OPEN_SOURCE_TRUST_CENTER_BANNED_SUBSTRINGS,
   OPEN_SOURCE_TRUST_CENTER_FUTURE_TENSE_TELLS,
   OPEN_SOURCE_TRUST_CENTER_PHASE_3_LAUNCH_BANNED_SUBSTRINGS,
+  OPEN_SOURCE_TRUST_CENTER_PHASE_4_DISTRIBUTION_BANNED_SUBSTRINGS,
+  OPEN_SOURCE_TRUST_CENTER_PHASE_4_WORD_BOUNDARY_BANNED,
   OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT,
   getOpenSourceTrustCenterSubject,
   groupClaimsBySection,
@@ -322,6 +324,12 @@ const LINKING_PAGES = [
   { path: 'src/pages/Proof.tsx', label: 'Proof', mode: 'window' },
   { path: 'src/pages/Home.tsx', label: 'Home', mode: 'window' },
   { path: 'src/components/Layout.tsx', label: 'Layout', mode: 'line' },
+  // Phase 4 (PR-A2): CLI strings, help text, and README inherit the
+  // launch-copy doctrine. Window mode because CLI source files are
+  // narrowly authored — no adjacent legacy debt to scope around.
+  { path: 'packages/cli/src/strings.ts', label: 'CLI strings', mode: 'window' },
+  { path: 'packages/cli/src/help.ts', label: 'CLI help', mode: 'window' },
+  { path: 'packages/cli/README.md', label: 'CLI README', mode: 'window' },
 ];
 
 const SOFT_BANNED_VERBS = ['Learn more', 'Discover', 'Explore', 'Unlock'];
@@ -413,6 +421,46 @@ test('linking-page copy near each link avoids soft-banned marketing verbs', () =
         ok(
           !re.test(snippet),
           `${label} page (${rel}) link copy near offset ${idx} contains soft-banned verb "${verb}" (implies marketing reveal)`,
+        );
+      }
+    }
+  }
+});
+
+test('linking-page copy near each link is free of Phase-4 distribution banned substrings', () => {
+  // Per Phase 4 ADR §5.4 and CLI v0 sub-sketch §5.2. Plain-substring bans:
+  // "certified" and "verified" must not appear near any /opensource-trust
+  // reference. They come off the list only when an underlying capability
+  // shipping justifies the claim.
+  for (const linkingPage of LINKING_PAGES) {
+    const src = read(linkingPage.path);
+    const windows = hygieneWindowsFor(linkingPage, src);
+    for (const { idx, snippet } of windows) {
+      const lower = snippet.toLowerCase();
+      for (const banned of OPEN_SOURCE_TRUST_CENTER_PHASE_4_DISTRIBUTION_BANNED_SUBSTRINGS) {
+        ok(
+          !lower.includes(banned.toLowerCase()),
+          `${linkingPage.label} (${linkingPage.path}) link copy near offset ${idx} contains Phase-4 banned substring "${banned}"`,
+        );
+      }
+    }
+  }
+});
+
+test('linking-page copy near each link avoids Phase-4 word-boundary bans', () => {
+  // Word-boundary bans: "secure" and "safe" are banned as standalone
+  // adjectives near /opensource-trust references but legitimate inside
+  // composite words (e.g. "secured", "safety"). Same word-boundary
+  // semantics as the soft-banned-verb check.
+  for (const linkingPage of LINKING_PAGES) {
+    const src = read(linkingPage.path);
+    const windows = hygieneWindowsFor(linkingPage, src);
+    for (const { idx, snippet } of windows) {
+      for (const word of OPEN_SOURCE_TRUST_CENTER_PHASE_4_WORD_BOUNDARY_BANNED) {
+        const re = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        ok(
+          !re.test(snippet),
+          `${linkingPage.label} (${linkingPage.path}) link copy near offset ${idx} contains Phase-4 word-boundary banned word "${word}" (standalone-adjective claim)`,
         );
       }
     }

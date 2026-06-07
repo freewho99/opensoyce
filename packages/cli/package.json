@@ -1,0 +1,36 @@
+{
+  "name": "opensoyce",
+  "version": "0.0.0",
+  "description": "Reads the OpenSoyce trust record from the terminal.",
+  "type": "module",
+  "bin": {
+    "opensoyce": "./dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "keywords": [
+    "opensource",
+    "trust",
+    "supply-chain",
+    "lockfile",
+    "cli"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "homepage": "https://opensoyce.com/opensource-trust",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/freewho99/opensoyce.git",
+    "directory": "packages/cli"
+  }
+}

@@ -122,6 +122,34 @@ export const OPEN_SOURCE_TRUST_CENTER_PHASE_3_LAUNCH_BANNED_SUBSTRINGS = Object.
   'agentic remediation',
 ]);
 
+/**
+ * Phase 4 distribution-specific banned vocabulary.
+ *
+ * Per docs/architecture/oss-distribution-cli-badge-adr.md §5.4 and the CLI
+ * v0 sub-sketch §5.2. Applied to CLI strings, CLI help text, CLI README,
+ * and (when the badge ships in PR-B2) the badge SVG copy + recommended
+ * README block. Word-boundary semantics for `secure` and `safe` so the
+ * standalone-adjective case is caught but longer composite words
+ * (e.g. `secured`, `safety`) are not false-positives.
+ *
+ * Comes off the list only when an underlying capability shipping
+ * justifies the claim — never separately.
+ */
+export const OPEN_SOURCE_TRUST_CENTER_PHASE_4_DISTRIBUTION_BANNED_SUBSTRINGS = Object.freeze([
+  'certified',
+  'verified',
+]);
+
+/**
+ * Phase 4 word-boundary entries: standalone adjectives that read as safety
+ * claims when used alone but are legitimate in compound forms. Enforced
+ * with a word-boundary regex, not a plain substring check.
+ */
+export const OPEN_SOURCE_TRUST_CENTER_PHASE_4_WORD_BOUNDARY_BANNED = Object.freeze([
+  'secure',
+  'safe',
+]);
+
 export const OPEN_SOURCE_TRUST_CENTER_MVP_SUBJECT = Object.freeze({
   owner: 'freewho99',
   repo: 'opensoyce',
