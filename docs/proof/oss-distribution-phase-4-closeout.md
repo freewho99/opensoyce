@@ -5,7 +5,7 @@
 **Phase:** 4 — OSS Distribution: CLI + Trust Badge
 **Predecessor phase:** [Phase 3 — Launch Narrative / Positioning (closed at `6110c13`)](./launch-narrative-positioning-closeout.md)
 **Successor phase:** Phase 5 — Trust Vault: private evidence + exceptions (promoted from "Later" to "Now" by this PR)
-**Arc PRs:** #58 → #59 → #60 → #61 → #62 → #64 → #65 (one ADR, two sub-sketches, two implementations, two closeouts — seven PRs total)
+**Arc PRs:** #58 → #59 → #60 → #61 → #62 → #64 → #66 (one ADR, two sub-sketches, two implementations, two closeouts — seven PRs total)
 
 This closeout records what shipped in Phase 4, what stayed deferred, what doctrine carried forward, and which roadmap status moves on `main` because of this phase. Per the [launch narrative closeout pattern](./launch-narrative-positioning-closeout.md), the roadmap doc updates in the same PR so the source of truth and the narrative agree at the same SHA.
 
@@ -63,7 +63,7 @@ Every section below respects that boundary. Phase 4 ships two public read surfac
 | CLI v0 sub-sketch (5 commands / 7 flags / 6 exit codes locked) | PR #59 (`68c6ab4`) |
 | Trust Badge sub-sketch (2 routes / SVG + JSON contract locked) | PR #62 (`888b2e3`) |
 | CLI v0 closeout (CLI track only) | PR #61 (`e44d4bb`) |
-| Phase 4 closeout (this PR) + roadmap status update | PR #65 |
+| Phase 4 closeout (this PR) + roadmap status update | PR #66 |
 
 ## 2. PR lineage
 
@@ -75,9 +75,14 @@ Every section below respects that boundary. Phase 4 ships two public read surfac
 | #61 | `e44d4bb` | docs | close out CLI v0 | CLI track closeout (PR-A3). Records the CLI track as closed; not the Phase 4 closeout. |
 | #62 | `888b2e3` | docs | sketch Trust Badge architecture | Badge sub-sketch (PR-B1). Locks routes, SVG dimensions, JSON shape, anti-forgery doctrine, hygiene constraints. |
 | #64 | `13e22cc` | feat | add Trust Badge v0 | Badge implementation (PR-B2). Single commit on the branch: full module + docs + 19 invariants + mid-flight aria-label fix. |
-| #65 | _(this PR)_ | docs | close out Phase 4 OSS distribution | Phase 4 closeout. This doc + roadmap update. |
+| #66 | _(this PR)_ | docs | close out Phase 4 OSS distribution | Phase 4 closeout. This doc + roadmap update. |
 
-Seven PRs. The PR numbering jumped from #62 to #64 because PR #63 was opened on a different branch (`feat/miasma-npm-worm`) by parallel work in the candidate-pipeline arc. The numbering gap is recorded honestly; #63 is not part of the Phase 4 arc.
+Seven PRs. Two numbering gaps in the GitHub sequence, both honestly recorded:
+
+- #63 was opened on `feat/miasma-npm-worm` by parallel work in the candidate-pipeline arc. Not part of the Phase 4 arc.
+- #65 was claimed by parallel work between the Trust Badge merge and this closeout being filed. Not part of the Phase 4 arc.
+
+GitHub assigns PR numbers in commit order across the whole repo, not per-arc. The arc's identity is the SHA chain, not the PR numbers.
 
 ## 3. Current guardrails (post-Phase-4)
 
@@ -315,7 +320,7 @@ This PR updates `docs/architecture/open-soyce-roadmap-integration.md`:
 
 | Phase | Status before this PR | Status after this PR |
 |---|---|---|
-| 4 — OSS Distribution: CLI + Trust Badge | **Now** | ✅ Closed (PRs #58 → #65, last impl merge `13e22cc`) |
+| 4 — OSS Distribution: CLI + Trust Badge | **Now** | ✅ Closed (PRs #58 → #66, last impl merge `13e22cc`) |
 | 5 — Trust Vault: private evidence + exceptions | Later | **Now** |
 | 1, 2, 3 | ✅ Closed (unchanged) | ✅ Closed (unchanged) |
 | 6, 7, 8, 9 | (Later / Blocked / Do not claim publicly yet) | unchanged |
@@ -387,7 +392,7 @@ None of A–E is pre-authorized. The user calls.
 
 **Closed.**
 
-Seven PRs (#58 → #59 → #60 → #61 → #62 → #64 → #65). Two new public surfaces: the `opensoyce` CLI (locally functional, npm publish deferred) and the Trust Badge route family (live on `main` at `13e22cc`). +35 net new doctrine-encoding invariants. 38 total banned tokens across 6 categories — **none lifted**.
+Seven PRs (#58 → #59 → #60 → #61 → #62 → #64 → #66). Two new public surfaces: the `opensoyce` CLI (locally functional, npm publish deferred) and the Trust Badge route family (live on `main` at `13e22cc`). +35 net new doctrine-encoding invariants. 38 total banned tokens across 6 categories — **none lifted**.
 
 The principle that produced this phase —
 

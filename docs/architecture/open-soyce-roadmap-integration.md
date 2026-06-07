@@ -53,7 +53,7 @@ The product spine is currently at Phase 2. Phases 3–9 are forward-looking and 
 | 1 | Public Trust Spine | ✅ Closed (PRs #43 → #50, closeout at `7788edd`) |
 | 2 | Trust Spine Activation | ✅ Closed (PRs #51 → #52, last merge `5b61c3c`) |
 | 3 | Launch Narrative / Positioning | ✅ Closed (PRs #54 → #57, last impl merge `394690a`) |
-| 4 | OSS Distribution: CLI + Trust Badge | ✅ Closed (PRs #58 → #65, last impl merge `13e22cc`, closeout filed by this PR) |
+| 4 | OSS Distribution: CLI + Trust Badge | ✅ Closed (PRs #58 → #66, last impl merge `13e22cc`, closeout filed by this PR) |
 | 5 | Trust Vault: private evidence + exceptions | **Now** |
 | 6 | Signal Intelligence: VEX + reachability + sandbox evidence | Later |
 | 7 | Remediation Drafts | Later |
@@ -232,8 +232,8 @@ The full table the user supplied, mapped to phases with current labels.
 | Idea | Phase | Label |
 |---|---|---|
 | Launch narrative / homepage positioning | 3 | ✅ Closed (PRs #54 → #57) |
-| OSS CLI | 4 | ✅ Closed (PRs #58 → #65) |
-| Health / Trust Badge | 4 | ✅ Closed (PRs #58 → #65) |
+| OSS CLI | 4 | ✅ Closed (PRs #58 → #66) |
+| Health / Trust Badge | 4 | ✅ Closed (PRs #58 → #66) |
 | Trust Vault / exception evidence | 5 | **Now** |
 | VEX / reachability signals | 6 | Later |
 | Sandbox behavioral telemetry | 6 | Later |
