@@ -75,9 +75,10 @@ const MIGRATIONS = [
   { num: '0010', name: 'vault_evidence', table: 'vault_evidence' },
   { num: '0011', name: 'vault_exceptions', table: 'vault_exceptions' },
   { num: '0012', name: 'vault_timeline_events', table: 'vault_timeline_events' },
+  { num: '0013', name: 'vault_create_workspace_with_owner_function', table: null },
 ];
 
-test('all 8 Vault migrations present with the documented sequence + names', () => {
+test('all 9 Vault migrations present with the documented sequence + names', () => {
   for (const m of MIGRATIONS) {
     const filename = `supabase/migrations/${m.num}_${m.name}.sql`;
     ok(exists(filename), `missing migration ${filename}`);
@@ -275,7 +276,56 @@ test('workspaces handler enforces slug shape + 1-200 char display_name + makes c
   const sql = read('src/server/vault/workspaces.js');
   ok(/SLUG_RE\s*=\s*\/\^/.test(sql), 'SLUG_RE regex constant must be present');
   ok(sql.includes('workspace_display_name_invalid'), 'display_name length check must be present');
-  ok(sql.includes("role: 'owner'"), 'creator must be inserted as owner');
+  // The creator becomes owner via the atomic RPC. The literal "role: 'owner'"
+  // appears in the response shape and/or the SQL function comment.
+  ok(sql.includes("role: 'owner'"), 'creator must be returned as owner');
+});
+
+test('workspace creation is atomic: calls vault_create_workspace_with_owner RPC, never two separate inserts', () => {
+  // Reviewer-flagged blocker from PR #78 review: the old shape (workspace
+  // insert + separate membership insert + best-effort DELETE rollback) left
+  // an ownerless-workspace hole. The fix is to do both inserts inside one
+  // Postgres function body (migration 0013), called via Supabase RPC.
+  const sql = read('src/server/vault/workspaces.js');
+  ok(
+    /supabase\.rpc\s*\(\s*'vault_create_workspace_with_owner'/.test(sql),
+    'workspaces.js must call the atomic vault_create_workspace_with_owner RPC',
+  );
+  // The old two-step shape is forbidden inside handleVaultCreateWorkspace:
+  // there must NOT be both a vault_workspaces .insert(...) AND a
+  // vault_workspace_memberships .insert(...) in the source. The RPC body
+  // does both server-side. (We still allow vault_workspace_memberships
+  // .insert() elsewhere in the file for future invitation flows; the check
+  // is the absence of a vault_workspaces .insert(...) literal.)
+  ok(
+    !sql.includes(".from('vault_workspaces')\n    .insert"),
+    'workspaces.js must not insert into vault_workspaces from application code (atomic RPC only)',
+  );
+  // The bad rollback pattern is gone for good.
+  ok(
+    !sql.includes('Best-effort rollback'),
+    'workspaces.js must not contain the deprecated best-effort rollback path',
+  );
+});
+
+test('migration 0013 defines vault_create_workspace_with_owner and inserts both workspace + membership', () => {
+  const sql = read('supabase/migrations/0013_vault_create_workspace_with_owner_function.sql');
+  ok(
+    sql.toLowerCase().includes('create or replace function public.vault_create_workspace_with_owner'),
+    '0013 must define public.vault_create_workspace_with_owner',
+  );
+  ok(
+    /insert\s+into\s+public\.vault_workspaces/i.test(sql),
+    '0013 must insert into vault_workspaces',
+  );
+  ok(
+    /insert\s+into\s+public\.vault_workspace_memberships/i.test(sql),
+    '0013 must insert the owner membership row in the same function body',
+  );
+  ok(
+    sql.toLowerCase().includes("'owner'"),
+    "0013 must insert the initial member as role 'owner'",
+  );
 });
 
 test('server.ts wires registerVaultRoutes', () => {
