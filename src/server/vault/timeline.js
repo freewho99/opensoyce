@@ -55,6 +55,15 @@ const ALLOWED_EVENT_TYPES = new Set([
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:?\d{2})$/;
 
+function shapeUser(row) {
+  if (!row) return null;
+  return {
+    user_id: row.user_id,
+    github_login: row.github_login,
+    display_name: row.display_name || null,
+  };
+}
+
 function shapeTimelineRow(row) {
   if (!row) return null;
   return {
@@ -68,9 +77,16 @@ function shapeTimelineRow(row) {
     references: row.references_json,
     visibility: 'private',
     emitted_at: row.emitted_at,
-    emitted_by: row.emitted_by || null,
+    emitted_by: shapeUser(row.emitted_by_user),
   };
 }
+
+// Per PR-V1-D §3.3 the user reference is an expanded object, not a UUID:
+//   { user_id, github_login, display_name } | null
+// Inline foreign-key joins in the supabase select keep the wire contract
+// stable. emitted_by is nullable (reaper-emitted events have no actor) —
+// the join row is null in that case and shapeUser returns null.
+const TIMELINE_SELECT = '*, emitted_by_user:emitted_by(user_id, github_login, display_name)';
 
 function encodeCursor(emittedAt, eventId) {
   const json = JSON.stringify({ v: CURSOR_VERSION, emitted_at: emittedAt, event_id: eventId });
@@ -154,6 +170,15 @@ export async function handleListTimelineEvents(req, res) {
   if (untilIso.error) {
     return sendError(res, 400, ERROR_CODES.invalid_filter, untilIso.error);
   }
+  if (sinceIso.value && untilIso.value
+      && Date.parse(sinceIso.value) >= Date.parse(untilIso.value)) {
+    return sendError(
+      res,
+      400,
+      ERROR_CODES.invalid_filter,
+      'since must be strictly less than until (since,until) is a half-open range',
+    );
+  }
 
   const limit = Math.min(
     Math.max(parseInt(q.limit, 10) || DEFAULT_TIMELINE_LIMIT, 1),
@@ -172,7 +197,7 @@ export async function handleListTimelineEvents(req, res) {
   const supabase = vaultDb();
   let query = supabase
     .from('vault_timeline_events')
-    .select('*', { count: 'exact' })
+    .select(TIMELINE_SELECT, { count: 'exact' })
     .eq('workspace_id', workspace.workspace_id);
 
   if (eventTypes.types) query = query.in('event_type', eventTypes.types);
@@ -186,6 +211,14 @@ export async function handleListTimelineEvents(req, res) {
     // rows strictly less than the cursor's tuple. PostgREST's .or() with
     // composite key:
     //   emitted_at.lt.<at>,and(emitted_at.eq.<at>,event_id.lt.<id>)
+    //
+    // SAFETY INVARIANT: at + id are interpolated directly into the
+    // PostgREST filter string. Both values came from decodeCursor() which
+    // ran them through ISO_RE / UUID_RE before returning. Those regexes
+    // forbid the characters PostgREST's mini-language treats as
+    // significant (commas, parentheses, percent signs). If either regex
+    // is ever relaxed, this interpolation MUST be reviewed for injection
+    // risk before the cursor format changes.
     const at = cursor.emitted_at;
     const id = cursor.event_id;
     query = query.or(
@@ -233,7 +266,7 @@ export async function handleGetTimelineEvent(req, res) {
   const supabase = vaultDb();
   const { data, error } = await supabase
     .from('vault_timeline_events')
-    .select('*')
+    .select(TIMELINE_SELECT)
     .eq('workspace_id', workspace.workspace_id)
     .eq('event_id', id)
     .limit(1);

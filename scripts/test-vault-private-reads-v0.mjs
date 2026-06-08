@@ -154,10 +154,17 @@ test('evidence shaping drops body for member-role viewers', () => {
     /viewerRole === 'member'/.test(src),
     'evidence shaping must branch on viewerRole === "member"',
   );
-  // The conditional spread pattern: ...(memberMasked ? {} : { body: ... })
+  // The conditional spread now uses bodyMasked (memberMasked || redactionMasked
+  // — see the redaction invariant below). The member-mask portion of that
+  // combined flag is asserted here; the redaction-mask portion is asserted
+  // in the dedicated redaction invariant.
   ok(
-    /memberMasked\s*\?\s*\{\}\s*:\s*\{\s*body:/.test(src),
-    'body field must be field-absent (not empty string) for members per PR-V1-D §6.4',
+    /memberMasked\s*=\s*viewerRole\s*===\s*['"]member['"]/.test(src),
+    'shapeEvidenceRow must derive memberMasked = viewerRole === "member"',
+  );
+  ok(
+    /bodyMasked\s*\?\s*\{\}\s*:\s*\{\s*body:/.test(src),
+    'body field must be field-absent (not empty string) when bodyMasked fires per PR-V1-D §6.4',
   );
 });
 
@@ -166,6 +173,42 @@ test('evidence response emits X-OpenSoyce-Vault-Masked-Fields header for members
   ok(
     /'X-OpenSoyce-Vault-Masked-Fields',\s*'body'/.test(src),
     'evidence reads must emit X-OpenSoyce-Vault-Masked-Fields: body when viewer is a member',
+  );
+});
+
+test('evidence body is masked when redaction_state !== "visible" for EVERY role (reviewer fix)', () => {
+  // Reviewer-flagged blocker on PR #83. Previously body was only masked
+  // when viewerRole === 'member'. A row with redaction_state === 'redacted'
+  // still returned body to reviewer / owner. The contract intent of
+  // "redacted" is that the body has been redacted from view; the 90-day
+  // window before hard_delete_at is forensic-recovery time at the SQL
+  // layer, not a read-through grace period for privileged roles.
+  //
+  // The fix introduces a `redactionMasked = row.redaction_state !== 'visible'`
+  // branch parallel to `memberMasked`, then combines them with OR so body
+  // is field-absent whenever EITHER condition fires.
+  const src = read('src/server/vault/evidence.js');
+  const shapeFn = src.match(/function shapeEvidenceRow\([^)]*\)[\s\S]*?\n\}/);
+  ok(shapeFn, 'shapeEvidenceRow not found');
+  ok(
+    /redactionMasked\s*=\s*row\.redaction_state\s*!==\s*['"]visible['"]/.test(shapeFn[0]),
+    'shapeEvidenceRow must derive redactionMasked = row.redaction_state !== "visible"',
+  );
+  ok(
+    /bodyMasked\s*=\s*memberMasked\s*\|\|\s*redactionMasked/.test(shapeFn[0]),
+    'shapeEvidenceRow must combine memberMasked || redactionMasked into bodyMasked',
+  );
+  ok(
+    /bodyMasked\s*\?\s*\{\}\s*:\s*\{\s*body:/.test(shapeFn[0]),
+    'body field must be field-absent (not empty string) when bodyMasked is true',
+  );
+
+  // X-Masked header must also fire on redaction, not just role.
+  const headerFn = src.match(/function setEvidenceMaskedHeader\([^)]*\)[\s\S]*?\n\}/);
+  ok(headerFn, 'setEvidenceMaskedHeader not found');
+  ok(
+    /redaction_state\s*!==\s*['"]visible['"]/.test(headerFn[0]),
+    'setEvidenceMaskedHeader must also check redaction_state to emit the X-Masked header for redacted-but-readable rows',
   );
 });
 
@@ -450,6 +493,88 @@ test('event_type filter only accepts the documented allowlist', () => {
   ]) {
     ok(src.indexOf(`'${t}'`) >= 0, `event_type allowlist missing ${t}`);
   }
+});
+
+// ---------- Reviewer fixes (PR #83 second pass) ----------
+
+test('evidence user reference fields are expanded objects, not bare UUIDs (per PR-V1-D §3.3)', () => {
+  // Reviewer-flagged contract gap on PR #83. The sub-sketch documents
+  // user reference fields as `{ user_id, github_login, display_name }`
+  // objects; the initial commit returned bare UUIDs. Fix uses inline
+  // foreign-key joins:
+  //   created_by_user:created_by(user_id, github_login, display_name)
+  //   redacted_by_user:redacted_by(user_id, github_login, display_name)
+  const src = read('src/server/vault/evidence.js');
+  ok(
+    /created_by_user:created_by\(user_id,\s*github_login,\s*display_name\)/.test(src),
+    'evidence select must join created_by_user with the documented shape',
+  );
+  ok(
+    /redacted_by_user:redacted_by\(user_id,\s*github_login,\s*display_name\)/.test(src),
+    'evidence select must join redacted_by_user with the documented shape',
+  );
+  // The shape function must return the joined object, not the raw UUID.
+  const shapeFn = src.match(/function shapeEvidenceRow\([^)]*\)[\s\S]*?\n\}/);
+  ok(shapeFn, 'shapeEvidenceRow not found');
+  ok(
+    /created_by:\s*shapeUser\(row\.created_by_user\)/.test(shapeFn[0]),
+    'shapeEvidenceRow.created_by must read from the joined created_by_user',
+  );
+  ok(
+    /redacted_by:\s*shapeUser\(row\.redacted_by_user\)/.test(shapeFn[0]),
+    'shapeEvidenceRow.redacted_by must read from the joined redacted_by_user',
+  );
+});
+
+test('timeline emitted_by is an expanded object, not a bare UUID (per PR-V1-D §3.3)', () => {
+  const src = read('src/server/vault/timeline.js');
+  ok(
+    /emitted_by_user:emitted_by\(user_id,\s*github_login,\s*display_name\)/.test(src),
+    'timeline select must join emitted_by_user with the documented shape',
+  );
+  const shapeFn = src.match(/function shapeTimelineRow\([^)]*\)[\s\S]*?\n\}/);
+  ok(shapeFn, 'shapeTimelineRow not found');
+  ok(
+    /emitted_by:\s*shapeUser\(row\.emitted_by_user\)/.test(shapeFn[0]),
+    'shapeTimelineRow.emitted_by must read from the joined emitted_by_user',
+  );
+  // Both list + single endpoints must use the join select. Assert via the
+  // shared TIMELINE_SELECT constant — both call sites should reference it
+  // by name so a future change can't drift only one of the two.
+  ok(
+    /const\s+TIMELINE_SELECT\s*=/.test(src),
+    'timeline.js must define a shared TIMELINE_SELECT constant carrying the user join',
+  );
+  const selectUses = (src.match(/\.select\(\s*TIMELINE_SELECT/g) || []).length;
+  ok(
+    selectUses >= 2,
+    `both timeline list + single handlers must use TIMELINE_SELECT (saw ${selectUses} call sites)`,
+  );
+});
+
+test('timeline list rejects reversed since/until window with 400 invalid-filter', () => {
+  const src = read('src/server/vault/timeline.js');
+  ok(
+    /sinceIso\.value\s*&&\s*untilIso\.value[\s\S]{0,200}?Date\.parse\(sinceIso\.value\)\s*>=\s*Date\.parse\(untilIso\.value\)/.test(src),
+    'handleListTimelineEvents must reject since >= until before issuing the supabase query',
+  );
+  ok(
+    /ERROR_CODES\.invalid_filter,[\s\S]{0,200}?since must be strictly less than until/.test(src),
+    'reversed-window response must use ERROR_CODES.invalid_filter with a since/until message',
+  );
+});
+
+test('cursor interpolation carries a SAFETY INVARIANT comment naming the regex guard', () => {
+  // Defense-in-depth: the .or() filter string interpolates `at` + `id`
+  // directly. The current safety relies on ISO_RE / UUID_RE forbidding
+  // the characters PostgREST treats as significant. A future relaxation
+  // of either regex would open an injection vector. The comment makes
+  // that dependency visible at the call site.
+  const src = read('src/server/vault/timeline.js');
+  ok(
+    /SAFETY INVARIANT[\s\S]{0,400}?ISO_RE[\s\S]{0,200}?UUID_RE/.test(src),
+    'the cursor .or() interpolation must carry a SAFETY INVARIANT comment naming ISO_RE + UUID_RE',
+  );
 });
 
 // ---------- Wiring + isolation invariants ----------
