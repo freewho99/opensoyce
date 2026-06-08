@@ -23,6 +23,16 @@ The single sentence the roadmap defends:
 
 The temptation across the incoming ideas list is to converge on "auto-fix everything." The roadmap rejects that frame. The product asset OpenSoyce has built is the **record** — verbatim API mirror, audit-anchored timeline, per-repo posture, public trust narrative — and every future capability is sequenced against whether it strengthens the record or skips past it.
 
+### The frontline is upstream, not in the packet stream
+
+A second framing rule, paired with the strategic frame above and equally load-bearing:
+
+> **OpenSoyce moves the frontline upstream.** It does not stand in the packet stream. It stands at the decision point before software is trusted. Dependencies are the first wedge; software components — packages, GitHub Actions, container images, base images, server/runtime versions, deployment manifests, SBOM entries — are the category. OpenSoyce evaluates whether components should enter the system; runtime protocol defense (WAF, edge controls, IDS/IPS) is a different category and a different vendor.
+
+A vulnerable web server is not an HTTP-request problem to OpenSoyce. It is a software-component trust problem: which version is in the image, is it allowed, who approved the exception, when does the exception expire, what evidence backed the decision. The earlier moment — the choice about what software is allowed to become part of the system — is the frontline OpenSoyce occupies.
+
+This framing does NOT change Phases 1–5. It refines the scope of Phase 6 (broader component categories than VEX + reachability + sandbox alone) and the eventual breadth of Phase 7 ("recommended trust actions" across components, not only dependency PRs). Phase 8 and Phase 9 inherit the same boundary.
+
 The corollary doctrine:
 
 - The record is public, anchored, and structurally guarded against marketing drift.
@@ -55,7 +65,7 @@ The product spine is currently at Phase 2. Phases 3–9 are forward-looking and 
 | 3 | Launch Narrative / Positioning | ✅ Closed (PRs #54 → #57, last impl merge `394690a`) |
 | 4 | OSS Distribution: CLI + Trust Badge | ✅ Closed (PRs #58 → #66, last impl merge `13e22cc`, closeout filed by this PR) |
 | 5 | Trust Vault: private evidence + exceptions | **Now** |
-| 6 | Signal Intelligence: VEX + reachability + sandbox evidence | Later |
+| 6 | Signal Intelligence: Component Exposure Intelligence | Later |
 | 7 | Remediation Drafts | Later |
 | 8 | Enterprise Evidence Exports | Blocked until evidence exists |
 | 9 | Deep auto-remediation / drop-in replacement | Do not claim publicly yet |
@@ -133,13 +143,16 @@ Each phase below carries its own scope, its precondition, its `enters` event, an
 
 **Out of scope for Phase 5:** Vanta / Drata export (Phase 8), public marketing of Trust Vault evidence (Trust Vault is internal/customer-private by definition).
 
-### Phase 6 — Signal Intelligence: VEX + reachability + sandbox evidence (Later)
+### Phase 6 — Signal Intelligence: Component Exposure Intelligence (Later)
 
-**Scope:** Additional evidence types that the gate / Timeline / Dashboard / Trust Center surfaces consume:
+**Scope:** Additional evidence types that the gate / Timeline / Dashboard / Trust Center surfaces consume. The category is **whether a software component is exposed in a system, allowed under policy, and recorded as a decision** — broader than dependency advisories alone:
 
 - **VEX (Vulnerability Exploitability eXchange)** — third-party VEX statements as evidence inputs. Frames as "the upstream maintainer says this advisory does not apply because…" — evidence, not a noise-suppression promise.
 - **Reachability analysis** — code-path evidence that an advisory's vulnerable function is or is not reachable from this project. Same framing: evidence input, not noise suppression.
 - **Sandbox behavioral telemetry** — runtime observation of package behavior during install / first-run. Detects `postinstall` exfiltration, network beaconing, file-system probing. Evidence-only at first; enforcement requires a separate decision.
+- **GitHub Action exposure** — workflow files reference Actions by `@version`/`@sha`. The component-trust question is: which version is referenced, is the version on a known-risk list, is there a workspace exception covering it.
+- **Container / base-image exposure** — Dockerfile FROM lines, Compose files, Kubernetes manifests. The component-trust question is: which base-image version, is it on a known-risk list, is the workspace running a stale tag.
+- **Server / runtime component-version exposure** — when SBOM evidence is available, the component-trust question is: are NGINX / Apache / Envoy / IIS / Node / Python runtime versions in known-risk lists, is there a workspace exception, when does the exception expire.
 
 **Why Later:** Each of these is a new evidence type. They presume the evidence model is stable enough to consume new inputs. The Phase 5 Trust Vault work likely tightens the evidence model (private evidence forces clearer typing). Phase 6 builds on the cleaned-up model.
 
@@ -148,18 +161,20 @@ Each phase below carries its own scope, its precondition, its `enters` event, an
 - Phase 5 closeout merged.
 - Evidence-type taxonomy stable across public and private layers.
 - Sandbox infrastructure decision (own ADR — touches privacy, cost, sandbox provider, opt-in vs opt-out for scanned packages).
+- Component-exposure intelligence is decomposable: each sub-category (VEX, reachability, sandbox, Actions, images, server versions) can sketch and ship independently. The Phase 6 ADR decomposes accordingly.
 
 **Doctrine constraints — load-bearing:**
 
 - **VEX and reachability MUST be framed as evidence, NOT as "zero noise."** The banned-substring vocabulary expands during Phase 6 to include "zero noise", "noise-free", "perfect signal", "false-positive elimination" — any phrasing that promises the elimination of friction the evidence cannot guarantee.
 - **Sandbox telemetry is evidence capture first.** Enforcement actions based on sandbox observations are a Phase 7 decision (Remediation Drafts) or later.
-- Every new evidence input must extend the Timeline event taxonomy (`vex_statement`, `reachability_finding`, `sandbox_observation`) and carry the same audit-anchor discipline.
+- Every new evidence input must extend the Timeline event taxonomy (`vex_statement`, `reachability_finding`, `sandbox_observation`, `component_exposure_observed`) and carry the same audit-anchor discipline.
+- **Component Exposure Intelligence is the upstream decision layer, not runtime traffic inspection.** Phase 6 sketches must not claim WAF-adjacent capability. OpenSoyce evaluates whether a component should enter the system; live protocol defense (WAF, edge controls, IDS/IPS, packet inspection) is a different category and a different vendor. The Phase 6 ADR will atomically add the banned-substring vocabulary protecting this boundary when its sketch lands.
 
-**Out of scope for Phase 6:** Auto-remediation, drop-in replacement, compliance export.
+**Out of scope for Phase 6:** Auto-remediation, drop-in replacement, compliance export, any runtime traffic / packet / protocol monitoring.
 
 ### Phase 7 — Remediation Drafts (Later)
 
-**Scope:** OpenSoyce proposes safe remediation PRs in response to gate findings. The agent drafts; a human reviewer accepts; the repo remembers. Same doctrine as the candidate-pipeline arc: **scraper proposes, reviewer decides, repo remembers.**
+**Scope:** OpenSoyce proposes safe remediation PRs in response to gate findings. The agent drafts; a human reviewer accepts; the repo remembers. Same doctrine as the candidate-pipeline arc: **scraper proposes, reviewer decides, repo remembers.** v0 focuses on dependency-version drafts; later Phase 7 sketches broaden to **"recommended trust actions"** across packages, GitHub Actions, base images, server-component versions, and stale-exception cleanup (e.g., "this workspace exception expires in 7 days; here is a draft PR that either renews the exception with fresh evidence or upgrades the underlying component"). The narrower v0 ships first; the broader categories sketch and ship per-component as Phase 6's exposure intelligence matures.
 
 **Why Later:** Remediation is action, not evidence. It comes after the evidence stack (Phase 6) because remediation that acts without evidence is auto-fix, which the strategic frame rejects.
 
@@ -235,8 +250,8 @@ The full table the user supplied, mapped to phases with current labels.
 | OSS CLI | 4 | ✅ Closed (PRs #58 → #66) |
 | Health / Trust Badge | 4 | ✅ Closed (PRs #58 → #66) |
 | Trust Vault / exception evidence | 5 | **Now** |
-| VEX / reachability signals | 6 | Later |
-| Sandbox behavioral telemetry | 6 | Later |
+| Component Exposure Intelligence (VEX / reachability / sandbox / image / Action / server) | 6 | Later |
+| Sandbox behavioral telemetry | 6 | Later (sub-category of Component Exposure Intelligence) |
 | Remediation drafts | 7 | Later |
 | Enterprise Evidence Exports (Vanta / Drata) | 8 | Blocked until evidence exists |
 | SOC 2 marketing claim activation | 8 | Do not claim publicly yet (lifts in the export PR) |
