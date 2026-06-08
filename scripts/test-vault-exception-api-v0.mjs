@@ -274,6 +274,75 @@ test('expires_at must be > now + 60s', () => {
   ok(sql.includes('60_000') || sql.includes('60000'), 'a 60-second buffer must be enforced');
 });
 
+test('state-mutating handlers call maybeReplayIdempotent BEFORE state/etag truth checks', () => {
+  // Reviewer-flagged blocker (PR #81 second review). The original shape
+  // ran state-conflict checks (row.state !== expected) and If-Match
+  // rejection BEFORE maybeReplayIdempotent. That meant a successful
+  // approve followed by a network retry with the same idempotency_key
+  // returned `409 cannot approve from state active` instead of replaying
+  // the original 200. Contract violation: idempotency must replay the
+  // prior response and cannot be defeated by current state truth.
+  //
+  // The fix is the ordering:
+  //   1. Resolve workspace + membership
+  //   2. Route-level role check (where applicable)
+  //   3. Parse idempotency_key
+  //   4. maybeReplayIdempotent — if replayed, return
+  //   5. Load row + state-truth checks (state, If-Match, four-eye, etc.)
+  //   6. Mutation
+  //   7. storeIdempotencyResponse
+  //
+  // This invariant grep-asserts ordering 4 < 5 in every state-mutating
+  // handler.
+  const sql = read('src/server/vault/exceptions.js');
+
+  const handlers = [
+    'handleApproveException',
+    'handleRejectException',
+    'handleRevokeException',
+    'handleExtendException',
+    'handlePatchProposal',
+  ];
+
+  for (const handlerName of handlers) {
+    const startMarker = `export async function ${handlerName}(`;
+    const startIdx = sql.indexOf(startMarker);
+    ok(startIdx >= 0, `${handlerName} not found in exceptions.js`);
+    let endIdx = sql.indexOf('\nexport ', startIdx + startMarker.length);
+    if (endIdx < 0) endIdx = sql.indexOf('\n// ----------', startIdx + startMarker.length);
+    if (endIdx < 0) endIdx = sql.length;
+    const body = sql.slice(startIdx, endIdx);
+
+    const replayIdx = body.indexOf('maybeReplayIdempotent(');
+    ok(
+      replayIdx >= 0,
+      `${handlerName} must call maybeReplayIdempotent (idempotency replay required on every state-mutating handler)`,
+    );
+
+    // Find every `row.state !==` (or `row.state ===`) reference inside the
+    // function body. Each must appear AFTER the maybeReplayIdempotent call.
+    const stateCheckRe = /row\.state\s*!==/g;
+    let m;
+    while ((m = stateCheckRe.exec(body)) !== null) {
+      ok(
+        m.index > replayIdx,
+        `${handlerName}: row.state check at offset ${m.index} appears BEFORE maybeReplayIdempotent at ${replayIdx} — fix the order`,
+      );
+    }
+
+    // checkIfMatch (the If-Match etag check) must also appear AFTER
+    // maybeReplayIdempotent. The reviewer's spec: "Then load/check current
+    // row state, If-Match, four-eye, expires_at, etc."
+    const etagIdx = body.indexOf('checkIfMatch(');
+    if (etagIdx >= 0) {
+      ok(
+        etagIdx > replayIdx,
+        `${handlerName}: checkIfMatch at offset ${etagIdx} appears BEFORE maybeReplayIdempotent at ${replayIdx} — fix the order`,
+      );
+    }
+  }
+});
+
 test('DELETE handler returns 405 with Allow: GET, POST, PATCH', () => {
   const sql = read('src/server/vault/exceptions.js');
   ok(sql.includes('handleDeleteForbidden'), 'handleDeleteForbidden export missing');

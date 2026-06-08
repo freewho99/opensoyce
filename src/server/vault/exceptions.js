@@ -258,10 +258,39 @@ export async function handleProposeException(req, res) {
 // ---------- POST approve ----------
 
 export async function handleApproveException(req, res) {
-  const result = await loadSingleException(req, res);
-  if (!result) return;
-  const { workspace, membership, row } = result;
+  // Ordering (PR-V2-B post-review fix): resolve workspace + membership →
+  // route-level role check → idempotency replay → THEN load row + run
+  // state-truth checks (If-Match, current-state guard, four-eye,
+  // expires_at). A successful approve followed by a retry with the same
+  // idempotency_key must return the original 200, NOT a 409 produced by
+  // the now-active state.
+  const slug = (req.params && req.params.slug) || '';
+  const id = (req.params && req.params.id) || '';
+  const resolved = await resolveWorkspaceForMember(req, res, slug);
+  if (!resolved) return;
+  const { workspace, membership } = resolved;
   if (!requireRole(res, membership, 'reviewer')) return;
+
+  const body = req.body || {};
+  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
+  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
+  if (replay.replayed) return;
+
+  // Load row + state-truth checks AFTER idempotency.
+  const supabase = vaultDb();
+  const { data: rows, error: rowError } = await supabase
+    .from('vault_exceptions')
+    .select('*')
+    .eq('workspace_id', workspace.workspace_id)
+    .eq('exception_id', id)
+    .limit(1);
+  if (rowError) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault exception read failed');
+  }
+  const row = Array.isArray(rows) && rows[0];
+  if (!row) {
+    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+  }
 
   const ifMatch = checkIfMatch(req, computeExceptionEtag(row));
   if (!ifMatch.ok) {
@@ -281,11 +310,6 @@ export async function handleApproveException(req, res) {
     return sendError(res, 403, ERROR_CODES.self_approval_forbidden, 'reviewer cannot approve their own proposal');
   }
 
-  const body = req.body || {};
-  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
-  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
-  if (replay.replayed) return;
-
   const expiresAt = parseExpiresAt(body.expires_at);
   if (!expiresAt) {
     return sendError(res, 400, ERROR_CODES.bad_request, 'expires_at must be an ISO-8601 timestamp');
@@ -304,7 +328,6 @@ export async function handleApproveException(req, res) {
   }
   const reasonPrivate = typeof body.reason_private === 'string' ? body.reason_private : row.reason_private;
 
-  const supabase = vaultDb();
   // State-machine UPDATE guard: WHERE state = 'proposed' rejects races.
   const { data, error } = await supabase
     .from('vault_exceptions')
@@ -356,9 +379,38 @@ export async function handleApproveException(req, res) {
 // ---------- POST reject ----------
 
 export async function handleRejectException(req, res) {
-  const result = await loadSingleException(req, res);
-  if (!result) return;
-  const { workspace, membership, row } = result;
+  // Ordering (PR-V2-B post-review fix): workspace → membership-only
+  // role gate (reject's role check is row-dependent — reviewer OR
+  // proposer — so it stays AFTER row load) → idempotency replay →
+  // row load + state-truth checks. Workspace membership alone is the
+  // pre-idempotency floor: a non-member cannot replay a key they don't
+  // own anyway, but workspace resolution must succeed first to scope
+  // the idempotency lookup.
+  const slug = (req.params && req.params.slug) || '';
+  const id = (req.params && req.params.id) || '';
+  const resolved = await resolveWorkspaceForMember(req, res, slug);
+  if (!resolved) return;
+  const { workspace, membership } = resolved;
+
+  const body = req.body || {};
+  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
+  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
+  if (replay.replayed) return;
+
+  const supabase = vaultDb();
+  const { data: rows, error: rowError } = await supabase
+    .from('vault_exceptions')
+    .select('*')
+    .eq('workspace_id', workspace.workspace_id)
+    .eq('exception_id', id)
+    .limit(1);
+  if (rowError) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault exception read failed');
+  }
+  const row = Array.isArray(rows) && rows[0];
+  if (!row) {
+    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+  }
 
   if (row.state !== 'proposed') {
     return sendError(res, 409, ERROR_CODES.exception_state_conflict, `cannot reject from state ${row.state}`, {
@@ -373,17 +425,11 @@ export async function handleRejectException(req, res) {
     return sendError(res, 403, ERROR_CODES.forbidden_role, 'requires reviewer role OR be the proposer');
   }
 
-  const body = req.body || {};
-  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
-  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
-  if (replay.replayed) return;
-
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (reason.length < 1 || reason.length > 280) {
     return sendError(res, 400, ERROR_CODES.bad_request, 'reason must be 1-280 chars');
   }
 
-  const supabase = vaultDb();
   const { data, error } = await supabase
     .from('vault_exceptions')
     .update({
@@ -420,10 +466,33 @@ export async function handleRejectException(req, res) {
 // ---------- POST revoke ----------
 
 export async function handleRevokeException(req, res) {
-  const result = await loadSingleException(req, res);
-  if (!result) return;
-  const { workspace, membership, row } = result;
+  // Ordering (PR-V2-B post-review fix): same shape as approve.
+  const slug = (req.params && req.params.slug) || '';
+  const id = (req.params && req.params.id) || '';
+  const resolved = await resolveWorkspaceForMember(req, res, slug);
+  if (!resolved) return;
+  const { workspace, membership } = resolved;
   if (!requireRole(res, membership, 'reviewer')) return;
+
+  const body = req.body || {};
+  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
+  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
+  if (replay.replayed) return;
+
+  const supabase = vaultDb();
+  const { data: rows, error: rowError } = await supabase
+    .from('vault_exceptions')
+    .select('*')
+    .eq('workspace_id', workspace.workspace_id)
+    .eq('exception_id', id)
+    .limit(1);
+  if (rowError) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault exception read failed');
+  }
+  const row = Array.isArray(rows) && rows[0];
+  if (!row) {
+    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+  }
 
   if (row.state !== 'active') {
     return sendError(res, 409, ERROR_CODES.exception_state_conflict, `cannot revoke from state ${row.state}`, {
@@ -431,17 +500,11 @@ export async function handleRevokeException(req, res) {
     });
   }
 
-  const body = req.body || {};
-  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
-  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
-  if (replay.replayed) return;
-
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (reason.length < 1 || reason.length > 280) {
     return sendError(res, 400, ERROR_CODES.bad_request, 'reason must be 1-280 chars');
   }
 
-  const supabase = vaultDb();
   const { data, error } = await supabase
     .from('vault_exceptions')
     .update({
@@ -478,21 +541,39 @@ export async function handleRevokeException(req, res) {
 // ---------- POST extend ----------
 
 export async function handleExtendException(req, res) {
-  const result = await loadSingleException(req, res);
-  if (!result) return;
-  const { workspace, membership, row } = result;
+  // Ordering (PR-V2-B post-review fix): same shape as approve/revoke.
+  const slug = (req.params && req.params.slug) || '';
+  const id = (req.params && req.params.id) || '';
+  const resolved = await resolveWorkspaceForMember(req, res, slug);
+  if (!resolved) return;
+  const { workspace, membership } = resolved;
   if (!requireRole(res, membership, 'reviewer')) return;
+
+  const body = req.body || {};
+  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
+  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
+  if (replay.replayed) return;
+
+  const supabase = vaultDb();
+  const { data: rows, error: rowError } = await supabase
+    .from('vault_exceptions')
+    .select('*')
+    .eq('workspace_id', workspace.workspace_id)
+    .eq('exception_id', id)
+    .limit(1);
+  if (rowError) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault exception read failed');
+  }
+  const row = Array.isArray(rows) && rows[0];
+  if (!row) {
+    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+  }
 
   if (row.state !== 'active') {
     return sendError(res, 409, ERROR_CODES.exception_state_conflict, `cannot extend from state ${row.state}`, {
       current_state: row.state,
     });
   }
-
-  const body = req.body || {};
-  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
-  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
-  if (replay.replayed) return;
 
   const expiresAt = parseExpiresAt(body.expires_at);
   if (!expiresAt) {
@@ -509,7 +590,6 @@ export async function handleExtendException(req, res) {
     return sendError(res, 400, ERROR_CODES.bad_request, 'extend must move expires_at forward');
   }
 
-  const supabase = vaultDb();
   const { data, error } = await supabase
     .from('vault_exceptions')
     .update({
@@ -545,9 +625,38 @@ export async function handleExtendException(req, res) {
 // ---------- PATCH (proposer-only proposal edit) ----------
 
 export async function handlePatchProposal(req, res) {
-  const result = await loadSingleException(req, res);
-  if (!result) return;
-  const { membership, row } = result;
+  // Ordering (PR-V2-B post-review fix): workspace → idempotency replay →
+  // row load → state-truth checks (proposer-only, state='proposed').
+  // The proposer-only check is row-dependent and must run AFTER
+  // idempotency replay so a retried successful PATCH still returns the
+  // cached response even if a different reviewer rejected the proposal
+  // between the original request and the retry.
+  const slug = (req.params && req.params.slug) || '';
+  const id = (req.params && req.params.id) || '';
+  const resolved = await resolveWorkspaceForMember(req, res, slug);
+  if (!resolved) return;
+  const { workspace, membership } = resolved;
+
+  const body = req.body || {};
+  const idempotencyKey = typeof body.idempotency_key === 'string' ? body.idempotency_key : null;
+  const replay = await maybeReplayIdempotent(req, res, req.vaultSession, workspace.workspace_id, idempotencyKey);
+  if (replay.replayed) return;
+
+  const supabase = vaultDb();
+  const { data: rows, error: rowError } = await supabase
+    .from('vault_exceptions')
+    .select('*')
+    .eq('workspace_id', workspace.workspace_id)
+    .eq('exception_id', id)
+    .limit(1);
+  if (rowError) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault exception read failed');
+  }
+  const row = Array.isArray(rows) && rows[0];
+  if (!row) {
+    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+  }
+
   if (row.state !== 'proposed') {
     return sendError(res, 409, ERROR_CODES.exception_state_conflict, 'cannot edit a non-proposed exception', {
       current_state: row.state,
@@ -556,7 +665,6 @@ export async function handlePatchProposal(req, res) {
   if (row.proposed_by !== req.vaultSession.user_id) {
     return sendError(res, 403, ERROR_CODES.forbidden_role, 'only the proposer may PATCH a proposal');
   }
-  const body = req.body || {};
   const patch = {};
   if (typeof body.reason_public === 'string') {
     const v = body.reason_public.trim();
@@ -580,7 +688,6 @@ export async function handlePatchProposal(req, res) {
   if (Object.keys(patch).length === 0) {
     return sendError(res, 400, ERROR_CODES.bad_request, 'no fields to patch');
   }
-  const supabase = vaultDb();
   const { data, error } = await supabase
     .from('vault_exceptions')
     .update(patch)
@@ -598,9 +705,18 @@ export async function handlePatchProposal(req, res) {
   if (!updated) {
     return sendError(res, 409, ERROR_CODES.exception_state_conflict, 'exception state changed under concurrent request');
   }
+  const shape = shapeExceptionRow(updated, membership.role);
   setEtagHeader(res, updated);
   setMaskedHeader(res, membership.role);
-  res.status(200).json(shapeExceptionRow(updated, membership.role));
+  await storeIdempotencyResponse({
+    workspaceId: workspace.workspace_id,
+    userId: req.vaultSession.user_id,
+    idempotencyKey,
+    requestRoute: `PATCH ${req.path}`,
+    responseStatus: 200,
+    responseSnapshot: shape,
+  });
+  res.status(200).json(shape);
 }
 
 // ---------- DELETE forbidden ----------
