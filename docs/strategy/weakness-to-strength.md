@@ -42,13 +42,13 @@ Each weakness has five fields:
 
 **The risk:** Every enterprise conversation hits this wall. Highest-value customers are currently unreachable through formal procurement.
 
-**The strength it becomes:** SOC 2 Type II certification on Guard launch timeline. Enterprise-ready terms before the first enterprise deal. The methodology transparency becomes a differentiated SOC 2 — auditors can verify reasoning, not just controls.
+**The strength it becomes:** The methodology transparency becomes useful future audit evidence: reviewers can inspect reasoning discipline, not just control checklists. Formal SOC 2 work remains deferred to Phase 8.
 
 **Build target:** SOC 2 Type II audit (gated to Phase 8 per ADR). Enterprise MSA template. SLA definitions. SSO + RBAC in Guard.
 
 **Status:** 🟠 In flight
 
-**PR #78 contribution:** Shipped full 4-role RBAC (`member < reviewer < owner + public_visitor`), GitHub OAuth, session management with sliding 30-day expiry (`opensoyce_vault_session`, HttpOnly + Secure + SameSite=Lax), RLS on all vault tables with service-role bypass, workspace membership with last-owner-protection trigger. This is approximately 40–50% of the SOC 2 access-control evidence. Full enterprise IdP SSO (Okta, Azure AD) not yet built.
+**PR #78 contribution:** PR #78 creates early access-control foundations that may later support SOC 2 evidence collection. It is not SOC 2 evidence by itself, and full enterprise IdP SSO is not yet built.
 
 ---
 
