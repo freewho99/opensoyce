@@ -20,6 +20,19 @@ export const ERROR_CODES = Object.freeze({
   workspace_slug_invalid: 'workspace-slug-invalid',
   workspace_display_name_invalid: 'workspace-display-name-invalid',
   workspace_slug_taken: 'workspace-slug-taken',
+  // PR-V2-B additions (exception state machine + API):
+  csrf_missing_cookie: 'csrf-missing-cookie',
+  csrf_missing_header: 'csrf-missing-header',
+  csrf_mismatch: 'csrf-mismatch',
+  csrf_empty: 'csrf-empty',
+  downgrade_only_violation: 'downgrade-only-violation',
+  self_approval_forbidden: 'self-approval-forbidden',
+  expires_at_in_past: 'expires-at-in-past',
+  expires_at_too_far: 'expires-at-too-far',
+  exception_state_conflict: 'exception-state-conflict',
+  exception_not_found: 'exception-not-found',
+  precondition_failed: 'precondition-failed',
+  invalid_subject: 'invalid-subject',
 });
 
 export function sendError(res, status, code, message, extras) {

@@ -13,7 +13,8 @@
 
 import { vaultDb } from './db.js';
 import { sendError, ERROR_CODES } from './errors.js';
-import { sessionTtlSeconds, setVaultCookie } from './auth.js';
+import { sessionTtlSeconds } from './auth.js';
+import { generateCsrfToken } from './csrf.js';
 
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
@@ -179,7 +180,14 @@ export async function handleVaultLogin(req, res) {
     return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault session write failed');
   }
 
-  setVaultCookie(res, sessionInsert.sessionId);
+  // Set the session cookie AND the CSRF token cookie atomically. The CSRF
+  // token is rotated on session establishment per PR-V1-C §5.4. Two
+  // Set-Cookie headers — the Express response supports an array.
+  const csrfToken = generateCsrfToken();
+  res.setHeader('Set-Cookie', [
+    `opensoyce_vault_session=${encodeURIComponent(sessionInsert.sessionId)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionTtlSeconds()}`,
+    `opensoyce_vault_csrf=${encodeURIComponent(csrfToken)}; Path=/; Secure; SameSite=Lax; Max-Age=${sessionTtlSeconds()}`,
+  ]);
   res.status(302).setHeader('Location', redirectTo);
   res.end();
 }
@@ -199,9 +207,11 @@ export async function handleVaultLogout(req, res) {
       // Cookie still cleared; server-side row will reap by expires_at.
     }
   }
-  res.setHeader(
-    'Set-Cookie',
+  // Clear both the session cookie AND the CSRF cookie. Logout must rotate
+  // (here: invalidate) the CSRF token per PR-V1-C §5.4.
+  res.setHeader('Set-Cookie', [
     'opensoyce_vault_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0',
-  );
+    'opensoyce_vault_csrf=; Path=/; Secure; SameSite=Lax; Max-Age=0',
+  ]);
   res.status(204).end();
 }
