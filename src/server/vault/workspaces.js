@@ -100,49 +100,35 @@ export async function handleVaultCreateWorkspace(req, res) {
     return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault database is not configured');
   }
 
-  const { data: existing } = await supabase
-    .from('vault_workspaces')
-    .select('workspace_id')
-    .eq('slug', slug)
-    .limit(1);
-  if (Array.isArray(existing) && existing[0]) {
-    return sendError(res, 409, ERROR_CODES.workspace_slug_taken, 'slug already taken');
+  // Atomic workspace + owner-membership creation via Postgres function
+  // (migration 0013). The PL/pgSQL function body runs in a single implicit
+  // transaction — either both rows commit or neither does. No partially-
+  // created workspace can ever exist. The previous shape (two separate
+  // INSERTs + best-effort DELETE rollback) was reviewer-flagged as a
+  // foundation-level race; this RPC closes it.
+  const { data: rpcRows, error: rpcError } = await supabase.rpc(
+    'vault_create_workspace_with_owner',
+    {
+      p_slug: slug,
+      p_display_name: displayName,
+      p_user_id: session.user_id,
+    },
+  );
+  if (rpcError) {
+    // Postgres SQLSTATE 23505 = unique_violation. The slug CHECK + slug-taken
+    // race both surface as this. Map honestly to 409 + workspace-slug-taken.
+    if (rpcError.code === '23505') {
+      return sendError(res, 409, ERROR_CODES.workspace_slug_taken, 'slug already taken');
+    }
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault workspace create failed');
   }
-
-  const { data: inserted, error: insertError } = await supabase
-    .from('vault_workspaces')
-    .insert({
-      slug,
-      display_name: displayName,
-      created_by: session.user_id,
-    })
-    .select('workspace_id, slug, display_name, created_at')
-    .limit(1);
-  if (insertError) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault workspace insert failed');
-  }
-  const workspace = inserted && inserted[0];
-  if (!workspace) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault workspace insert returned no row');
-  }
-
-  const { error: memberError } = await supabase.from('vault_workspace_memberships').insert({
-    workspace_id: workspace.workspace_id,
-    user_id: session.user_id,
-    role: 'owner',
-    member_status: 'active',
-    added_by: session.user_id,
-  });
-  if (memberError) {
-    // Best-effort rollback. The workspace exists but has no owner; the
-    // last-owner trigger would have blocked this if it were a delete. Log
-    // the inconsistency for operational follow-up.
-    await supabase.from('vault_workspaces').delete().eq('workspace_id', workspace.workspace_id);
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault membership insert failed');
+  const row = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+  if (!row || !row.workspace_id) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault workspace create returned no row');
   }
 
   res.status(201).json({
-    ...publicWorkspaceShape(workspace),
+    ...publicWorkspaceShape(row),
     role: 'owner',
   });
 }
