@@ -31,6 +31,11 @@ import {
   handlePatchProposal,
   handleDeleteForbidden,
 } from './exceptions.js';
+import { handleGetEvidence } from './evidence.js';
+import {
+  handleListTimelineEvents,
+  handleGetTimelineEvent,
+} from './timeline.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -129,5 +134,30 @@ export function registerVaultRoutes(app) {
     '/api/vault/workspaces/:slug/exceptions/:id',
     setPrivateCacheHeaders,
     handleDeleteForbidden,
+  );
+
+  // ---------- Private proof-anchor + Vault Timeline reads (PR-V2-C) ----------
+  // 3 read endpoints. All GETs — no mutating verbs (Timeline events are
+  // emitted by trigger functions, not by client writes; evidence rows are
+  // captured via mechanisms outside the v0 API surface). 404-on-non-member
+  // doctrine applies; the resolveWorkspaceForMember helper funnels every
+  // sub-case through the same not-found path.
+  app.get(
+    '/api/vault/workspaces/:slug/evidence/:id',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleGetEvidence,
+  );
+  app.get(
+    '/api/vault/workspaces/:slug/timeline',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleListTimelineEvents,
+  );
+  app.get(
+    '/api/vault/workspaces/:slug/timeline/:id',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleGetTimelineEvent,
   );
 }

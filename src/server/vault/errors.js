@@ -33,6 +33,10 @@ export const ERROR_CODES = Object.freeze({
   exception_not_found: 'exception-not-found',
   precondition_failed: 'precondition-failed',
   invalid_subject: 'invalid-subject',
+  // PR-V2-C additions (private proof-anchor + Vault Timeline reads):
+  cursor_invalid: 'cursor-invalid',
+  cursor_stale: 'cursor-stale',
+  invalid_filter: 'invalid-filter',
 });
 
 export function sendError(res, status, code, message, extras) {
