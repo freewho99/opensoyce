@@ -28,12 +28,28 @@ as $$
 declare
   v_summary text;
   v_subject text;
+  v_workspace_slug text;
 begin
   -- Only the "freshly inserted proposed" case emits exception_proposed.
   -- Any other insert state would have come from an UPDATE; the row is
   -- always created as 'proposed' per PR-V1-C §1.1.
   if new.state <> 'proposed' then
     return new;
+  end if;
+
+  -- Look up the workspace slug for the private-anchor href. PR-V1-D §1.2
+  -- locks the canonical URL pattern to /api/vault/workspaces/:slug/...,
+  -- where :slug is the immutable URL-safe slug (PR-V1-A §3.1), NOT the
+  -- workspace_id UUID. Writing the UUID would commit a syntactically-valid-
+  -- looking anchor that resolves to a broken route once PR-V2-C ships the
+  -- read surface. The trigger runs in the same SQL transaction as the
+  -- vault_exceptions INSERT, so the workspace row is guaranteed to exist.
+  select w.slug into v_workspace_slug
+    from public.vault_workspaces w
+    where w.workspace_id = new.workspace_id;
+  if v_workspace_slug is null then
+    raise exception 'vault_emit_timeline_event_for_exception_insert: workspace % not found', new.workspace_id
+      using errcode = 'foreign_key_violation';
   end if;
 
   v_subject := case new.subject_kind
@@ -69,7 +85,7 @@ begin
       jsonb_build_object(
         'proofType', 'private-anchor',
         'label', 'Exception proposal',
-        'href', '/api/vault/workspaces/' || new.workspace_id::text || '/exceptions/' || new.exception_id::text,
+        'href', '/api/vault/workspaces/' || v_workspace_slug || '/exceptions/' || new.exception_id::text,
         'visibility', 'private'
       )
     ),
@@ -89,6 +105,7 @@ declare
   v_summary text;
   v_subject text;
   v_actor uuid;
+  v_workspace_slug text;
 begin
   -- Only emit when the state actually changed, OR when state stayed 'active'
   -- but expires_at moved forward (the extend case).
@@ -96,6 +113,16 @@ begin
      and (new.state <> 'active' or new.expires_at is not distinct from old.expires_at)
   then
     return new;
+  end if;
+
+  -- Look up the workspace slug for the private-anchor href. See the matching
+  -- comment block in vault_emit_timeline_event_for_exception_insert.
+  select w.slug into v_workspace_slug
+    from public.vault_workspaces w
+    where w.workspace_id = new.workspace_id;
+  if v_workspace_slug is null then
+    raise exception 'vault_emit_timeline_event_for_exception_update: workspace % not found', new.workspace_id
+      using errcode = 'foreign_key_violation';
   end if;
 
   v_subject := new.subject_name;
@@ -168,7 +195,7 @@ begin
       jsonb_build_object(
         'proofType', 'private-anchor',
         'label', 'Exception ' || v_event_type,
-        'href', '/api/vault/workspaces/' || new.workspace_id::text || '/exceptions/' || new.exception_id::text,
+        'href', '/api/vault/workspaces/' || v_workspace_slug || '/exceptions/' || new.exception_id::text,
         'visibility', 'private'
       )
     ),

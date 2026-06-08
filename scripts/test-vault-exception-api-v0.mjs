@@ -109,6 +109,55 @@ test('migration 0015 timeline trigger functions emit the 6 exception lifecycle e
     'timeline event references_json must use private-anchor proofType');
 });
 
+test('private-anchor href in trigger uses workspace slug, not workspace_id UUID', () => {
+  // Reviewer-flagged blocker (PR #81 review). Per PR-V1-D §1.2 the
+  // canonical URL pattern is /api/vault/workspaces/:slug/exceptions/:id.
+  // Writing workspace_id::text in the :slug segment would commit a
+  // syntactically-valid-looking anchor that resolves to a broken route
+  // (workspace handlers expect a slug). The trigger MUST look up the slug
+  // from vault_workspaces and use it.
+  const sql = read('supabase/migrations/0015_vault_exception_timeline_triggers.sql');
+  const rawSql = sql; // case preserved; the forbidden pattern is case-sensitive.
+
+  // FORBIDDEN: workspace_id::text appearing in any /api/vault/workspaces/...
+  // href construction. This is the exact reviewer-named anti-pattern.
+  ok(
+    !/'\/api\/vault\/workspaces\/'\s*\|\|\s*new\.workspace_id::text/.test(rawSql),
+    'trigger MUST NOT build href with new.workspace_id::text in the :slug segment',
+  );
+
+  // REQUIRED: each trigger declares v_workspace_slug, looks it up from
+  // vault_workspaces by workspace_id, and references it inside the href
+  // template.
+  ok(
+    /v_workspace_slug\s+text/i.test(rawSql),
+    'trigger must declare v_workspace_slug text',
+  );
+  ok(
+    /select\s+w\.slug\s+into\s+v_workspace_slug/i.test(rawSql),
+    'trigger must SELECT slug INTO v_workspace_slug from vault_workspaces',
+  );
+  ok(
+    /from\s+public\.vault_workspaces/i.test(rawSql),
+    'slug lookup must read from public.vault_workspaces',
+  );
+
+  // Count: the href is built with v_workspace_slug in BOTH trigger
+  // functions (insert + update).
+  const hrefBuilds = (rawSql.match(/'\/api\/vault\/workspaces\/'\s*\|\|\s*v_workspace_slug/g) || []).length;
+  ok(
+    hrefBuilds >= 2,
+    `expected v_workspace_slug to appear in the href template in BOTH trigger functions; found ${hrefBuilds}`,
+  );
+
+  // Sanity guard: if the workspace lookup returns null, the trigger raises
+  // (not silently writes a NULL slug into the href). Defense-in-depth.
+  ok(
+    /v_workspace_slug\s+is\s+null/i.test(rawSql) && /raise\s+exception/i.test(rawSql),
+    'trigger must raise if the workspace slug lookup misses (no silent NULL href)',
+  );
+});
+
 test('migration sequence (0005-0015) is gap-free', () => {
   const filenames = fs.readdirSync(path.join(root, 'supabase/migrations')).sort();
   const numbered = filenames.filter((f) => /^\d{4}_/.test(f));
