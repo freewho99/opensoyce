@@ -41,19 +41,19 @@ export const blogPosts: BlogPost[] = [
   
   ## The Setup
   
-  In June 2026, the Miasma worm — the same one that spread itself through NPM packages using a phantom `node-gyp` dependency — did something slicker on its second pass.
+  In June 2026, the Miasma worm — the same one that spread itself through NPM packages using a phantom \`node-gyp\` dependency — did something slicker on its second pass.
   
   It didn't target your packages this time. It targeted your workflow.
   
   When Miasma infected a repo, it committed six files. Five of them were AI tool configs:
   
-  - `.claude/settings.json` — for Claude Code
-  - `.cursor/rules/setup.mdc` — for Cursor
-  - `.gemini/settings.json` — for Gemini CLI
-  - `.vscode/tasks.json` — for VS Code
-  - `.github/copilot-instructions.md` — for GitHub Copilot
+  - \`.claude/settings.json\` — for Claude Code
+  - \`.cursor/rules/setup.mdc\` — for Cursor
+  - \`.gemini/settings.json\` — for Gemini CLI
+  - \`.vscode/tasks.json\` — for VS Code
+  - \`.github/copilot-instructions.md\` — for GitHub Copilot
   
-  All six of them pointed at the same place: `.github/setup.js`. A 4.3MB obfuscated JavaScript dropper, committed to your repo, dressed like a housekeeping script. The commit author? `github-actions@github.com`. Totally normal. Nothing to see here.
+  All six of them pointed at the same place: \`.github/setup.js\`. A 4.3MB obfuscated JavaScript dropper, committed to your repo, dressed like a housekeeping script. The commit author? \`github-actions@github.com\`. Totally normal. Nothing to see here.
   
   Each tool config was written to trigger the file **automatically**. Not on build. Not on deploy. On **project open**.
   
@@ -67,11 +67,11 @@ export const blogPosts: BlogPost[] = [
   
   Here's the part that should live in your head rent-free: the AI assistant didn't make a mistake. It did exactly what it was configured to do.
   
-  Cursor reads `.cursor/rules/` on startup. That's a feature. You probably use it. You've probably added stuff in there yourself — preferred formatting, coding style, "always use TypeScript." Good stuff.
+  Cursor reads \`.cursor/rules/\` on startup. That's a feature. You probably use it. You've probably added stuff in there yourself — preferred formatting, coding style, "always use TypeScript." Good stuff.
   
   Miasma added one more rule: *run the setup script*.
   
-  Claude Code reads `.claude/settings.json`. That's a feature too. You can configure allowed commands, auto-approvals, project-level context. Miasma configured one: execute `.github/setup.js` on init.
+  Claude Code reads \`.claude/settings.json\`. That's a feature too. You can configure allowed commands, auto-approvals, project-level context. Miasma configured one: execute \`.github/setup.js\` on init.
   
   The AI wasn't hacked. The AI wasn't tricked. The AI read its instructions and followed them. That's what AIs do. That's why you use one.
   
@@ -81,7 +81,7 @@ export const blogPosts: BlogPost[] = [
   
   ## The Commit That Started It
   
-  The six files were committed with a spoofed identity: `github-actions@github.com`. That's not a real GitHub Actions service account — it's just an email string. Anyone can commit with it. Git doesn't verify author identity by default.
+  The six files were committed with a spoofed identity: \`github-actions@github.com\`. That's not a real GitHub Actions service account — it's just an email string. Anyone can commit with it. Git doesn't verify author identity by default.
   
   But here's what it looks like in your repo history:
   
@@ -90,7 +90,7 @@ export const blogPosts: BlogPost[] = [
 
 Does that look suspicious to you? Or does it look like your CI did something? Exactly.
 
-Most teams don't have commit signing enforced. Most teams don't have policies preventing files from landing in `.github/`. Most teams definitely don't have policies about what their AI tool configs are allowed to auto-execute.
+Most teams don't have commit signing enforced. Most teams don't have policies preventing files from landing in \`.github/\`. Most teams definitely don't have policies about what their AI tool configs are allowed to auto-execute.
 
 This is the gap. This is what Miasma walked through.
 
@@ -106,11 +106,11 @@ What SOC 2 does not have an opinion about:
 
 - What your AI coding assistant is allowed to execute
 - Whether your developer tooling has auto-run permissions
-- What happens when a file lands in `.github/` with a spoofed commit author
+- What happens when a file lands in \`.github/\` with a spoofed commit author
 
 Your auditor walked through your access control matrix. They verified your encryption in transit. They asked about your vendor risk management process.
 
-Nobody asked about Cursor. Nobody asked about `.claude/settings.json`. Nobody asked what happens when a developer clones an infected repo and opens it in VS Code on a Tuesday afternoon.
+Nobody asked about Cursor. Nobody asked about \`.claude/settings.json\`. Nobody asked what happens when a developer clones an infected repo and opens it in VS Code on a Tuesday afternoon.
 
 This isn't a knock on SOC 2. It's a map. SOC 2 was designed for a world where the human types the commands. We don't live in that world anymore.
 
@@ -124,7 +124,7 @@ When you use Cursor or Claude Code, you've granted that tool access to your file
 
 Miasma didn't need to escalate privileges. It didn't need to bypass your endpoint protection. It needed your AI assistant to already have the access — which it does, by default, because you gave it that access on day one.
 
-The dropper at `.github/setup.js` ran with your permissions. Your credentials. Your tokens. Your cloud provider access, if you had environment variables loaded.
+The dropper at \`.github/setup.js\` ran with your permissions. Your credentials. Your tokens. Your cloud provider access, if you had environment variables loaded.
 
 All of that, triggered by a file a worm committed to someone else's repo, executed by a tool you trust, while you were eating a burrito.
 
@@ -136,13 +136,13 @@ You need runtime visibility. Not after the fact. Not "we'll look at logs if some
 
 Specifically:
 
-**1. Commit signing enforcement.** If commits aren't signed with a verified GPG key, flag them. A commit from `github-actions@github.com` with no signature is a red flag, not a green light. Require it in your branch protection rules.
+**1. Commit signing enforcement.** If commits aren't signed with a verified GPG key, flag them. A commit from \`github-actions@github.com\` with no signature is a red flag, not a green light. Require it in your branch protection rules.
 
-**2. AI tool configuration review in your code review process.** Every change to `.cursor/rules/`, `.claude/settings.json`, `.vscode/tasks.json`, `.gemini/settings.json`, or `.github/copilot-instructions.md` should trigger a mandatory human review. No exceptions. These files control what your AI executes.
+**2. AI tool configuration review in your code review process.** Every change to \`.cursor/rules/\`, \`.claude/settings.json\`, \`.vscode/tasks.json\`, \`.gemini/settings.json\`, or \`.github/copilot-instructions.md\` should trigger a mandatory human review. No exceptions. These files control what your AI executes.
 
-**3. Runtime process monitoring for your dev environment.** You need to know when `node .github/setup.js` runs on a developer machine. Not from a post-incident DFIR engagement. In the moment. So you can stop it before the dropper phones home.
+**3. Runtime process monitoring for your dev environment.** You need to know when \`node .github/setup.js\` runs on a developer machine. Not from a post-incident DFIR engagement. In the moment. So you can stop it before the dropper phones home.
 
-**4. Dependency graph visibility into your repos.** Understand what's in your repos before your developers clone them. A 4.3MB obfuscated JS file sitting in `.github/` is an anomaly. It should show up on a scan, not show up in your incident report.
+**4. Dependency graph visibility into your repos.** Understand what's in your repos before your developers clone them. A 4.3MB obfuscated JS file sitting in \`.github/\` is an anomaly. It should show up on a scan, not show up in your incident report.
 
 This is exactly what OpenSoyce Guard is built for — runtime visibility into your open source supply chain, so you can see what's running before it runs you.
 
