@@ -140,11 +140,17 @@ Specifically:
 
 **2. AI tool configuration review in your code review process.** Every change to `.cursor/rules/`, `.claude/settings.json`, `.vscode/tasks.json`, `.gemini/settings.json`, or `.github/copilot-instructions.md` should trigger a mandatory human review. No exceptions. These files control what your AI executes.
 
-**3. Runtime process monitoring for your dev environment.** You need to know when `node .github/setup.js` runs on a developer machine. Not from a post-incident DFIR engagement. In the moment. So you can stop it before the dropper phones home.
+**3. Runtime process monitoring for your dev environment.** Something should notice when `node .github/setup.js` fires on a developer machine. But be honest about whose job that is: it's EDR, endpoint, runtime security — not a dependency scanner. Anybody who tells you their supply-chain tool watches your processes execute live is selling you a smoke alarm that lives in a different building. Get real runtime monitoring for the runtime problem.
 
 **4. Dependency graph visibility into your repos.** Understand what's in your repos before your developers clone them. A 4.3MB obfuscated JS file sitting in `.github/` is an anomaly. It should show up on a scan, not show up in your incident report.
 
-This is exactly what OpenSoyce Guard is built for — runtime visibility into your open source supply chain, so you can see what's running before it runs you.
+And here's where we're straight with you, because this is a trust brand and overclaiming is worse than useless.
+
+OpenSoyce Guard is not standing on your laptop watching `setup.js` spawn a child process. That's not what it is. It doesn't live in your runtime, and it can't stop a script that's already executing — by then it's an endpoint problem, and you want an endpoint tool.
+
+What OpenSoyce *does* sit on is the moment before. The same worm that committed that file also poisoned the packages around it — and *that* is the layer OpenSoyce scores: what's in the dependency, who published it, how it's behaving in the registry, whether it should be allowed into your build at all. The exploit ran because nobody asked "should this be trusted?" before the AI ran it. That question — asked early, answered with a reason, written down — is the whole product.
+
+Same worm. Same lesson. One layer earlier.
 
 ---
 
@@ -379,6 +385,8 @@ That's the lunch your worm is eating.
         Behavior. Live signal. Eyes that are still open at 11:30 on a Tuesday, when yours are closed and you've earned it.
 
         The worm is genuinely brilliant at hiding from the things that stopped looking. It has never once worked out how to hide from the thing that keeps watching.
+
+        One honest line on what "watching" means here, because it matters: this is not a thing sitting on your build box sniffing your processes. That's runtime security's job, and it's a real one — go buy it. OpenSoyce watches the *package*: the registry it came from, the velocity it published at, the shape of the tarball, the maintainer behind it — and scores whether it should be allowed into your build before it ever runs a line. The worm tipped its hand upstream, in the registry, hours before it touched your runner. That's the window. That's where the decision lives.
 
         So treat every install like it's already lying to you. Because the green ones, the quiet ones, the boring routine ones you'd never look at twice — those are the ones that always are.
 
