@@ -16,6 +16,8 @@ import { getVendorSdk } from "./src/data/vendorSdks.js";
 import { detectMigration, makeFetchForks } from "./src/shared/detectMigration.js";
 import { verdictFor, detectExtensionExploitRisk, trustPostureFor } from "./src/shared/verdict.js";
 import { registerTrustBadgeRoutes } from "./src/server/badge/routes.js";
+// @ts-ignore — plain JS module, no .d.ts ships with the vault file in v0
+import { registerVaultRoutes } from "./src/server/vault/routes.js";
 // @ts-ignore — plain JS handler, no .d.ts
 import earlyAccessHandler from "./api/early-access.js";
 // @ts-ignore — plain JS handler, no .d.ts
@@ -321,6 +323,12 @@ async function startServer() {
   // Dashboard data; no scan, no auth, no analytics. See
   // docs/architecture/trust-badge-architecture-sub-sketch.md.
   registerTrustBadgeRoutes(app);
+
+  // Trust Vault v0 foundation (Phase 5 PR-V2-A): auth + workspaces only.
+  // Exception API, private proof-anchor reads, Vault Timeline reads, and
+  // the Vault Dashboard UI ship in later PRs (PR-V2-B / PR-V2-C / PR-V2-E).
+  // Every /api/vault/* response carries Cache-Control: private, no-store.
+  registerVaultRoutes(app);
 
   app.get("/api/badge/:owner/:repo.svg", scoringLimiter, async (req, res) => {
     const { owner, repo } = req.params;
