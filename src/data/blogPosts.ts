@@ -41,19 +41,19 @@ export const blogPosts: BlogPost[] = [
   
   ## The Setup
   
-  In June 2026, the Miasma worm — the same one that spread itself through NPM packages using a phantom `node-gyp` dependency — did something slicker on its second pass.
+  In June 2026, the Miasma worm — the same one that spread itself through NPM packages using a phantom \`node-gyp\` dependency — did something slicker on its second pass.
   
   It didn't target your packages this time. It targeted your workflow.
   
   When Miasma infected a repo, it committed six files. Five of them were AI tool configs:
   
-  - `.claude/settings.json` — for Claude Code
-  - `.cursor/rules/setup.mdc` — for Cursor
-  - `.gemini/settings.json` — for Gemini CLI
-  - `.vscode/tasks.json` — for VS Code
-  - `.github/copilot-instructions.md` — for GitHub Copilot
+  - \`.claude/settings.json\` — for Claude Code
+  - \`.cursor/rules/setup.mdc\` — for Cursor
+  - \`.gemini/settings.json\` — for Gemini CLI
+  - \`.vscode/tasks.json\` — for VS Code
+  - \`.github/copilot-instructions.md\` — for GitHub Copilot
   
-  All six of them pointed at the same place: `.github/setup.js`. A 4.3MB obfuscated JavaScript dropper, committed to your repo, dressed like a housekeeping script. The commit author? `github-actions@github.com`. Totally normal. Nothing to see here.
+  All six of them pointed at the same place: \`.github/setup.js\`. A 4.3MB obfuscated JavaScript dropper, committed to your repo, dressed like a housekeeping script. The commit author? \`github-actions@github.com\`. Totally normal. Nothing to see here.
   
   Each tool config was written to trigger the file **automatically**. Not on build. Not on deploy. On **project open**.
   
@@ -67,11 +67,11 @@ export const blogPosts: BlogPost[] = [
   
   Here's the part that should live in your head rent-free: the AI assistant didn't make a mistake. It did exactly what it was configured to do.
   
-  Cursor reads `.cursor/rules/` on startup. That's a feature. You probably use it. You've probably added stuff in there yourself — preferred formatting, coding style, "always use TypeScript." Good stuff.
+  Cursor reads \`.cursor/rules/\` on startup. That's a feature. You probably use it. You've probably added stuff in there yourself — preferred formatting, coding style, "always use TypeScript." Good stuff.
   
   Miasma added one more rule: *run the setup script*.
   
-  Claude Code reads `.claude/settings.json`. That's a feature too. You can configure allowed commands, auto-approvals, project-level context. Miasma configured one: execute `.github/setup.js` on init.
+  Claude Code reads \`.claude/settings.json\`. That's a feature too. You can configure allowed commands, auto-approvals, project-level context. Miasma configured one: execute \`.github/setup.js\` on init.
   
   The AI wasn't hacked. The AI wasn't tricked. The AI read its instructions and followed them. That's what AIs do. That's why you use one.
   
@@ -81,7 +81,7 @@ export const blogPosts: BlogPost[] = [
   
   ## The Commit That Started It
   
-  The six files were committed with a spoofed identity: `github-actions@github.com`. That's not a real GitHub Actions service account — it's just an email string. Anyone can commit with it. Git doesn't verify author identity by default.
+  The six files were committed with a spoofed identity: \`github-actions@github.com\`. That's not a real GitHub Actions service account — it's just an email string. Anyone can commit with it. Git doesn't verify author identity by default.
   
   But here's what it looks like in your repo history:
   
@@ -90,7 +90,7 @@ export const blogPosts: BlogPost[] = [
 
 Does that look suspicious to you? Or does it look like your CI did something? Exactly.
 
-Most teams don't have commit signing enforced. Most teams don't have policies preventing files from landing in `.github/`. Most teams definitely don't have policies about what their AI tool configs are allowed to auto-execute.
+Most teams don't have commit signing enforced. Most teams don't have policies preventing files from landing in \`.github/\`. Most teams definitely don't have policies about what their AI tool configs are allowed to auto-execute.
 
 This is the gap. This is what Miasma walked through.
 
@@ -106,11 +106,11 @@ What SOC 2 does not have an opinion about:
 
 - What your AI coding assistant is allowed to execute
 - Whether your developer tooling has auto-run permissions
-- What happens when a file lands in `.github/` with a spoofed commit author
+- What happens when a file lands in \`.github/\` with a spoofed commit author
 
 Your auditor walked through your access control matrix. They verified your encryption in transit. They asked about your vendor risk management process.
 
-Nobody asked about Cursor. Nobody asked about `.claude/settings.json`. Nobody asked what happens when a developer clones an infected repo and opens it in VS Code on a Tuesday afternoon.
+Nobody asked about Cursor. Nobody asked about \`.claude/settings.json\`. Nobody asked what happens when a developer clones an infected repo and opens it in VS Code on a Tuesday afternoon.
 
 This isn't a knock on SOC 2. It's a map. SOC 2 was designed for a world where the human types the commands. We don't live in that world anymore.
 
@@ -124,7 +124,7 @@ When you use Cursor or Claude Code, you've granted that tool access to your file
 
 Miasma didn't need to escalate privileges. It didn't need to bypass your endpoint protection. It needed your AI assistant to already have the access — which it does, by default, because you gave it that access on day one.
 
-The dropper at `.github/setup.js` ran with your permissions. Your credentials. Your tokens. Your cloud provider access, if you had environment variables loaded.
+The dropper at \`.github/setup.js\` ran with your permissions. Your credentials. Your tokens. Your cloud provider access, if you had environment variables loaded.
 
 All of that, triggered by a file a worm committed to someone else's repo, executed by a tool you trust, while you were eating a burrito.
 
@@ -136,15 +136,21 @@ You need runtime visibility. Not after the fact. Not "we'll look at logs if some
 
 Specifically:
 
-**1. Commit signing enforcement.** If commits aren't signed with a verified GPG key, flag them. A commit from `github-actions@github.com` with no signature is a red flag, not a green light. Require it in your branch protection rules.
+**1. Commit signing enforcement.** If commits aren't signed with a verified GPG key, flag them. A commit from \`github-actions@github.com\` with no signature is a red flag, not a green light. Require it in your branch protection rules.
 
-**2. AI tool configuration review in your code review process.** Every change to `.cursor/rules/`, `.claude/settings.json`, `.vscode/tasks.json`, `.gemini/settings.json`, or `.github/copilot-instructions.md` should trigger a mandatory human review. No exceptions. These files control what your AI executes.
+**2. AI tool configuration review in your code review process.** Every change to \`.cursor/rules/\`, \`.claude/settings.json\`, \`.vscode/tasks.json\`, \`.gemini/settings.json\`, or \`.github/copilot-instructions.md\` should trigger a mandatory human review. No exceptions. These files control what your AI executes.
 
-**3. Runtime process monitoring for your dev environment.** You need to know when `node .github/setup.js` runs on a developer machine. Not from a post-incident DFIR engagement. In the moment. So you can stop it before the dropper phones home.
+**3. Runtime process monitoring for your dev environment.** Something should notice when \`node .github/setup.js\` fires on a developer machine. But be honest about whose job that is: it's EDR, endpoint, runtime security — not a dependency scanner. Anybody who tells you their supply-chain tool watches your processes execute live is selling you a smoke alarm that lives in a different building. Get real runtime monitoring for the runtime problem.
 
-**4. Dependency graph visibility into your repos.** Understand what's in your repos before your developers clone them. A 4.3MB obfuscated JS file sitting in `.github/` is an anomaly. It should show up on a scan, not show up in your incident report.
+**4. Dependency graph visibility into your repos.** Understand what's in your repos before your developers clone them. A 4.3MB obfuscated JS file sitting in \`.github/\` is an anomaly. It should show up on a scan, not show up in your incident report.
 
-This is exactly what OpenSoyce Guard is built for — runtime visibility into your open source supply chain, so you can see what's running before it runs you.
+And here's where we're straight with you, because this is a trust brand and overclaiming is worse than useless.
+
+OpenSoyce Guard is not standing on your laptop watching \`setup.js\` spawn a child process. That's not what it is. It doesn't live in your runtime, and it can't stop a script that's already executing — by then it's an endpoint problem, and you want an endpoint tool.
+
+What OpenSoyce *does* sit on is the moment before. The same worm that committed that file also poisoned the packages around it — and *that* is the layer OpenSoyce scores: what's in the dependency, who published it, how it's behaving in the registry, whether it should be allowed into your build at all. The exploit ran because nobody asked "should this be trusted?" before the AI ran it. That question — asked early, answered with a reason, written down — is the whole product.
+
+Same worm. Same lesson. One layer earlier.
 
 ---
 
@@ -265,9 +271,33 @@ That's the lunch your worm is eating.
 
         Which means patching HTTP/2 doesn't save you from the next protocol that runs the same trick. QUIC has compression. Everything moving data efficiently has *some* scheme for "you know what I mean" — and every one of those schemes has a version of "what if someone abuses the memory on the receiving end."
 
-        The teams that got hit weren't negligent. They were running maintained software on modern protocols. They just didn't have anything watching behavior at the edge — anything that would notice "this single connection is allocating memory at a rate that has nothing to do with the data it's actually sending."
+        The teams that got hit weren't negligent. They were running maintained software on modern protocols.         Now here's where a lesser security blog lies to you.
 
-        That's what OpenSoyce Guard watches. Not the version number. Not the CVE list from this morning. The *behavior*. Right now. Because the next one won't have a CVE yet. And your server will still be standing in that hallway, being helpful, waiting for someone who isn't coming.
+        This is the paragraph where we're supposed to say "and that's why OpenSoyce Guard would've caught it." We're not going to do that. OpenSoyce Guard is not sitting in front of your NGINX box watching HTTP/2 frames swell up in memory. It does not live in your request path. It is not a WAF. Anybody who tells you their dependency tool watches live protocol behavior is selling you a hallway and calling it a wall.
+
+        HTTP/2 Bomb is a runtime problem. It belongs to the people who patch web servers, tune load balancers, and write edge rules. That's their frontline. Respect it.
+
+        But look at the *shape* of what just happened to you.
+
+        Something showed up that looked completely valid. Your server checked it against the rules. It passed. Your server did exactly what it was told — and the dangerous part didn't show up until the behavior had already unfolded. By then it was holding thirty-two gigs in both hands.
+
+        You have seen that shape before. You see it every week.
+
+        A package installs clean. A maintainer looks active enough. The lockfile resolves, the build goes green, nothing screams. Valid. Passed. And then the dangerous part shows up later — inside your app, where it's a whole lot harder to evict than it was to let in.
+
+        Same pattern. Different layer.
+
+        The HTTP/2 Bomb lands in the request path, twenty seconds before your server hits the floor. The dependency problem lands earlier — at the quiet moment a human or a build pipeline decides "yeah, this one's fine, ship it." Nobody's getting paged at that moment. That's exactly why it's dangerous.
+
+        That moment is the frontline OpenSoyce actually stands on.
+
+        Not the packet stream. The decision. Before the code is trusted, OpenSoyce Guard asks the question your build pipeline forgot to: *should this be allowed to ship?* It explains why or why not, and it writes the answer down — so the "yeah it's fine" becomes a decision somebody made on the record, not a thing that happened to you while nobody was looking.
+
+        OpenSoyce Guard doesn't claim to catch every runtime exploit. It moves your frontline *upstream* — from reacting to dangerous software after it's already running, to deciding what software is even allowed to become part of your stack in the first place.
+
+        Because "valid" was never the same thing as "safe." The HTTP/2 Bomb just taught your server that lesson at thirty-two gigabytes a connection. Your dependencies have been trying to teach you the same thing, quietly, the whole time.
+
+        HTTP/2 Bomb is the metaphor. Dependency trust is the product.
 
         **Sources:** HAProxy Technologies / Ron Northcutt, *Protecting against HTTP/2 Bomb vulnerability (CVE-2026-49975)*; Penligent, *CVE-2026-49975, Tiny HTTP/2 Headers That Pin...*; Red Hat Security Center; Amazon Linux Security Center; Reddit r/haproxy.
 
@@ -379,6 +409,8 @@ That's the lunch your worm is eating.
         Behavior. Live signal. Eyes that are still open at 11:30 on a Tuesday, when yours are closed and you've earned it.
 
         The worm is genuinely brilliant at hiding from the things that stopped looking. It has never once worked out how to hide from the thing that keeps watching.
+
+        One honest line on what "watching" means here, because it matters: this is not a thing sitting on your build box sniffing your processes. That's runtime security's job, and it's a real one — go buy it. OpenSoyce watches the *package*: the registry it came from, the velocity it published at, the shape of the tarball, the maintainer behind it — and scores whether it should be allowed into your build before it ever runs a line. The worm tipped its hand upstream, in the registry, hours before it touched your runner. That's the window. That's where the decision lives.
 
         So treat every install like it's already lying to you. Because the green ones, the quiet ones, the boring routine ones you'd never look at twice — those are the ones that always are.
 
