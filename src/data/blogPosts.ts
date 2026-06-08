@@ -265,9 +265,33 @@ That's the lunch your worm is eating.
 
         Which means patching HTTP/2 doesn't save you from the next protocol that runs the same trick. QUIC has compression. Everything moving data efficiently has *some* scheme for "you know what I mean" — and every one of those schemes has a version of "what if someone abuses the memory on the receiving end."
 
-        The teams that got hit weren't negligent. They were running maintained software on modern protocols. They just didn't have anything watching behavior at the edge — anything that would notice "this single connection is allocating memory at a rate that has nothing to do with the data it's actually sending."
+        The teams that got hit weren't negligent. They were running maintained software on modern protocols.         Now here's where a lesser security blog lies to you.
 
-        That's what OpenSoyce Guard watches. Not the version number. Not the CVE list from this morning. The *behavior*. Right now. Because the next one won't have a CVE yet. And your server will still be standing in that hallway, being helpful, waiting for someone who isn't coming.
+        This is the paragraph where we're supposed to say "and that's why OpenSoyce Guard would've caught it." We're not going to do that. OpenSoyce Guard is not sitting in front of your NGINX box watching HTTP/2 frames swell up in memory. It does not live in your request path. It is not a WAF. Anybody who tells you their dependency tool watches live protocol behavior is selling you a hallway and calling it a wall.
+
+        HTTP/2 Bomb is a runtime problem. It belongs to the people who patch web servers, tune load balancers, and write edge rules. That's their frontline. Respect it.
+
+        But look at the *shape* of what just happened to you.
+
+        Something showed up that looked completely valid. Your server checked it against the rules. It passed. Your server did exactly what it was told — and the dangerous part didn't show up until the behavior had already unfolded. By then it was holding thirty-two gigs in both hands.
+
+        You have seen that shape before. You see it every week.
+
+        A package installs clean. A maintainer looks active enough. The lockfile resolves, the build goes green, nothing screams. Valid. Passed. And then the dangerous part shows up later — inside your app, where it's a whole lot harder to evict than it was to let in.
+
+        Same pattern. Different layer.
+
+        The HTTP/2 Bomb lands in the request path, twenty seconds before your server hits the floor. The dependency problem lands earlier — at the quiet moment a human or a build pipeline decides "yeah, this one's fine, ship it." Nobody's getting paged at that moment. That's exactly why it's dangerous.
+
+        That moment is the frontline OpenSoyce actually stands on.
+
+        Not the packet stream. The decision. Before the code is trusted, OpenSoyce Guard asks the question your build pipeline forgot to: *should this be allowed to ship?* It explains why or why not, and it writes the answer down — so the "yeah it's fine" becomes a decision somebody made on the record, not a thing that happened to you while nobody was looking.
+
+        OpenSoyce Guard doesn't claim to catch every runtime exploit. It moves your frontline *upstream* — from reacting to dangerous software after it's already running, to deciding what software is even allowed to become part of your stack in the first place.
+
+        Because "valid" was never the same thing as "safe." The HTTP/2 Bomb just taught your server that lesson at thirty-two gigabytes a connection. Your dependencies have been trying to teach you the same thing, quietly, the whole time.
+
+        HTTP/2 Bomb is the metaphor. Dependency trust is the product.
 
         **Sources:** HAProxy Technologies / Ron Northcutt, *Protecting against HTTP/2 Bomb vulnerability (CVE-2026-49975)*; Penligent, *CVE-2026-49975, Tiny HTTP/2 Headers That Pin...*; Red Hat Security Center; Amazon Linux Security Center; Reddit r/haproxy.
 
