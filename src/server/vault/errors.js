@@ -37,6 +37,10 @@ export const ERROR_CODES = Object.freeze({
   cursor_invalid: 'cursor-invalid',
   cursor_stale: 'cursor-stale',
   invalid_filter: 'invalid-filter',
+  // PR-V2-D additions (CLI device-code flow):
+  authorization_pending: 'authorization-pending',
+  device_code_expired: 'device-code-expired',
+  device_code_invalid: 'device-code-invalid',
 });
 
 export function sendError(res, status, code, message, extras) {

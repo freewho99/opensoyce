@@ -9,6 +9,7 @@ import { STRINGS } from '../strings.js';
 import type { ParsedArgs } from '../args.js';
 import { formatCheck, type TimelineEvent } from '../output.js';
 import { STATIC_TIMELINE } from '../lib/static-data.js';
+import { fetchWorkspaceExceptions, formatWorkspaceContext } from '../lib/workspace-context.js';
 
 const PACKAGE_SPEC_RE = /^@?[a-z0-9][\w./-]*@[\w.+-]+$/i;
 
@@ -53,6 +54,28 @@ export async function runWhy(args: ParsedArgs): Promise<number> {
   }, args);
 
   if (output) process.stdout.write(output);
+
+  // Workspace mode (PR-V2-D, per PR-V1-E §3.1): if --workspace was set,
+  // append the workspace's active exceptions for this subject as a
+  // [PRIVATE] block. Vault Timeline events touching the subject are
+  // surfaced via `opensoyce timeline --workspace <id> --package <name>`;
+  // mirroring them here would double-render across commands.
+  if (args.workspace) {
+    const ctx = await fetchWorkspaceExceptions({
+      apiBase: args.apiBase,
+      workspace: args.workspace,
+      subjectName: pkg,
+      timeoutMs: args.timeoutMs,
+    });
+    if (!ctx.ok) {
+      process.stderr.write(ctx.message + '\n');
+      return ctx.exitCode;
+    }
+    if (!args.json) {
+      process.stdout.write(formatWorkspaceContext(ctx.context));
+    }
+  }
+
   if (action === 'NOT_EVALUATED') return EXIT_NOT_EVALUATED;
   return exitCodeForAction(action);
 }

@@ -17,6 +17,9 @@ COMMANDS:
   trust <owner>/<repo>         Per-repo trust posture
   timeline [--package <p>]     Recorded trust-decision events
   why <pkg>                    Current decision plus timeline events
+  login                        Sign in to a Vault workspace via device code
+  logout                       Clear the local Vault session
+  exception <subcommand>       Vault workspace exceptions (list | propose | revoke)
 
 GLOBAL OPTIONS:
   --json                       Machine-consumable JSON output
@@ -26,6 +29,7 @@ GLOBAL OPTIONS:
   --quiet, -q                  Suppress non-error stdout in default mode
   --help, -h                   Show help
   --version                    Print the CLI version
+  --workspace <id>             Run a command inside a Vault workspace
 
 EXIT CODES:
   0  ALLOW (or read-only command succeeded)
@@ -92,6 +96,49 @@ Read the current decision plus the timeline events that produced it.
 
 EXAMPLES:
   opensoyce why ua-parser-js@0.7.29
+
+${FOOTER}
+`,
+
+  login: `opensoyce login
+
+Sign in to a Vault workspace via the device-code flow. Opens a one-shot
+verification URL; you confirm in a browser. The CLI writes a session
+file at ~/.opensoyce/session.json (mode 0600) on success.
+
+EXAMPLES:
+  opensoyce login
+  opensoyce login --json
+
+${FOOTER}
+`,
+
+  logout: `opensoyce logout
+
+Clear the local Vault session. Locally idempotent: the session file is
+deleted even if the server-side logout call fails.
+
+EXAMPLES:
+  opensoyce logout
+
+${FOOTER}
+`,
+
+  exception: `opensoyce exception <list | propose | revoke> --workspace <id>
+
+Read or write workspace exceptions. Requires a Vault session and the
+--workspace flag.
+
+  list      List exceptions in the workspace (optional --state, --subject, --limit)
+  propose   Propose a new exception (downgrade only: BLOCK->WARN|ALLOW, WARN->ALLOW)
+  revoke    Revoke an active exception (safety operation; tightens the gate)
+
+The four-eye gates (approve / reject / extend) remain UI-only in v0.
+
+EXAMPLES:
+  opensoyce exception list --workspace acme --state active
+  opensoyce exception propose --workspace acme --subject ua-parser-js@0.7.29 --from BLOCK --to WARN --reason "Patched fork pinned for 30 days"
+  opensoyce exception revoke b4d6a47d-1e9c-4ce4-9c63-79c6c4f1c0a3 --reason "Patched upstream" --workspace acme
 
 ${FOOTER}
 `,

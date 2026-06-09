@@ -36,6 +36,11 @@ import {
   handleListTimelineEvents,
   handleGetTimelineEvent,
 } from './timeline.js';
+import {
+  handleCreateDeviceCode,
+  handlePollDeviceToken,
+  handleApproveDeviceCode,
+} from './cli.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -159,5 +164,27 @@ export function registerVaultRoutes(app) {
     setPrivateCacheHeaders,
     requireVaultSession,
     handleGetTimelineEvent,
+  );
+
+  // ---------- CLI device-code flow (PR-V2-D) ----------
+  // device-code + device-token are PUBLIC (no session required). They are
+  // the bootstrap that establishes a session. approve requires a browser
+  // session + CSRF since it's a state-mutating cross-side action.
+  app.post(
+    '/api/vault/cli/device-code',
+    setPrivateCacheHeaders,
+    handleCreateDeviceCode,
+  );
+  app.post(
+    '/api/vault/cli/device-token',
+    setPrivateCacheHeaders,
+    handlePollDeviceToken,
+  );
+  app.post(
+    '/api/vault/cli/approve',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    requireCsrf,
+    handleApproveDeviceCode,
   );
 }
