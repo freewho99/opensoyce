@@ -41,16 +41,20 @@ Do not collapse these objects.
 
 ## Implemented Phase 5 Stack on Main
 
-As of the PR-V2-C closeout:
+As of the PR-V3 Phase 5 closeout (Phase 5 is CLOSED):
 
 ```txt
-5beb8fa  PR-V2-A       Vault auth + workspace foundation
-34aad06  forward-fix   atomic workspace + owner creation
-bc7b5d9  PR-V2-B       exception state machine + API
+47f86bc  PR-V2-E       Vault Dashboard + /cli-auth approval page  (#86)
+34ef316  #85           docs(strategy): CEI architecture + v3 addendum
+15fc8eb  PR-V2-D       CLI workspace mode                          (#84)
 3adc0fc  PR-V2-C       private proof anchors + Vault Timeline reads
+c560468  #82           docs(strategy): weakness-to-strength
+bc7b5d9  PR-V2-B       exception state machine + API
+34aad06  forward-fix   atomic workspace + owner creation
+5beb8fa  PR-V2-A       Vault auth + workspace foundation
 ```
 
-Phase 5 now has the private write/read API loop:
+Phase 5 has the full private write/read/control loop:
 
 ```txt
 workspace auth
@@ -61,7 +65,12 @@ private proof anchors
 Vault Timeline read API
 expanded user object shaping
 redacted-body-for-all-roles rule
+CLI device-code login + workspace commands
+browser Vault Dashboard + /cli-auth approval page
+strategy / do-not-claim firewall
 ```
+
+See [`phase-5-closeout.md`](./phase-5-closeout.md) for the closeout handoff record.
 
 ## Status Vocabulary
 

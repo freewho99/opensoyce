@@ -119,29 +119,33 @@ Each phase below carries its own scope, its precondition, its `enters` event, an
 
 **Out of scope for Phase 4:** Trust Vault scope, VEX/reachability scope, remediation actions, compliance export, sandbox telemetry.
 
-### Phase 5 — Trust Vault: private evidence + exceptions (Later)
+### Phase 5 — Trust Vault: private evidence + exceptions (✅ Closed)
 
-**Scope:** Auth-gated private evidence layer. Per-customer audit logs, embargoed CVE work, reviewer-private exception justifications, repo-scoped exception persistence. Closes the deferred items in:
+**Scope:** Auth-gated private evidence layer. Per-customer audit logs, embargoed CVE work, reviewer-private exception justifications, repo-scoped exception persistence. Closed the deferred items in:
 
 - `repo-trust-dashboard-sketch.md` §9 backlog (repo-scoped exception storage)
 - `open-source-trust-center-sketch.md` §6 (private evidence boundary)
 - `public-trust-spine-closeout.md` §8 (no editable exceptions, no per-customer trust pages)
 
-**Why Later, not Next:** Private evidence requires auth + persistence + RBAC. That is a substantially larger arc than the public spine. It comes after CLI + badge because distribution validates the public asset before private capabilities deepen it.
+**Closeout record:** see [`docs/strategy/phase-5-closeout.md`](../strategy/phase-5-closeout.md).
 
-**Preconditions:**
+**Implementation arc on main:**
 
-- Phase 4 closeout merged.
-- Decision on auth provider, persistence layer, and RBAC scope (each likely its own sub-ADR inside the Phase 5 sketch).
-- Decision on whether the Trust Vault is a separate route family or extends `/opensource-trust` / `/projects/.../trust` with visibility-aware sections.
+- `5beb8fa` PR-V2-A — auth + workspace foundation
+- `34aad06` forward-fix — atomic workspace + owner creation
+- `bc7b5d9` PR-V2-B — exception state machine + API + CSRF + idempotency
+- `3adc0fc` PR-V2-C — private proof anchors + Vault Timeline reads
+- `15fc8eb` PR-V2-D — CLI workspace mode
+- `47f86bc` PR-V2-E — Vault Dashboard + `/cli-auth` approval page
+- `c560468`, `34ef316` — strategy / do-not-claim firewall
 
-**Doctrine constraints:**
+**Doctrine constraints (held through closeout):**
 
-- The existing Trust Center's `visibility` field guard (private-scope creep guard) lifts only when this phase ships, in the same PR.
-- Trust Vault evidence types must carry the same audit-anchor discipline as public evidence: PR + SHA, live surface, or doc anchor — no fabrications.
-- Banned-substring vocabulary on public Trust Center surfaces stays intact; Trust Vault evidence may carry different copy but must not leak back into public-surface copy.
+- The Trust Center's `visibility` field guard was lifted atomically with PR-V2-C, scoped to Vault data shapes; PR-V2-D extended the allowlist to `packages/cli/`; PR-V2-E extended it to `src/pages/CliAuth.tsx`, `src/pages/vault/**`, `src/components/VaultLayout.tsx`, and `src/shared/vault/api-client.ts`. Every other public-spine surface still carries the original ban.
+- Trust Vault evidence types carry the same audit-anchor discipline as public evidence: PR + SHA, live surface, or doc anchor. `private-anchor` is a separate proofType that may only appear in Vault data with `visibility: 'private'`. The structural tests enforce both rules.
+- Banned-substring vocabulary on public Trust Center surfaces stayed intact.
 
-**Out of scope for Phase 5:** Vanta / Drata export (Phase 8), public marketing of Trust Vault evidence (Trust Vault is internal/customer-private by definition).
+**Out of scope for Phase 5 (still deferred):** Vanta / Drata export (Phase 8), public marketing of Trust Vault evidence (Trust Vault is internal/customer-private by definition).
 
 ### Phase 6 — Signal Intelligence: Component Exposure Intelligence (Later)
 

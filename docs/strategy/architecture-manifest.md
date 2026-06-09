@@ -35,22 +35,19 @@ do-not-claim:
 |---|---:|---|---|---|
 | Vault auth + workspace foundation | implemented | PR-V2-A | PR #78 / `5beb8fa` | Auth/session/workspace base |
 | Atomic workspace + owner creation | implemented | forward-fix | PR #80 / `34aad06` | Atomic workspace initialization |
+| Weakness-to-strength strategy | implemented | strategy docs | PR #82 / `c560468` | Strategic positioning |
 | Exception state machine + API | implemented | PR-V2-B | PR #81 / `bc7b5d9` | Exception write lifecycle |
 | Private proof anchors + Vault Timeline reads | implemented | PR-V2-C | PR #83 / `3adc0fc` | Private reads / timeline loop |
-| Weakness-to-strength strategy | implemented | strategy docs | PR #82 / `c560468` | Strategic positioning |
+| CLI workspace mode | implemented | PR-V2-D | PR #84 / `15fc8eb` | Device-code login, `--workspace`, exception list/propose/revoke, atomic CLI v0 lock lift |
+| CEI architecture lock-in + v3 addendum | implemented | strategy docs | PR #85 / `34ef316` | Do-not-claim firewall, parking lot, resilience doctrine, v3 enterprise boundaries |
+| Vault Dashboard + `/cli-auth` approval | implemented | PR-V2-E | PR #86 / `47f86bc` | Browser approval page + Dashboard shell (workspaces, Trust Expiry table, exception detail w/ reviewer actions, Vault Timeline, evidence detail) |
+| Phase 5 closeout | implemented | PR-V3 | this PR | Phase 5 marked COMPLETE; final doctrine; closeout checklist; Phase 6 parked-not-authorized language |
+
+**Phase 5 is CLOSED.** See [`phase-5-closeout.md`](./phase-5-closeout.md) for the full handoff record.
 
 ## Approved Next
 
-| Artifact | Status | Phase | Purpose |
-|---|---:|---|---|
-| CLI workspace extension | approved-next only after explicit call | PR-V2-D | login/logout, `--workspace`, exception list/propose/revoke, atomic CLI v0 lock lift |
-
-## Planned / Near Future
-
-| Artifact | Status | Phase | Purpose |
-|---|---:|---|---|
-| Vault Dashboard UI | planned | PR-V2-E | Trust Expiry table, evidence state, review actions |
-| Phase 5 closeout | planned | PR-V3 | Close implementation arc and update docs |
+_(none — Phase 5 is closed; Phase 6 is parked and requires explicit user approval before any implementation begins)_
 
 ## Parked — Component Exposure Intelligence
 
