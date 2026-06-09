@@ -81,6 +81,20 @@ do-not-claim:
 | Auditor export bundle | parked | Phase 8 | Compliance evidence packaging |
 | Vanta/Drata export | parked | Phase 8 | Evidence producer into GRC systems |
 
+## Parked — v3 / Enterprise Expansion (long-range)
+
+| Artifact | Status | Phase | Purpose |
+|---|---:|---|---|
+| SPIFFE/SPIRE identity direction | parked / research | v3 | Workload identity attestation for future collectors / agents |
+| Cross-cloud trust scope synthesis | parked | Phase 6+ | Explicit per-scope exception applicability across environments |
+| Predictive blast-radius preview | parked | Phase 6+ | Trust Impact Analysis on proposed exceptions (advises only) |
+| Compliance evidence export projection | parked | Phase 8+ | Projection from `vault_exceptions` / `vault_evidence` / `vault_timeline_events` |
+| Compliance Evidence Exports dashboard | parked | Phase 8+ | Audit Evidence Mapping; control-code rows; review-required statuses |
+| DR reconciliation playbook | parked | Future resilience | Post-outage local audit upload + reconcile |
+| Post-Incident Review template | parked | Future resilience | Break-glass governance closure |
+| Decision-Event Reconciliation API | parked | Phase 6+ | `component-exposures/reconcile` route family |
+| Pricing around trust-surface complexity | parked | Phase 8+ | Team / Platform / Enterprise tier framing (no exact prices in repo) |
+
 ## Parked — Resilience
 
 | Artifact | Status | Phase | Purpose |
