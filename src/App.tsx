@@ -48,6 +48,14 @@ import RepoTrustDashboard from './pages/RepoTrustDashboard';
 import OpenSourceTrustCenter from './pages/OpenSourceTrustCenter';
 import AppealsReview from './pages/AppealsReview';
 import IncidentCandidatesReview from './pages/IncidentCandidatesReview';
+import CliAuth from './pages/CliAuth';
+import VaultLayout from './components/VaultLayout';
+import VaultDashboard from './pages/vault/VaultDashboard';
+import VaultWorkspace from './pages/vault/VaultWorkspace';
+import VaultExceptionList from './pages/vault/VaultExceptionList';
+import VaultExceptionDetail from './pages/vault/VaultExceptionDetail';
+import VaultTimeline from './pages/vault/VaultTimeline';
+import VaultEvidenceDetail from './pages/vault/VaultEvidenceDetail';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
 // while the browser entry uses <BrowserRouter>. Keep this in sync with the
@@ -55,6 +63,18 @@ import IncidentCandidatesReview from './pages/IncidentCandidatesReview';
 export function AppRoutes() {
   return (
     <Routes>
+      {/* Private Vault surfaces. They render OUTSIDE the public Layout
+          (no public-spine nav chrome) and live in src/pages/vault/ which
+          is on the vault-allowed import list per PR-V2-C + PR-V2-E. */}
+      <Route path="/cli-auth" element={<CliAuth />} />
+      <Route path="/vault" element={<VaultLayout />}>
+        <Route index element={<VaultDashboard />} />
+        <Route path=":slug" element={<VaultWorkspace />} />
+        <Route path=":slug/exceptions" element={<VaultExceptionList />} />
+        <Route path=":slug/exceptions/:id" element={<VaultExceptionDetail />} />
+        <Route path=":slug/timeline" element={<VaultTimeline />} />
+        <Route path=":slug/evidence/:id" element={<VaultEvidenceDetail />} />
+      </Route>
       <Route path="/" element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="/leaderboards" element={<Leaderboard />} />

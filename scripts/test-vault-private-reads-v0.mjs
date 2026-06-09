@@ -253,6 +253,14 @@ test('no public source file contains the literal string visibility: "private" or
     `${'scripts'}${'/'}test-cli-workspace-`,
     `${'packages'}${'/'}cli${'/'}`,
     `${'docs'}${'/'}`,
+    // PR-V2-E atomic lift: Vault Dashboard React surfaces are documented
+    // Vault consumers. The /cli-auth approval page and the /vault/* tree
+    // are explicitly allowed to render visibility: 'private' fields. The
+    // dashboard structural test (scripts/test-vault-dashboard-v0.mjs)
+    // additionally asserts that no public-spine page imports these.
+    `${'src'}${'/'}pages${'/'}vault${'/'}`,
+    `${'src'}${'/'}pages${'/'}CliAuth`,
+    `${'src'}${'/'}components${'/'}VaultLayout`,
     `${'src'}${'/'}server${'/'}vault\\`,
     `${'src'}${'/'}shared${'/'}vault\\`,
     `${'supabase'}${'/'}migrations\\`,
@@ -260,6 +268,9 @@ test('no public source file contains the literal string visibility: "private" or
     `${'scripts'}${'/'}test-cli-workspace-`.replace(/\//g, '\\'),
     `${'packages'}${'/'}cli${'/'}`.replace(/\//g, '\\'),
     `${'docs'}${'/'}`.replace(/\//g, '\\'),
+    `${'src'}${'/'}pages${'/'}vault\\`,
+    `${'src'}${'/'}pages${'/'}CliAuth`.replace(/\//g, '\\'),
+    `${'src'}${'/'}components${'/'}VaultLayout`.replace(/\//g, '\\'),
   ];
 
   const candidateRoots = ['src', 'packages/cli/src'];
@@ -351,18 +362,34 @@ test('public renderer + shared + badge files do not import any vault path', () =
   // Per PR-V1-D §7.1: public-spine files must not import from src/server/vault
   // or src/shared/vault.
   //
-  // PR-V2-D atomically lifts the CLI from this rule: the CLI is now a
-  // documented Vault consumer in workspace mode. Per PR-V1-E §7.1 the v0
-  // CLI commands (check, lockfile, trust, timeline, why) may import vault
-  // paths ONLY via a wrapper module (lib/workspace-context.ts); they may
-  // not import lib/vault-api.ts directly. Workspace-mode-native files
-  // (login, logout, exception/*, lib/session.ts, lib/vault-api.ts,
-  // lib/workspace-context.ts) may import vault-api freely. The CLI
-  // structural test (scripts/test-cli-workspace-v0.mjs) enforces the
-  // wrapper-only rule for v0 commands.
+  // PR-V2-D atomically lifted the CLI from this rule (the CLI is a
+  // documented Vault consumer in workspace mode). PR-V2-E atomically lifts
+  // the SAME rule for the Vault Dashboard surfaces:
+  //   - src/pages/CliAuth.tsx (the /cli-auth approval page)
+  //   - src/pages/vault/** (the /vault/* tree)
+  //   - src/components/VaultLayout.tsx (the Vault-only chrome)
+  // These files MAY import src/shared/vault/api-client. Public-spine
+  // pages and components still MUST NOT import any vault path; the
+  // PR-V2-E dashboard structural test (scripts/test-vault-dashboard-v0.mjs)
+  // additionally enforces that no public renderer imports the vault
+  // dashboard files themselves.
+  const isVaultDashboardFile = (rel) => {
+    if (rel === 'src/pages/CliAuth.tsx' || rel === 'src/pages/CliAuth.ts') return true;
+    if (rel.startsWith('src/pages/vault/')) return true;
+    if (rel === 'src/components/VaultLayout.tsx' || rel === 'src/components/VaultLayout.ts') return true;
+    return false;
+  };
   const candidates = [
-    ...walkFiles('src/pages', (p) => /\.(ts|tsx|js|mjs)$/i.test(p)),
-    ...walkFiles('src/components', (p) => /\.(ts|tsx|js|mjs)$/i.test(p)),
+    ...walkFiles('src/pages', (p) => {
+      const rel = p.slice(REPO_ROOT.length + 1).replace(/\\/g, '/');
+      if (isVaultDashboardFile(rel)) return false;
+      return /\.(ts|tsx|js|mjs)$/i.test(p);
+    }),
+    ...walkFiles('src/components', (p) => {
+      const rel = p.slice(REPO_ROOT.length + 1).replace(/\\/g, '/');
+      if (isVaultDashboardFile(rel)) return false;
+      return /\.(ts|tsx|js|mjs)$/i.test(p);
+    }),
     ...walkFiles('src/server/badge', (p) => /\.(ts|tsx|js|mjs)$/i.test(p)),
     ...walkFiles('src/shared', (p) => {
       const rel = p.slice(REPO_ROOT.length + 1).replace(/\\/g, '/');
