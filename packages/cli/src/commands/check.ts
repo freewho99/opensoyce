@@ -8,8 +8,15 @@ import {
 import { STRINGS } from '../strings.js';
 import type { ParsedArgs } from '../args.js';
 import { formatCheck } from '../output.js';
+import { fetchWorkspaceExceptions, formatWorkspaceContext } from '../lib/workspace-context.js';
 
 const PACKAGE_SPEC_RE = /^@?[a-z0-9][\w./-]*@[\w.+-]+$/i;
+
+function subjectFromPkg(pkg: string): string {
+  // /api/compliance-gate accepts `name@version`; the workspace exception
+  // subject_name carries the same shape. Match exactly.
+  return pkg;
+}
 
 export async function runCheck(args: ParsedArgs): Promise<number> {
   const pkg = args.positional[0];
@@ -40,6 +47,28 @@ export async function runCheck(args: ParsedArgs): Promise<number> {
   }, args);
 
   if (output) process.stdout.write(output);
+
+  // Workspace mode (PR-V2-D): if the user supplied --workspace AND has a
+  // session, fetch the workspace's active exceptions for this subject and
+  // append a [PRIVATE] context block. The public gate response above is
+  // unchanged — workspace overlay is informational client-side annotation
+  // only. Exit code stays driven by the public gate action.
+  if (args.workspace) {
+    const ctx = await fetchWorkspaceExceptions({
+      apiBase: args.apiBase,
+      workspace: args.workspace,
+      subjectName: subjectFromPkg(pkg),
+      timeoutMs: args.timeoutMs,
+    });
+    if (!ctx.ok) {
+      process.stderr.write(ctx.message + '\n');
+      return ctx.exitCode;
+    }
+    if (!args.json) {
+      process.stdout.write(formatWorkspaceContext(ctx.context));
+    }
+  }
+
   if (action === 'NOT_EVALUATED') return EXIT_NOT_EVALUATED;
   return exitCodeForAction(action);
 }

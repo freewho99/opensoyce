@@ -235,20 +235,30 @@ test('evidence proof_anchors are NEVER masked (per PR-V1-D §6.4)', () => {
 // ---------- Group 4: no private data leaks in public surfaces ----------
 
 test('no public source file contains the literal string visibility: "private" or visibility: \'private\'', () => {
-  // The lift permits `visibility` field on Vault data shapes; it FORBIDS
-  // `visibility: 'private'` anywhere in public-spine source or static data.
-  // Allowed locations: src/server/vault/*, src/shared/vault/*, supabase/migrations/*,
-  // scripts/test-vault-*, docs/*.
+  // The lift permits the `visibility` field on Vault data shapes AND on
+  // Vault-consuming CLI workspace-mode files. PR-V2-D added `packages/cli/`
+  // to the allowlist atomically with the CLI workspace extension — the
+  // CLI is now a documented Vault consumer (the [PRIVATE]-marked workspace
+  // output literally carries `visibility: 'private'` in --json mode).
+  //
+  // The field remains FORBIDDEN in:
+  //   - src/pages, src/components, src/server/badge
+  //   - src/shared/* except src/shared/vault/*
+  //   - any future public-spine surface
   const ALLOWED_PATH_FRAGMENTS = [
     `${'src'}${'/'}server${'/'}vault${'/'}`,
     `${'src'}${'/'}shared${'/'}vault${'/'}`,
     `${'supabase'}${'/'}migrations${'/'}`,
     `${'scripts'}${'/'}test-vault-`,
+    `${'scripts'}${'/'}test-cli-workspace-`,
+    `${'packages'}${'/'}cli${'/'}`,
     `${'docs'}${'/'}`,
     `${'src'}${'/'}server${'/'}vault\\`,
     `${'src'}${'/'}shared${'/'}vault\\`,
     `${'supabase'}${'/'}migrations\\`,
     `${'scripts'}${'/'}test-vault-`.replace(/\//g, '\\'),
+    `${'scripts'}${'/'}test-cli-workspace-`.replace(/\//g, '\\'),
+    `${'packages'}${'/'}cli${'/'}`.replace(/\//g, '\\'),
     `${'docs'}${'/'}`.replace(/\//g, '\\'),
   ];
 
@@ -337,15 +347,23 @@ test('SQL migrations may carry visibility CHECK constraints (defense in depth)',
 
 // ---------- Group 6: no public renderer imports src/server/vault/* ----------
 
-test('public renderer + shared + badge + CLI files do not import any vault path', () => {
+test('public renderer + shared + badge files do not import any vault path', () => {
   // Per PR-V1-D §7.1: public-spine files must not import from src/server/vault
-  // or src/shared/vault. The atomic visibility lift in PR-V2-C does NOT
-  // open this gate.
+  // or src/shared/vault.
+  //
+  // PR-V2-D atomically lifts the CLI from this rule: the CLI is now a
+  // documented Vault consumer in workspace mode. Per PR-V1-E §7.1 the v0
+  // CLI commands (check, lockfile, trust, timeline, why) may import vault
+  // paths ONLY via a wrapper module (lib/workspace-context.ts); they may
+  // not import lib/vault-api.ts directly. Workspace-mode-native files
+  // (login, logout, exception/*, lib/session.ts, lib/vault-api.ts,
+  // lib/workspace-context.ts) may import vault-api freely. The CLI
+  // structural test (scripts/test-cli-workspace-v0.mjs) enforces the
+  // wrapper-only rule for v0 commands.
   const candidates = [
     ...walkFiles('src/pages', (p) => /\.(ts|tsx|js|mjs)$/i.test(p)),
     ...walkFiles('src/components', (p) => /\.(ts|tsx|js|mjs)$/i.test(p)),
     ...walkFiles('src/server/badge', (p) => /\.(ts|tsx|js|mjs)$/i.test(p)),
-    ...walkFiles('packages/cli/src', (p) => /\.(ts|tsx|js|mjs)$/i.test(p)),
     ...walkFiles('src/shared', (p) => {
       const rel = p.slice(REPO_ROOT.length + 1).replace(/\\/g, '/');
       // src/shared/vault/* is allowed (it would BE a vault module); other
@@ -358,7 +376,6 @@ test('public renderer + shared + badge + CLI files do not import any vault path'
   for (const f of candidates) {
     const text = readFileSync(f, 'utf8');
     const rel = f.slice(REPO_ROOT.length + 1).replace(/\\/g, '/');
-    // Import statements that mention any path containing 'vault'.
     const importMatches = text.match(/import\s[\s\S]*?from\s+['"][^'"]+['"]/g) || [];
     for (const imp of importMatches) {
       const fromMatch = imp.match(/from\s+['"]([^'"]+)['"]/);
@@ -373,6 +390,34 @@ test('public renderer + shared + badge + CLI files do not import any vault path'
     offenders.length === 0,
     `public-spine files must not import vault paths; offenders:\n      ${offenders.join('\n      ')}`,
   );
+});
+
+test('CLI v0 commands import vault paths only via the workspace-context wrapper', () => {
+  // PR-V1-E §7.1 — the v0 commands may import the workspace-mode branch
+  // only via a shared module. The wrapper is packages/cli/src/lib/workspace-context.ts.
+  // Direct vault-api or session imports inside check/lockfile/trust/timeline/why
+  // are a structural violation.
+  const V0_COMMANDS = ['check', 'lockfile', 'trust', 'timeline', 'why'];
+  const FORBIDDEN_DIRECT_IMPORTS = [
+    '../lib/vault-api',
+    '../lib/session',
+  ];
+  for (const cmd of V0_COMMANDS) {
+    const file = `packages/cli/src/commands/${cmd}.ts`;
+    const text = readFileSync(`${REPO_ROOT}/${file}`, 'utf8');
+    const imports = text.match(/import\s[\s\S]*?from\s+['"][^'"]+['"]/g) || [];
+    for (const imp of imports) {
+      const fromMatch = imp.match(/from\s+['"]([^'"]+)['"]/);
+      if (!fromMatch) continue;
+      const spec = fromMatch[1];
+      for (const forbidden of FORBIDDEN_DIRECT_IMPORTS) {
+        ok(
+          !spec.startsWith(forbidden),
+          `${file} imports ${spec} directly — v0 commands must go through ../lib/workspace-context (PR-V1-E §7.1 wrapper-only rule)`,
+        );
+      }
+    }
+  }
 });
 
 // ---------- Group 7: no Vault read path imports public renderers ----------

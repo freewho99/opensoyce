@@ -1,27 +1,43 @@
 #!/usr/bin/env node
 /**
- * Structural invariants for the OpenSoyce CLI v0 (Phase 4 PR-A2).
+ * Structural invariants for the OpenSoyce CLI.
  *
- * Doctrine enforced (matches docs/architecture/cli-architecture-sub-sketch.md):
- *   - 5 commands present: check, lockfile, trust, timeline, why
- *   - 7 global flags present in args.ts: --json, --no-color, --api-base,
- *     --timeout, --quiet/-q, --help/-h, --version
+ * Doctrine enforced (matches docs/architecture/cli-architecture-sub-sketch.md
+ * + the PR-V2-D atomic lift per docs/architecture/vault-cli-workspace-extension-sub-sketch.md
+ * §7):
+ *
+ *   v0 SURFACE (lifted by PR-V2-D — was 5/7, now 8/8):
+ *   - 8 top-level commands present: check, lockfile, trust, timeline, why,
+ *     login, logout, exception   (login + logout + exception added in PR-V2-D)
+ *   - 8 global flags present in args.ts: --json, --no-color, --api-base,
+ *     --timeout, --quiet/-q, --help/-h, --version, --workspace
+ *     (--workspace added in PR-V2-D per PR-V1-E §3)
  *   - 6 exit codes exported: EXIT_ALLOW (0), EXIT_BLOCK (1), EXIT_WARN (2),
  *     EXIT_NOT_EVALUATED (3), EXIT_NETWORK_ERROR (4), EXIT_USAGE_ERROR (5)
+ *
+ *   ISOLATION (unchanged across the PR-V2-D lift):
  *   - No local gate execution: CLI source does not import from
  *     src/shared/ paths that perform gate evaluation
- *   - No write actions: no fs.writeFile / fs.appendFile / fs.rename /
- *     fs.unlink / fs.rmdir / fs.mkdir / fs.cp / fs.symlink outside the
- *     CLI's own temp paths
- *   - No auth: no "Authorization" header anywhere in CLI source
- *   - No telemetry: every network call targets the --api-base URL (the
- *     allowed-host pattern); no fetch() with a literal hostname other than
- *     the configured API base
- *   - No process.env.OPENSOYCE_TOKEN or process.env.GITHUB_TOKEN reads
+ *   - No auth: no "Authorization" header anywhere in CLI source. PR-V2-D
+ *     uses a Cookie header (opensoyce_vault_session) — that's not a
+ *     bearer auth scheme; the existing "no Authorization" rule stays.
+ *   - No PAT / token env reads — device-code is the only auth path
+ *   - No telemetry: every network call targets the --api-base URL
  *   - The CLI's inlined static-data file mirrors the shared MVP data
- *     (the CLI never invents posture or timeline events)
  *   - package.json bin entry points at dist/cli.js
  *   - CLI strings file exists and is in the LINKING_PAGES hygiene list
+ *
+ *   WRITE ACTIONS (atomically lifted by PR-V2-D):
+ *   - fs.writeFileSync + fs.chmodSync are now permitted, BUT ONLY in
+ *     packages/cli/src/lib/session.ts — the dedicated Vault session
+ *     storage module. The CLI's structural test asserts every other
+ *     CLI source file remains free of destructive fs methods.
+ *
+ *   PRIVATE-OUTPUT DOCTRINE (added by PR-V2-D):
+ *   - No `private-anchor` proofType string in CLI source — public CLI
+ *     mode must not emit private-anchor hrefs (per PR-V1-E §8). The
+ *     workspace-mode output uses the [PRIVATE] line marker convention,
+ *     not the private-anchor proof type literal.
  */
 
 import fs from 'node:fs';
@@ -77,38 +93,73 @@ function allCliSource() {
   return out;
 }
 
-// -- 5 commands present ----------------------------------------------------
+// -- 8 commands present (atomically lifted by PR-V2-D from 5) -------------
 
-test('all 5 CLI commands have a runner module', () => {
-  const commands = ['check', 'lockfile', 'trust', 'timeline', 'why'];
-  for (const cmd of commands) {
+test('all 8 CLI commands have a runner module', () => {
+  // Atomic lift in PR-V2-D: was 5 commands (check, lockfile, trust,
+  // timeline, why); now 8 with login (login.ts), logout (logout.ts), and
+  // exception/ subdirectory carrying three subcommands (list/propose/revoke).
+  const flatCommands = ['check', 'lockfile', 'trust', 'timeline', 'why', 'login', 'logout'];
+  for (const cmd of flatCommands) {
     const p = path.join(root, 'packages', 'cli', 'src', 'commands', `${cmd}.ts`);
     ok(fs.existsSync(p), `missing command module: ${p}`);
   }
+  // exception/ holds the three subcommand modules.
+  const exceptionDir = path.join(root, 'packages', 'cli', 'src', 'commands', 'exception');
+  ok(fs.existsSync(exceptionDir), 'missing exception/ subdirectory');
+  for (const sub of ['list', 'propose', 'revoke']) {
+    const p = path.join(exceptionDir, `${sub}.ts`);
+    ok(fs.existsSync(p), `missing exception subcommand module: ${p}`);
+  }
 });
 
-test('cli.ts dispatches all 5 commands and nothing else', () => {
+test('cli.ts dispatches all 8 commands and nothing outside the lifted surface', () => {
   const cli = read('packages/cli/src/cli.ts');
-  for (const cmd of ['check', 'lockfile', 'trust', 'timeline', 'why']) {
+  // The 8 top-level commands the lift authorizes.
+  const allowedCases = ['check', 'lockfile', 'trust', 'timeline', 'why', 'login', 'logout', 'exception'];
+  for (const cmd of allowedCases) {
     ok(cli.includes(`case '${cmd}':`), `cli.ts missing case for ${cmd}`);
   }
-  const sixthCommand = ['fix', 'upgrade', 'replace', 'remediate', 'install', 'init', 'login', 'audit', 'export'];
-  for (const banned of sixthCommand) {
-    ok(!cli.includes(`case '${banned}':`), `cli.ts contains forbidden case for ${banned} (would exceed locked 5-command surface)`);
+  // Forbidden additions OUTSIDE the lifted surface. login + logout +
+  // exception were lifted; the rest stay banned.
+  const stillBanned = ['fix', 'upgrade', 'replace', 'remediate', 'install', 'init', 'audit', 'export'];
+  for (const banned of stillBanned) {
+    ok(!cli.includes(`case '${banned}':`), `cli.ts contains forbidden case for ${banned} (outside the PR-V2-D lifted surface)`);
+  }
+  // The four-eye exception verbs stay UI-only — never wired into the CLI.
+  const fourEyeUiOnly = ['approve', 'reject', 'extend', 'withdraw'];
+  for (const ui of fourEyeUiOnly) {
+    ok(
+      !cli.includes(`runException${ui[0].toUpperCase()}${ui.slice(1)}`),
+      `cli.ts must not dispatch exception ${ui} (UI-only per PR-V1-E §4.2)`,
+    );
   }
 });
 
-// -- 7 global flags present in args.ts ------------------------------------
+// -- 8 global flags present in args.ts (atomically lifted from 7) ---------
 
-test('args.ts exposes all 7 global flags', () => {
+test('args.ts exposes all 8 global flags', () => {
   const args = read('packages/cli/src/args.ts');
-  const flags = ['--json', '--no-color', '--api-base', '--timeout', '--quiet', '-q', '--help', '-h', '--version'];
+  const flags = [
+    '--json',
+    '--no-color',
+    '--api-base',
+    '--timeout',
+    '--quiet',
+    '-q',
+    '--help',
+    '-h',
+    '--version',
+    '--workspace',
+  ];
   for (const flag of flags) {
     ok(args.includes(`'${flag}'`), `args.ts missing flag literal ${flag}`);
   }
+  // --workspace was the atomic lift; --config / --cache / --profile /
+  // --token / --fail-on remain banned.
   const bannedFlags = ['--config', '--cache', '--profile', '--token', '--fail-on'];
   for (const banned of bannedFlags) {
-    ok(!args.includes(`'${banned}'`), `args.ts contains forbidden flag ${banned} (outside locked 7-flag surface)`);
+    ok(!args.includes(`'${banned}'`), `args.ts contains forbidden flag ${banned} (outside the lifted surface)`);
   }
 });
 
@@ -151,9 +202,14 @@ test('CLI source does not import gate evaluation from src/shared/', () => {
   }
 });
 
-// -- No write actions -----------------------------------------------------
+// -- No write actions OUTSIDE the lifted session.ts allow-list ------------
 
-test('CLI source uses no destructive fs methods', () => {
+test('CLI source uses no destructive fs methods outside the session-storage allow-list', () => {
+  // Atomic lift in PR-V2-D: packages/cli/src/lib/session.ts is the SINGLE
+  // file allowed to write to disk (it persists ~/.opensoyce/session.json
+  // with mode 0600 per PR-V1-E §2.3). Every other CLI source file remains
+  // free of destructive fs methods.
+  const SESSION_ALLOWLIST = 'packages/cli/src/lib/session.ts';
   const banned = [
     'fs.writeFile',
     'fs.appendFile',
@@ -172,20 +228,31 @@ test('CLI source uses no destructive fs methods', () => {
     'renameSync',
   ];
   for (const { rel, src } of allCliSource()) {
+    if (rel === SESSION_ALLOWLIST) continue;
     for (const b of banned) {
-      ok(!src.includes(b), `${rel} uses forbidden write method ${b}`);
+      ok(!src.includes(b), `${rel} uses forbidden write method ${b} (only ${SESSION_ALLOWLIST} is allowed to write to disk)`);
     }
   }
 });
 
-// -- No auth --------------------------------------------------------------
+// -- No bearer-style auth headers; no token env vars ----------------------
 
-test('CLI source carries no Authorization header or token env vars', () => {
+test('CLI source carries no Authorization HTTP header or token env vars', () => {
+  // Atomic refinement in PR-V2-D: the v0 rule was "no auth at all." PR-V2-D
+  // adds device-code login which uses a Cookie header (opensoyce_vault_session),
+  // NOT an Authorization bearer header. The original case-insensitive
+  // includes('authorization') was over-broad — it caught the RFC 8628
+  // standard error code `authorization-pending` which is OAuth Device Grant
+  // vocabulary, not a bearer scheme. Tighten the rule to the actual concern:
+  // no HTTP `Authorization` header literal, no token env reads.
   for (const { rel, src } of allCliSource()) {
-    ok(!src.toLowerCase().includes('authorization'), `${rel} contains the word "Authorization" (no auth in v0)`);
-    ok(!src.includes('OPENSOYCE_TOKEN'), `${rel} reads OPENSOYCE_TOKEN env (no auth in v0)`);
-    ok(!src.includes('GITHUB_TOKEN'), `${rel} reads GITHUB_TOKEN env (no auth in v0)`);
-    ok(!src.includes('NPM_TOKEN'), `${rel} reads NPM_TOKEN env (no auth in v0)`);
+    // HTTP Authorization header literal (capital A, as the spec writes it).
+    // Reject any string that looks like an HTTP-header assignment.
+    ok(!/['"]Authorization['"]\s*[:,]/.test(src), `${rel} sets an Authorization HTTP header (no bearer auth in this CLI)`);
+    ok(!/Authorization\s*:\s*['"]?Bearer/i.test(src), `${rel} carries a Bearer Authorization header (no bearer auth in this CLI)`);
+    ok(!src.includes('OPENSOYCE_TOKEN'), `${rel} reads OPENSOYCE_TOKEN env (no PAT auth in this CLI)`);
+    ok(!src.includes('GITHUB_TOKEN'), `${rel} reads GITHUB_TOKEN env (no PAT auth in this CLI)`);
+    ok(!src.includes('NPM_TOKEN'), `${rel} reads NPM_TOKEN env (no PAT auth in this CLI)`);
   }
 });
 
