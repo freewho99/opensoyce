@@ -1,6 +1,6 @@
-# Phase 7A/7B/7C — Dependency-Exposure Ingestion (CLI + CI attribution + server-side dedupe)
+# Phase 7A/7B/7C/7D — Dependency-Exposure Ingestion (CLI + CI attribution + server-side dedupe + CI-native packaging)
 
-Status: scope record for PR-7A, PR-7B, and PR-7C
+Status: scope record for PR-7A, PR-7B, PR-7C, and PR-7D
 Scope: CLI/CI dependency-exposure ingestion ONLY. Create exposure records. No exceptions. No proposals. No policy. No lifecycle. No custom types. No claims expansion.
 
 ## Product thesis
@@ -77,9 +77,25 @@ The shape: **one stable exposure fact + repeat-observation metadata + latest/bou
 - **HTTP contract pinned at 201 for both paths.** The 7A/7B CLI accepts only 201, and the CLI lane is outside the 7C permitted files. The body carries the truth: `seen_again: true|false`, plus `seen_count` and `latest_source_ref` on every shaped row. Known bounded inaccuracy: the CLI's text output says "created" for absorbed repeats until the CLI lane is next open; the JSON body it prints is accurate.
 - Local CLI and CI-attributed ingestion hit the same server path, so both get identical dedupe semantics with zero CLI changes.
 
+## PR-7D — CI-native packaging (thin wrapper)
+
+7A proved local observation. 7B proved CI attribution. 7C made repeated CI observation quiet. 7D packages the lane so teams can install and run it — easier invocation, nothing more.
+
+```txt
+Packaging makes observation repeatable.
+Packaging does not make observation judgment.
+```
+
+- **`actions/ingest-dependencies/action.yml`** — a composite GitHub Action wrapping `opensoyce exposure ingest-dependencies --ci`. It builds the CLI from the action's own checkout (ephemeral `npx typescript`; no published package, no committed dist), runs it with `--ci-provider github-actions`, and maps inputs 1:1 onto the 7B flags. `dry-run` input supported.
+- **The 7B boundary, kept**: *the workflow may pass context; the CLI may not sniff context* — and neither may the action. The only `github.*` reference in action.yml is `github.action_path` (locates the action's own files). All run context — repository, run-id, job, sha, ref — arrives as explicit inputs that the caller's workflow passes (`${{ github.repository }}` etc. live in the WORKFLOW snippet, never in the action). Structurally pinned.
+- **Auth** (the one piece the CLI didn't already have an answer for in CI): the CLI authenticates via the session file only — there is deliberately no `--token` flag. The action takes a `session-token` input (an encrypted secret, minted locally via `opensoyce login`, invalidated via `opensoyce logout`), writes a `0600` session file for the duration of the run, and removes it `if: always()` — even when ingestion fails. The fabricated session-file fields the CLI requires but does not validate (`expires_at` etc.) are written honestly (`"server-validated"`); the server remains the authority on token validity.
+- **No judgment surface**: no octokit, no GitHub API, no workflow-command annotations (`::error` and friends), no check runs, no PR comments, no policy. Those would be a new product surface — "GitHub-native judgment" — and stay parked behind their own scope block.
+
 ## Deferred (documented, not forgotten)
 
 - **CLI seen_again reporting**: teach `ingest-dependencies` to read `seen_again` from the response and report created vs seen-again counts honestly (and possibly drop the now-redundant client-side dedupe scan). Needs the CLI lane reopened.
+- **Versioned action releases**: the README pins `@main`; tagging action releases (`@v1`) is a release-management decision once the wrapper has been dogfooded.
+- **GitHub-native judgment surfaces** (annotations / PR comments / check runs): explicitly NOT packaging; own scope block, after the observation lane earns operational trust.
 - **CI-native packaging** (a published GitHub Action wrapper, annotations, PR comments, check runs): all explicitly out of scope; the CI story today is "run the CLI in a workflow step with attribution flags."
 - Other manifest ecosystems (yarn, pnpm, poetry, uv), SBOM import, scanner output, and the other five native exposure types: all parked.
 

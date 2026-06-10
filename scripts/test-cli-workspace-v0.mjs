@@ -522,6 +522,62 @@ test('PR-7B CI mode adds attribution only — no annotations, no PR comments, no
     'CI metadata must carry ci_provider / run_id / repository');
 });
 
+// ---------- PR-7D: CI-native packaging (thin wrapper) ---------------------
+//
+// Packaging makes observation repeatable. Packaging does not make
+// observation judgment. The workflow may pass context; the CLI may not
+// sniff context.
+
+test('PR-7D action wrapper exists and drives the existing CLI command (thin wrapper)', () => {
+  const p = path.join(root, 'actions', 'ingest-dependencies', 'action.yml');
+  ok(fs.existsSync(p), 'missing actions/ingest-dependencies/action.yml');
+  const action = read('actions/ingest-dependencies/action.yml');
+  ok(/using:\s*'?composite'?/.test(action), 'action must be a composite (no bundled JS runtime)');
+  // It wraps the EXISTING command with --ci and the github-actions provider.
+  ok(/exposure ingest-dependencies/.test(action), 'action must invoke exposure ingest-dependencies');
+  ok(/--ci\b/.test(action) && /--ci-provider github-actions/.test(action),
+    'action must run in CI mode with the github-actions provider');
+  // Explicit-inputs interface: the 7B attribution flags map to inputs.
+  for (const input of ['workspace:', 'session-token:', 'file:', 'repository:', 'run-id:', 'job:', 'sha:', 'ref:', 'dry-run:']) {
+    ok(action.includes(input), `action.yml missing input ${input}`);
+  }
+  // The session file is scoped to the step and removed even on failure.
+  ok(/if:\s*always\(\)/.test(action), 'session cleanup must run if: always()');
+  ok(/0o600|mode:\s*0o600/.test(action), 'session file must be written mode 0600');
+});
+
+test('PR-7D action never sniffs ambient run context', () => {
+  const action = read('actions/ingest-dependencies/action.yml');
+  // The ONLY github.* reference allowed is github.action_path (locates the
+  // action's own files). Everything about the RUN must arrive as an input
+  // the workflow passed explicitly.
+  const withoutActionPath = action.replaceAll('github.action_path', '');
+  ok(!/\$\{\{\s*github\./.test(withoutActionPath),
+    'action.yml must not read ${{ github.* }} run context — the workflow passes it explicitly');
+  ok(!/\$\{\{\s*(env|secrets|vars)\./.test(action),
+    'action.yml must not read ambient env/secrets/vars context');
+  ok(!/GITHUB_[A-Z]/.test(action), 'action.yml must not read GITHUB_* environment variables');
+});
+
+test('PR-7D packaging adds no judgment surface', () => {
+  const action = read('actions/ingest-dependencies/action.yml');
+  const readme = read('actions/ingest-dependencies/README.md');
+  // Functional tokens only — prose may NAME the absences; code may not
+  // carry the machinery: no GitHub API, no workflow commands (::error
+  // annotations), no check/PR surfaces.
+  for (const banned of ['octokit', 'api.github.com', '::error', '::warning', '::notice', 'check_run', 'pulls.create', 'checks.create']) {
+    ok(!action.includes(banned), `action.yml contains ${banned} — packaging must not judge`);
+    ok(!readme.includes(banned), `README contains ${banned} — packaging must not judge`);
+  }
+  // The wrapper never touches the CLI source contract: the CLI still has
+  // no token flag and no env sniffing (re-asserted from 7B).
+  const args = read('packages/cli/src/args.ts');
+  ok(!args.includes("'--token'"), 'CLI must still have no --token flag (session file only)');
+  for (const { rel, src } of exposureCommandSources()) {
+    ok(!/process\.env/.test(stripJsComments(src)), `${rel} must still not read process.env`);
+  }
+});
+
 // ---------- Wiring -------------------------------------------------------
 
 test('package.json wires test:cli-workspace-v0 into test:ci', () => {

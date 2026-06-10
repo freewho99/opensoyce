@@ -1,0 +1,130 @@
+# OpenSoyce dependency-observation Action (PR-7D).
+#
+# A THIN WRAPPER around the existing CLI command:
+#   opensoyce exposure ingest-dependencies --ci ...
+#
+# DOCTRINE (7D):
+#   Packaging makes observation repeatable.
+#   Packaging does not make observation judgment.
+#
+# The boundary, kept on purpose:
+#   The workflow may pass context.
+#   The CLI may not sniff context.
+# This action takes EXPLICIT inputs only. It reads no ambient run context
+# itself — your workflow passes repository / run-id / sha / ref expressions
+# explicitly (see README). The only github.* reference in this file is
+# github.action_path, which locates the action's own files, not the run.
+#
+# What this action will never do: write to the repo, call the GitHub API,
+# create workflow surfaces, or evaluate policy. It observes; it does not
+# judge. Decisions stay with humans in the Vault.
+
+name: 'OpenSoyce Dependency Observation'
+description: >-
+  Ingest dependency-exposure records into an OpenSoyce Vault workspace from
+  package metadata. Observes; does not decide.
+
+inputs:
+  workspace:
+    description: 'Vault workspace slug to record observations in.'
+    required: true
+  session-token:
+    description: >-
+      OpenSoyce Vault session token. Store it as an encrypted secret. Mint
+      one locally with `opensoyce login` and copy session_token from
+      ~/.opensoyce/session.json; invalidate it with `opensoyce logout`.
+    required: true
+  file:
+    description: 'Dependency file to ingest (package.json, package-lock.json, or explicit JSON).'
+    required: false
+    default: 'package-lock.json'
+  repository:
+    description: 'owner/repo this run observes. Pass it explicitly from your workflow (github.repository).'
+    required: true
+  run-id:
+    description: 'CI run id. Pass it explicitly from your workflow (github.run_id).'
+    required: true
+  job:
+    description: 'CI job name (optional). Pass it explicitly (github.job).'
+    required: false
+    default: ''
+  sha:
+    description: 'Commit SHA observed (optional). Pass it explicitly (github.sha).'
+    required: false
+    default: ''
+  ref:
+    description: 'Git ref observed (optional). Pass it explicitly (github.ref).'
+    required: false
+    default: ''
+  api-base:
+    description: 'OpenSoyce API base URL.'
+    required: false
+    default: 'https://opensoyce.com'
+  dry-run:
+    description: 'Set "true" to print the plan without writing records.'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Build the OpenSoyce CLI
+      shell: bash
+      run: |
+        npx --yes --package typescript@5 tsc -p "${{ github.action_path }}/../../packages/cli/tsconfig.json"
+
+    - name: Write the Vault session file
+      shell: bash
+      env:
+        OPENSOYCE_SESSION_TOKEN: ${{ inputs.session-token }}
+        OPENSOYCE_API_BASE: ${{ inputs.api-base }}
+      run: |
+        node -e '
+          const fs = require("node:fs");
+          const os = require("node:os");
+          const path = require("node:path");
+          const dir = path.join(os.homedir(), ".opensoyce");
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(
+            path.join(dir, "session.json"),
+            JSON.stringify({
+              session_token: process.env.OPENSOYCE_SESSION_TOKEN,
+              github_login: "ci",
+              issued_at: new Date().toISOString(),
+              expires_at: "server-validated",
+              api_base: process.env.OPENSOYCE_API_BASE,
+            }),
+            { mode: 0o600 },
+          );
+        '
+
+    - name: Ingest dependency observations
+      shell: bash
+      env:
+        IN_WORKSPACE: ${{ inputs.workspace }}
+        IN_FILE: ${{ inputs.file }}
+        IN_REPOSITORY: ${{ inputs.repository }}
+        IN_RUN_ID: ${{ inputs.run-id }}
+        IN_JOB: ${{ inputs.job }}
+        IN_SHA: ${{ inputs.sha }}
+        IN_REF: ${{ inputs.ref }}
+        IN_DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        ARGS=( exposure ingest-dependencies
+          --workspace "$IN_WORKSPACE"
+          --file "$IN_FILE"
+          --ci
+          --ci-provider github-actions
+          --repository "$IN_REPOSITORY"
+          --run-id "$IN_RUN_ID"
+          --json )
+        if [ -n "$IN_JOB" ]; then ARGS+=( --job "$IN_JOB" ); fi
+        if [ -n "$IN_SHA" ]; then ARGS+=( --sha "$IN_SHA" ); fi
+        if [ -n "$IN_REF" ]; then ARGS+=( --ref "$IN_REF" ); fi
+        if [ "$IN_DRY_RUN" = "true" ]; then ARGS+=( --dry-run ); fi
+        node "${{ github.action_path }}/../../packages/cli/dist/cli.js" "${ARGS[@]}"
+
+    - name: Remove the Vault session file
+      if: always()
+      shell: bash
+      run: rm -f ~/.opensoyce/session.json

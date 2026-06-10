@@ -51,7 +51,8 @@ do-not-claim:
 | Phase 6 proposal/audit loop closeout | implemented | PR-6-CLOSEOUT | PR #99 / `578ee18` | Phase 6 loop marked CLOSED; doctrine; demo walkthrough; 6G+ parked-not-authorized language |
 | Dependency-exposure ingestion (CLI) | implemented | PR-7A | PR #100 / `1b3b30b` | `opensoyce exposure ingest-dependencies` — package.json / package-lock.json / explicit JSON → dependency-exposure records via the PR-6A create API; dry-run; client-side dedupe; ingestion observes, never decides |
 | CI-attributed ingestion | implemented | PR-7B | PR #101 / `107d941` | `--ci --ci-provider --repository --run-id [--job --sha --ref]` on the 7A path; `source_kind: ci`; run-specific source_ref; explicit flags only (no ambient env); attribution-only, no annotations / PR comments |
-| Server-side semantic dedupe | implemented | PR-7C | this PR | Migration 0021: `observation_identity` + `seen_count` + `latest_source_ref` + partial unique index; upsert-touch, not unique-reject; identity = fact (name/version/manager/manifest/class), never source_ref; repetition is quiet, provenance is not erased |
+| Server-side semantic dedupe | implemented | PR-7C | PR #102 / `7928c9f` | Migration 0021: `observation_identity` + `seen_count` + `latest_source_ref` + partial unique index; upsert-touch, not unique-reject; identity = fact (name/version/manager/manifest/class), never source_ref; repetition is quiet, provenance is not erased |
+| CI-native packaging (thin wrapper) | implemented | PR-7D | this PR | `actions/ingest-dependencies` composite Action around the 7B CLI command; explicit inputs only (expressions live in the caller's workflow); session-token secret → 0600 session file, removed `if: always()`; no octokit / API / annotations / check runs / comments / policy |
 
 **Phase 5 is CLOSED.** See [`phase-5-closeout.md`](./phase-5-closeout.md) for the full handoff record.
 
@@ -59,17 +60,18 @@ do-not-claim:
 
 ## Approved Next
 
-_(none — PR-7C closed the dedupe lane; further lanes are parked and each requires explicit user approval with a scope block before any implementation begins)_
+_(none — PR-7D closed the packaging lane; further lanes are parked and each requires explicit user approval with a scope block before any implementation begins)_
 
-## Parked — Component Exposure Intelligence (post-7C lanes)
+## Parked — Component Exposure Intelligence (post-7D lanes)
 
 | Artifact | Status | Phase | Purpose |
 |---|---:|---|---|
 | Expiry reaper + expired-outcome event | parked | 6G+ | active→expired transition; owns `exception_expired_from_exposure` + the actor-nullability decision |
 | Exposure status lifecycle | parked | 6G+ | Move `observed` → `resolved` etc.; today the enum exists but nothing transitions it |
-| CLI seen_again reporting | parked | 7D+ | Teach the CLI to report created vs seen-again from the 7C response body; possibly drop the redundant client-side scan |
-| CI-native packaging (Action wrapper / annotations / PR comments) | parked | 7D+ | Today the CI story is "run the CLI in a workflow step with attribution flags" |
-| Other manifest ecosystems / SBOM / scanner ingest | parked | 7D+ | yarn / pnpm / poetry / uv, SBOM import, scanner output; 7A/7B/7C are npm package metadata only |
+| CLI seen_again reporting | parked | 7E+ | Teach the CLI to report created vs seen-again from the 7C response body; possibly drop the redundant client-side scan |
+| GitHub-native judgment surfaces (annotations / PR comments / check runs) | parked | 7E+ | A NEW product surface, deliberately not "packaging"; needs its own scope block after the observation lane earns operational trust |
+| Versioned action releases (`@v1` tags) | parked | 7E+ | Release-management decision after the wrapper is dogfooded |
+| Other manifest ecosystems / SBOM / scanner ingest | parked | 7E+ | yarn / pnpm / poetry / uv, SBOM import, scanner output; 7A–7D are npm package metadata only |
 | Custom exposure type registry | parked | 6G+ | Workspace-defined types beyond the 6 native |
 | Dynamic JSON Schema validation | parked | 6G+ | `validation_schema` for custom exposure metadata |
 | Shared Vault Timeline integration | parked | 6G+ | The 6A deferral stands; CEI audits stay in CEI's own surface |
