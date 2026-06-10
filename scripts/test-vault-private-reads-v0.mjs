@@ -248,6 +248,11 @@ test('no public source file contains the literal string visibility: "private" or
   const ALLOWED_PATH_FRAGMENTS = [
     `${'src'}${'/'}server${'/'}vault${'/'}`,
     `${'src'}${'/'}shared${'/'}vault${'/'}`,
+    // PR-6A atomic lift: CEI is a private vault-adjacent surface.
+    `${'src'}${'/'}server${'/'}cei${'/'}`,
+    `${'src'}${'/'}server${'/'}cei\\`,
+    `${'scripts'}${'/'}test-cei-`,
+    `${'scripts'}${'/'}test-cei-`.replace(/\//g, '\\'),
     `${'supabase'}${'/'}migrations${'/'}`,
     `${'scripts'}${'/'}test-vault-`,
     `${'scripts'}${'/'}test-cli-workspace-`,
@@ -333,7 +338,15 @@ test('visibility field appears in Vault paths only (lift is scoped)', () => {
     const text = readFileSync(f, 'utf8');
     // We are interested in JSON-style data field usage with a string value.
     if (!/[\s,{][\s]*visibility\s*:\s*['"]/.test(text)) continue;
-    const isVault = rel.startsWith('src/server/vault/') || rel.startsWith('src/shared/vault/');
+    // PR-6A atomic lift: src/server/cei/ is a private vault-adjacent
+    // surface (Component Exposure Intelligence). Its rows are inherently
+    // private — `visibility: 'private'` belongs there exactly as it does
+    // in src/server/vault/. The CEI structural test
+    // (scripts/test-cei-foundation-v0.mjs) additionally asserts no public
+    // CEI surface and no public-spine imports of CEI.
+    const isVault = rel.startsWith('src/server/vault/')
+      || rel.startsWith('src/shared/vault/')
+      || rel.startsWith('src/server/cei/');
     if (!isVault) offenders.push(rel);
   }
   ok(
