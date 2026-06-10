@@ -294,6 +294,80 @@ export async function proposeException(
   });
 }
 
+// ---------- Component Exposures (PR-7A: CEI ingestion, create + list only) ----------
+//
+// DOCTRINE: ingestion observes; it does not decide. The CLI may LIST
+// exposures (for ingest dedupe) and CREATE exposures. It must never wire
+// exposure decision verbs, exception proposals, or status mutation here.
+
+export interface ComponentExposure {
+  exposure_id: string;
+  workspace_id: string;
+  exposure_type: string | null;
+  subject_kind: string;
+  subject_name: string;
+  trust_boundary: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  source_kind: string;
+  source_ref: string | null;
+  status: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  created_at: string;
+  visibility: 'private';
+}
+
+export async function listExposures(
+  apiBase: string,
+  sessionToken: string,
+  workspace: string,
+  query: Record<string, string | number | undefined>,
+  timeoutMs: number,
+) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v === undefined || v === null) continue;
+    params.set(k, String(v));
+  }
+  const qs = params.toString();
+  const path = `/api/vault/workspaces/${encodeURIComponent(workspace)}/exposures${qs ? `?${qs}` : ''}`;
+  return vaultRequest<{ exposures: ComponentExposure[]; total_count_estimate: number; limit: number; offset: number }>({
+    apiBase,
+    path,
+    method: 'GET',
+    sessionToken,
+    timeoutMs,
+  });
+}
+
+export interface CreateExposureBody {
+  exposure_type: string;
+  subject_kind: string;
+  subject_name: string;
+  source_kind: string;
+  source_ref?: string;
+  metadata?: Record<string, unknown>;
+  trust_boundary?: Record<string, unknown>;
+}
+
+export async function createExposure(
+  apiBase: string,
+  sessionToken: string,
+  workspace: string,
+  body: CreateExposureBody,
+  timeoutMs: number,
+) {
+  return vaultRequest<ComponentExposure>({
+    apiBase,
+    path: `/api/vault/workspaces/${encodeURIComponent(workspace)}/exposures`,
+    method: 'POST',
+    sessionToken,
+    body,
+    timeoutMs,
+    acceptStatuses: [201],
+  });
+}
+
 export async function revokeException(
   apiBase: string,
   sessionToken: string,

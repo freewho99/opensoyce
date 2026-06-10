@@ -350,6 +350,130 @@ test('errors.js exposes the device-code error codes (PR-V2-D additions)', () => 
   }
 });
 
+// ---------- PR-7A: dependency-exposure ingestion --------------------------
+//
+// Ingestion observes. Ingestion does not decide. Ingestion creates exposure
+// records. Humans still propose. Reviewers still decide. CEI still records
+// the relationship.
+
+// Strip // line comments and /* */ block comments so structural greps test
+// the actual code, not doctrine prose (which deliberately NAMES the verbs it
+// explains the absence of).
+function stripJsComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => {
+      const idx = line.indexOf('//');
+      return idx >= 0 ? line.slice(0, idx) : line;
+    })
+    .join('\n');
+}
+
+function exposureCommandSources() {
+  const dir = path.join(root, 'packages', 'cli', 'src', 'commands', 'exposure');
+  const out = [];
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    if (fs.statSync(p).isFile() && p.endsWith('.ts')) {
+      out.push({ rel: `packages/cli/src/commands/exposure/${name}`, src: fs.readFileSync(p, 'utf8') });
+    }
+  }
+  out.push({
+    rel: 'packages/cli/src/lib/dependency-ingest.ts',
+    src: read('packages/cli/src/lib/dependency-ingest.ts'),
+  });
+  return out;
+}
+
+test('exposure ingest-dependencies is present, dispatched, and workspace-required (PR-7A)', () => {
+  const p = path.join(root, 'packages', 'cli', 'src', 'commands', 'exposure', 'ingest-dependencies.ts');
+  ok(fs.existsSync(p), 'missing exposure/ingest-dependencies.ts');
+  const cli = read('packages/cli/src/cli.ts');
+  ok(/case 'exposure':/.test(cli), 'cli.ts must dispatch the exposure command');
+  ok(/runExposureIngestDependencies/.test(cli), 'cli.ts must import + dispatch runExposureIngestDependencies');
+  const args = read('packages/cli/src/args.ts');
+  ok(args.includes("'--file'") && args.includes("'--dry-run'"), 'args.ts must parse --file and --dry-run');
+  const requiredMatch = args.match(/WORKSPACE_REQUIRED_COMMANDS\s*=\s*new Set\(\[([^\]]*)\]/);
+  ok(requiredMatch && /'exposure'/.test(requiredMatch[1]),
+    'exposure must be in WORKSPACE_REQUIRED_COMMANDS');
+});
+
+test('PR-7A ingestion creates exposures ONLY — no exception verbs anywhere in the lane', () => {
+  for (const { rel, src } of exposureCommandSources()) {
+    const code = stripJsComments(src);
+    for (const banned of [
+      'proposeException', 'revokeException',
+      'runExceptionApprove', 'runExceptionReject', 'runExceptionExtend', 'runExceptionWithdraw',
+      '/exceptions', 'approve', 'reject', 'extend(', 'withdraw',
+    ]) {
+      ok(!code.includes(banned), `${rel} references ${banned} — ingestion must not touch the exception lane`);
+    }
+  }
+});
+
+test('PR-7A vault-api exposure surface is create + list only, on the private boundary', () => {
+  const api = stripJsComments(read('packages/cli/src/lib/vault-api.ts'));
+  ok(/export async function createExposure/.test(api), 'vault-api must export createExposure');
+  ok(/export async function listExposures/.test(api), 'vault-api must export listExposures');
+  // No exposure mutation/decision helpers beyond create + list.
+  for (const banned of ['updateExposure', 'deleteExposure', 'patchExposure', 'resolveExposure', 'exposureStatus']) {
+    ok(!api.includes(banned), `vault-api must not export ${banned}`);
+  }
+  // CreateExposureBody carries NO status field — created records take the
+  // server-side create-time default; the CLI cannot push a status.
+  const bodyMatch = api.match(/export interface CreateExposureBody \{([\s\S]*?)\}/);
+  ok(bodyMatch, 'CreateExposureBody interface not found');
+  ok(!/status/.test(bodyMatch[1]), 'CreateExposureBody must not carry a status field');
+  // Both helpers stay inside the private vault workspace boundary.
+  const exposureBlock = api.slice(api.indexOf('export async function listExposures'));
+  ok(/\/api\/vault\/workspaces\//.test(exposureBlock), 'exposure helpers must call /api/vault/workspaces/');
+});
+
+test('PR-7A ingest shape is fixed: dependency-exposure / package / cli (no custom types, no schemas)', () => {
+  const src = stripJsComments(read('packages/cli/src/commands/exposure/ingest-dependencies.ts'));
+  ok(/exposure_type:\s*'dependency-exposure'/.test(src), 'must hardcode exposure_type: dependency-exposure');
+  ok(/subject_kind:\s*'package'/.test(src), 'must hardcode subject_kind: package');
+  ok(/source_kind:\s*'cli'/.test(src), 'must hardcode source_kind: cli');
+  for (const { rel, src: s } of exposureCommandSources()) {
+    const code = stripJsComments(s);
+    for (const banned of [
+      'github-action-exposure', 'container-image-exposure', 'base-image-exposure',
+      'dev-tool-exposure', 'runtime-version-exposure',
+      'component_exposure_types', 'validation_schema', 'ajv', 'json-schema',
+      'cloud-permission-drift', 'sbom', 'osv', 'advisory',
+    ]) {
+      ok(!code.toLowerCase().includes(banned), `${rel} references ${banned} — outside the PR-7A lane`);
+    }
+  }
+});
+
+test('PR-7A dry-run is write-free and runs before any create call', () => {
+  const src = stripJsComments(read('packages/cli/src/commands/exposure/ingest-dependencies.ts'));
+  const dryRunIdx = src.indexOf('if (args.dryRun)');
+  const createIdx = src.indexOf('await createExposure(');
+  ok(dryRunIdx !== -1, 'ingest must branch on args.dryRun');
+  ok(createIdx !== -1, 'ingest must call createExposure in the non-dry path');
+  ok(dryRunIdx < createIdx, 'the dry-run early return must come BEFORE the create loop');
+  // No status mutation in the create body either.
+  ok(!/status:/.test(src), 'ingest must never send a status field');
+});
+
+test('PR-7A parser observes only — no network, no evaluation', () => {
+  const src = stripJsComments(read('packages/cli/src/lib/dependency-ingest.ts'));
+  ok(!/fetch\(/.test(src), 'dependency-ingest must not make network calls');
+  ok(!/writeFileSync|appendFileSync/.test(src), 'dependency-ingest must not write files');
+  for (const banned of ['score', 'policy', 'gate', 'block', 'allow(']) {
+    ok(!src.toLowerCase().includes(banned), `dependency-ingest references ${banned} — parsing must not evaluate`);
+  }
+});
+
+test('PR-7A output is marked private; exposure command never leaks the session token', () => {
+  const src = read('packages/cli/src/commands/exposure/ingest-dependencies.ts');
+  ok(/\[PRIVATE\]/.test(src), 'ingest text output must carry the [PRIVATE] marker');
+  ok(/visibility:\s*'private'/.test(src), 'ingest JSON output must carry visibility: private');
+});
+
 // ---------- Wiring -------------------------------------------------------
 
 test('package.json wires test:cli-workspace-v0 into test:ci', () => {

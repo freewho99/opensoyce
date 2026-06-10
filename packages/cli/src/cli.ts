@@ -25,6 +25,9 @@ import { runLogout } from './commands/logout.js';
 import { runExceptionList } from './commands/exception/list.js';
 import { runExceptionPropose } from './commands/exception/propose.js';
 import { runExceptionRevoke } from './commands/exception/revoke.js';
+// PR-7A: exposure ingestion. Creates exposure RECORDS only — no exception
+// verbs, no policy, no lifecycle. Ingestion observes; it does not decide.
+import { runExposureIngestDependencies } from './commands/exposure/ingest-dependencies.js';
 
 const CLI_VERSION = '0.0.0';
 
@@ -91,6 +94,14 @@ async function main(argv: string[]): Promise<number> {
         return EXIT_USAGE_ERROR;
       }
       process.stderr.write(`Unknown exception subcommand: ${args.subcommand}. Allowed: list | propose | revoke.\n`);
+      return EXIT_USAGE_ERROR;
+    case 'exposure':
+      if (args.subcommand === 'ingest-dependencies') return runExposureIngestDependencies(args);
+      if (!args.subcommand) {
+        process.stderr.write('Usage error: `exposure` requires a subcommand: ingest-dependencies.\n');
+        return EXIT_USAGE_ERROR;
+      }
+      process.stderr.write(`Unknown exposure subcommand: ${args.subcommand}. Allowed: ingest-dependencies.\n`);
       return EXIT_USAGE_ERROR;
     default:
       process.stderr.write(STRINGS.errors.unknownCommand(args.command) + '\n');
