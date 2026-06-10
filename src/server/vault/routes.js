@@ -41,6 +41,7 @@ import {
   handlePollDeviceToken,
   handleApproveDeviceCode,
 } from './cli.js';
+import { registerCeiRoutes } from '../cei/routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -187,4 +188,10 @@ export function registerVaultRoutes(app) {
     requireCsrf,
     handleApproveDeviceCode,
   );
+
+  // ---------- Component Exposure Intelligence foundation (PR-6A) ----------
+  // CEI is part of the private vault surface; it reuses the same session +
+  // CSRF middleware and the 404-on-non-member doctrine. Native exposure
+  // types only; no ingestion, no dashboard, no custom types.
+  registerCeiRoutes(app);
 }

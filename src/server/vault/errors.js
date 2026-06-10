@@ -41,6 +41,13 @@ export const ERROR_CODES = Object.freeze({
   authorization_pending: 'authorization-pending',
   device_code_expired: 'device-code-expired',
   device_code_invalid: 'device-code-invalid',
+  // PR-6A additions (Component Exposure Intelligence foundation):
+  exposure_type_not_found: 'exposure-type-not-found',
+  exposure_subject_invalid: 'exposure-subject-invalid',
+  exposure_metadata_invalid: 'exposure-metadata-invalid',
+  exposure_source_invalid: 'exposure-source-invalid',
+  exposure_status_invalid: 'exposure-status-invalid',
+  exposure_not_found: 'exposure-not-found',
 });
 
 export function sendError(res, status, code, message, extras) {
