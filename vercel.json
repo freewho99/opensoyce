@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/vault/:path*",
+      "destination": "/api/vault"
+    },
+    {
       "source": "/api/compliance/gate",
       "destination": "/api/exceptions?action=compliance-gate"
     },
