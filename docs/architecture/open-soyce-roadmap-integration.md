@@ -56,16 +56,16 @@ A label change is a roadmap decision. It belongs in this doc, not in implementat
 
 ## 3. Phase sequence
 
-The product spine is currently at Phase 2. Phases 3–9 are forward-looking and each one closes in a phase-closeout doc the way Phase 1 closed in `docs/proof/public-trust-spine-closeout.md`.
+Each phase closes in a phase-closeout doc the way Phase 1 closed in `docs/proof/public-trust-spine-closeout.md`. (Status column refreshed by PR-7C — it had gone stale after the Phase 5/6 closeouts and the ingestion PRs.)
 
 | Phase | Name | Status |
 |---|---|---|
 | 1 | Public Trust Spine | ✅ Closed (PRs #43 → #50, closeout at `7788edd`) |
 | 2 | Trust Spine Activation | ✅ Closed (PRs #51 → #52, last merge `5b61c3c`) |
 | 3 | Launch Narrative / Positioning | ✅ Closed (PRs #54 → #57, last impl merge `394690a`) |
-| 4 | OSS Distribution: CLI + Trust Badge | ✅ Closed (PRs #58 → #66, last impl merge `13e22cc`, closeout filed by this PR) |
-| 5 | Trust Vault: private evidence + exceptions | **Now** |
-| 6 | Signal Intelligence: Component Exposure Intelligence | Later |
+| 4 | OSS Distribution: CLI + Trust Badge | ✅ Closed (PRs #58 → #66, last impl merge `13e22cc`) |
+| 5 | Trust Vault: private evidence + exceptions | ✅ Closed (PR-V2-A…E #78 → #86, closeout #87 `83486c8`, dogfood repair #92) |
+| 6 | Signal Intelligence: Component Exposure Intelligence | ✅ Proposal/audit loop closed (6A–6F #93 → #98, closeout #99 `578ee18`); observation ingestion shipped on top as PR-7A/7B/7C (#100, #101, this PR — note: these "7x" PR labels are the ingestion ledger steps 11–13, NOT this table's Phase 7) |
 | 7 | Remediation Drafts | Later |
 | 8 | Enterprise Evidence Exports | Blocked until evidence exists |
 | 9 | Deep auto-remediation / drop-in replacement | Do not claim publicly yet |

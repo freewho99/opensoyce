@@ -81,6 +81,7 @@ const TYPES_MIGRATION = 'supabase/migrations/0017_component_exposure_types.sql';
 const EXPOSURES_MIGRATION = 'supabase/migrations/0018_component_exposures.sql';
 const EVENTS_MIGRATION = 'supabase/migrations/0019_component_exposure_events.sql';
 const OUTCOMES_MIGRATION = 'supabase/migrations/0020_cei_outcome_event_kinds.sql';
+const DEDUPE_MIGRATION = 'supabase/migrations/0021_cei_observation_dedupe.sql';
 
 // PR-6F: the full event-kind allowlist — the 6D proposal kind plus one kind
 // per reviewer outcome that exists as a REAL transition in the application.
@@ -573,6 +574,85 @@ test('PR-6F preserves the firewall: only the events CHECK changes', () => {
     ok(!/source_exposure_id/.test(readSqlNoComments(m)),
       `${m} must not persist a source_exposure_id column`);
   }
+});
+
+// ---------- PR-7C: server-side semantic dedupe (upsert-touch) ----------
+//
+// Observation is not judgment. Repetition is not new evidence. Provenance
+// must not be erased.
+
+test('0021 adds ONLY repeat-observation columns + the partial identity index (PR-7C)', () => {
+  const sql = readSqlNoComments(DEDUPE_MIGRATION);
+  ok(/alter table public\.component_exposures/.test(sql), '0021 must alter component_exposures');
+  ok(/observation_identity\s+text/.test(sql), '0021 must add observation_identity');
+  ok(/seen_count\s+integer\s+not null\s+default 1/.test(sql), '0021 must add seen_count defaulting to 1');
+  ok(/check \(seen_count >= 1\)/.test(sql), 'seen_count must carry a >= 1 CHECK');
+  ok(/latest_source_ref\s+text/.test(sql), '0021 must add latest_source_ref');
+  ok(/create unique index[\s\S]*?\(workspace_id, observation_identity\)[\s\S]*?where observation_identity is not null/.test(sql),
+    '0021 must add the PARTIAL unique index (null identities stay outside dedupe)');
+  // Firewall: 0021 touches nothing else.
+  ok(!/vault_timeline_events/.test(sql), '0021 must not reference vault_timeline_events');
+  ok(!/vault_exceptions/.test(sql), '0021 must not reference vault_exceptions');
+  ok(!/component_exposure_events/.test(sql), '0021 must not reference the CEI event table');
+  ok(!/create table/i.test(sql), '0021 must not create any table');
+  ok(!/status/.test(sql), '0021 must not touch status (no lifecycle)');
+});
+
+test('observation identity is SEMANTIC, not run-specific (PR-7C)', () => {
+  const src = stripJsComments(read('src/server/cei/exposures.js'));
+  const body = src.match(/function buildObservationIdentity[\s\S]*?\n}/);
+  ok(body, 'exposures.js must define buildObservationIdentity');
+  // The identity is the dependency fact...
+  for (const part of ['subject_name', 'version', 'package_manager', 'manifest_kind', 'dependency_class']) {
+    ok(body[0].includes(part), `identity must include ${part}`);
+  }
+  // ...and NEVER the run/provenance.
+  for (const banned of ['source_ref', 'source_kind', 'run_id', 'sha']) {
+    ok(!body[0].includes(banned), `identity must NOT include ${banned} — provenance is not identity`);
+  }
+  // Dedupe is the dependency-exposure ingestion lane only.
+  ok(/dependency-exposure/.test(body[0]), 'identity must be scoped to dependency-exposure');
+  ok(/return null/.test(body[0]), 'non-dependency / sparse creates must opt out (null identity)');
+});
+
+test('touch updates ONLY repeat metadata — never status, subject, or first provenance (PR-7C)', () => {
+  const src = stripJsComments(read('src/server/cei/exposures.js'));
+  const fn = src.match(/async function touchExistingObservation[\s\S]*?\n}/);
+  ok(fn, 'exposures.js must define touchExistingObservation');
+  const update = fn[0].match(/\.update\(\{([\s\S]*?)\}\)/);
+  ok(update, 'touch must issue an update');
+  ok(/seen_count/.test(update[1]), 'touch must increment seen_count');
+  ok(/last_seen_at/.test(update[1]), 'touch must move last_seen_at forward');
+  ok(/latest_source_ref/.test(update[1]), 'touch must record the latest provenance');
+  for (const banned of [/\bstatus\b/, /\bsubject_name\b/, /\bsource_ref\b\s*:/, /\bsource_kind\b/, /\bfirst_seen_at\b/, /\bcreated_at\b/, /\bmetadata\b/, /\btrust_boundary\b/]) {
+    ok(!banned.test(update[1]),
+      `touch payload must not contain ${banned} — the first observation stays historically understandable`);
+  }
+});
+
+test('insert race falls back to touch — the repeat sighting is never dropped (PR-7C)', () => {
+  const src = stripJsComments(read('src/server/cei/exposures.js'));
+  const handler = src.match(/async function handleCreateExposure[\s\S]*?\n}/);
+  ok(handler, 'handleCreateExposure not found');
+  ok(/'23505'/.test(handler[0]), 'create must catch the unique-violation race');
+  const raceIdx = handler[0].indexOf("'23505'");
+  ok(handler[0].indexOf('touchExistingObservation', raceIdx) !== -1,
+    'the 23505 loser must fall back to the touch path');
+});
+
+test('dedupe keeps the HTTP contract and tells the truth in the body (PR-7C)', () => {
+  const src = stripJsComments(read('src/server/cei/exposures.js'));
+  // The 7A/7B CLI pins 201; both paths answer 201 and the body carries
+  // seen_again so repetition is visible, not hidden.
+  ok(/seen_again:\s*true/.test(src), 'touch responses must mark seen_again: true');
+  ok(/seen_again:\s*false/.test(src), 'fresh creates must mark seen_again: false');
+  ok(/seen_count/.test(src) && /latest_source_ref/.test(src),
+    'shaped rows must surface seen_count + latest_source_ref');
+  // Dedupe writes no audit event and never reaches the exception lane.
+  ok(!/component_exposure_events/.test(src), 'exposures.js must not write the CEI event table');
+  ok(!/vault_exceptions/.test(src), 'exposures.js must not touch vault_exceptions');
+  ok(!/recordProposalFromExposure|recordOutcomeFromExposure/.test(src),
+    'dedupe must not record proposal/outcome events');
 });
 
 // ---------- wiring ----------
