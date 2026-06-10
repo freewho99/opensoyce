@@ -94,12 +94,17 @@ export default function VaultExceptionDetail() {
       setWorkspace(ws.data);
       setException(ex.data);
       setPhase('ready');
-      // Source-exposure context is a separate, best-effort read. The newest
-      // related CEI event (if any) carries the source exposure.
+      // Source-exposure context is a separate, best-effort read. PR-6F: the
+      // related events now include reviewer OUTCOMES, so the card must pin
+      // the PROPOSAL event specifically — "proposed by / proposed at" must
+      // never show the reviewer's decision instead of the proposal.
       const src = await listExceptionSourceEvents(slug, id);
       if (cancelled) return;
-      if (isOk(src) && src.data.events.length > 0) {
-        setSourceEvent(src.data.events[0]);
+      if (isOk(src)) {
+        const proposal = src.data.events.find(
+          (ev) => ev.event_kind === 'exception_proposed_from_exposure',
+        );
+        if (proposal) setSourceEvent(proposal);
       }
     })();
     return () => { cancelled = true; };

@@ -28,7 +28,16 @@ import { maybeReplayIdempotent, storeIdempotencyResponse } from './idempotency.j
 // touch vault_timeline_events and does NOT change the exception state
 // machine — the exception is created exactly as before; the event is a
 // separate, best-effort audit row.
-import { validateExposureInWorkspace, recordProposalFromExposure } from '../cei/events.js';
+// PR-6F: the same best-effort, additive contract for reviewer OUTCOMES —
+// approve/reject/revoke on an exposure-born exception record a CEI event
+// connecting the decision back to the exposure. The exception row still
+// carries no exposure reference; the recorder discovers the link from the
+// 6D proposal event and silently skips when there is none.
+import {
+  validateExposureInWorkspace,
+  recordProposalFromExposure,
+  recordOutcomeFromExposure,
+} from '../cei/events.js';
 
 const PACKAGE_SUBJECT_RE = /^@?[a-z0-9][\w./-]*(@[\w.+-]+)?$/i;
 const REPO_SUBJECT_RE = /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/;
@@ -398,6 +407,18 @@ export async function handleApproveException(req, res) {
       { current_state: (Array.isArray(latest) && latest[0] && latest[0].state) || null },
     );
   }
+
+  // PR-6F: CEI-native outcome audit, AFTER the state transition committed.
+  // Best-effort — a failure to write the audit row never undoes or blocks
+  // the approval. No-op when the exception was not proposed from an exposure.
+  await recordOutcomeFromExposure(supabase, {
+    workspaceId: workspace.workspace_id,
+    exceptionId: updated.exception_id,
+    outcomeKind: 'exception_approved_from_exposure',
+    actorUserId: req.vaultSession.user_id,
+    metadata: { subject_kind: updated.subject_kind, subject_name: updated.subject_name },
+  });
+
   const shape = shapeExceptionRow(updated, membership.role);
   setEtagHeader(res, updated);
   setMaskedHeader(res, membership.role);
@@ -485,6 +506,17 @@ export async function handleRejectException(req, res) {
   if (!updated) {
     return sendError(res, 409, ERROR_CODES.exception_state_conflict, 'exception state changed under concurrent request');
   }
+
+  // PR-6F: CEI-native outcome audit (covers reviewer reject AND proposer
+  // withdrawal — the actor distinguishes them). Best-effort, additive.
+  await recordOutcomeFromExposure(supabase, {
+    workspaceId: workspace.workspace_id,
+    exceptionId: updated.exception_id,
+    outcomeKind: 'exception_rejected_from_exposure',
+    actorUserId: req.vaultSession.user_id,
+    metadata: { subject_kind: updated.subject_kind, subject_name: updated.subject_name },
+  });
+
   const shape = shapeExceptionRow(updated, membership.role);
   setEtagHeader(res, updated);
   setMaskedHeader(res, membership.role);
@@ -560,6 +592,17 @@ export async function handleRevokeException(req, res) {
   if (!updated) {
     return sendError(res, 409, ERROR_CODES.exception_state_conflict, 'exception state changed under concurrent request');
   }
+
+  // PR-6F: CEI-native outcome audit. Best-effort, additive. NOTE: 'extend'
+  // deliberately records nothing — it is not an outcome (state stays active).
+  await recordOutcomeFromExposure(supabase, {
+    workspaceId: workspace.workspace_id,
+    exceptionId: updated.exception_id,
+    outcomeKind: 'exception_revoked_from_exposure',
+    actorUserId: req.vaultSession.user_id,
+    metadata: { subject_kind: updated.subject_kind, subject_name: updated.subject_name },
+  });
+
   const shape = shapeExceptionRow(updated, membership.role);
   setEtagHeader(res, updated);
   setMaskedHeader(res, membership.role);

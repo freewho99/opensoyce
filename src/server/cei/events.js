@@ -22,8 +22,25 @@ import { vaultDb } from '../vault/db.js';
 import { sendError, ERROR_CODES } from '../vault/errors.js';
 import { resolveWorkspaceForMember } from '../vault/rbac.js';
 
-// 6D allowlist is exactly one event kind.
-export const EVENT_KINDS = Object.freeze(['exception_proposed_from_exposure']);
+// 6D opened the allowlist with exactly one kind (the proposal). 6F widens
+// it with one kind per reviewer outcome that exists as a real transition
+// in the application today. exception_expired_from_exposure is DELIBERATELY
+// absent: no reaper exists, nothing transitions active -> expired, and the
+// event table requires an actor while expiry has none — the kind joins the
+// allowlist with the reaper scope block, not before. 'extend' is not an
+// outcome (state stays active) and records nothing.
+export const PROPOSAL_EVENT_KIND = 'exception_proposed_from_exposure';
+export const OUTCOME_EVENT_KINDS = Object.freeze([
+  'exception_approved_from_exposure',
+  'exception_rejected_from_exposure',
+  'exception_revoked_from_exposure',
+]);
+export const EVENT_KINDS = Object.freeze([
+  'exception_proposed_from_exposure',
+  'exception_approved_from_exposure',
+  'exception_rejected_from_exposure',
+  'exception_revoked_from_exposure',
+]);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -70,6 +87,53 @@ export async function recordProposalFromExposure(supabase, params) {
       metadata: metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {},
     });
   if (error) return { error };
+  return { ok: true };
+}
+
+/**
+ * PR-6F: insert the CEI-native audit event recording that a reviewer
+ * outcome (approve / reject / revoke) landed on an exception that was
+ * proposed from an exposure.
+ *
+ * The exception row carries NO reference to the exposure (separation
+ * preserved since 6A), so the link is discovered the only place it exists:
+ * the 6D proposal event, queried by related_exception_id. When no proposal
+ * event exists the exception was not exposure-born and nothing is recorded
+ * — { skipped: true }.
+ *
+ * Best-effort, same contract as recordProposalFromExposure: returns
+ * { error } on failure but the caller treats the decision as already-
+ * succeeded (the exception state machine is the trust record; this event
+ * is audit context). Recording NEVER mutates the exposure or the exception.
+ */
+export async function recordOutcomeFromExposure(supabase, params) {
+  const { workspaceId, exceptionId, outcomeKind, actorUserId, metadata } = params;
+  if (!OUTCOME_EVENT_KINDS.includes(outcomeKind)) {
+    return { error: new Error(`unknown outcome kind: ${outcomeKind}`) };
+  }
+  if (!isUuid(exceptionId)) return { skipped: true };
+  const { data, error } = await supabase
+    .from('component_exposure_events')
+    .select('exposure_id')
+    .eq('workspace_id', workspaceId)
+    .eq('related_exception_id', exceptionId)
+    .eq('event_kind', PROPOSAL_EVENT_KIND)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) return { error };
+  const proposal = Array.isArray(data) && data[0];
+  if (!proposal) return { skipped: true };
+  const { error: insertError } = await supabase
+    .from('component_exposure_events')
+    .insert({
+      workspace_id: workspaceId,
+      exposure_id: proposal.exposure_id,
+      event_kind: outcomeKind,
+      related_exception_id: exceptionId,
+      actor_user_id: actorUserId,
+      metadata: metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {},
+    });
+  if (insertError) return { error: insertError };
   return { ok: true };
 }
 

@@ -80,6 +80,19 @@ function stripJsComments(src) {
 const TYPES_MIGRATION = 'supabase/migrations/0017_component_exposure_types.sql';
 const EXPOSURES_MIGRATION = 'supabase/migrations/0018_component_exposures.sql';
 const EVENTS_MIGRATION = 'supabase/migrations/0019_component_exposure_events.sql';
+const OUTCOMES_MIGRATION = 'supabase/migrations/0020_cei_outcome_event_kinds.sql';
+
+// PR-6F: the full event-kind allowlist — the 6D proposal kind plus one kind
+// per reviewer outcome that exists as a REAL transition in the application.
+// exception_expired_from_exposure is deliberately absent until the reaper
+// scope block exists (nothing transitions active -> expired today, and the
+// event table requires an actor while expiry has none).
+const ALL_EVENT_KINDS = [
+  'exception_proposed_from_exposure',
+  'exception_approved_from_exposure',
+  'exception_rejected_from_exposure',
+  'exception_revoked_from_exposure',
+];
 
 const NATIVE_TYPES = [
   'dependency-exposure',
@@ -338,19 +351,42 @@ test('event table is workspace-scoped + requires exposure + actor (PR-6D)', () =
     'actor_user_id must be NOT NULL FK to vault_users');
 });
 
-test('event_kind allowlist has ONLY exception_proposed_from_exposure (PR-6D)', () => {
+test('event_kind allowlist: 0019 opened with ONLY the proposal kind (PR-6D, historical)', () => {
+  // The 0019 migration is history — it must STILL carry exactly the single
+  // 6D value. 6F widened the live allowlist via 0020, never by rewriting
+  // the 6D migration.
   const sql = readSqlNoComments(EVENTS_MIGRATION);
   const checkMatch = sql.match(/event_kind[\s\S]*?check\s*\(\s*event_kind\s+in\s*\(([^)]*)\)/i);
   ok(checkMatch, 'event_kind must carry an IN (...) CHECK');
   const kinds = (checkMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
   ok(kinds.length === 1 && kinds[0] === 'exception_proposed_from_exposure',
-    `event_kind allowlist must be exactly ['exception_proposed_from_exposure'], found ${JSON.stringify(kinds)}`);
+    `0019 event_kind allowlist must be exactly ['exception_proposed_from_exposure'], found ${JSON.stringify(kinds)}`);
+});
+
+test('event_kind allowlist: 0020 + events.js carry EXACTLY the 6F kind set (PR-6F)', () => {
+  // The live allowlist is the 6D proposal kind + the three reviewer-outcome
+  // kinds — no more (no expired until the reaper scope block), no fewer,
+  // and migration + app constant must agree.
+  const sql = readSqlNoComments(OUTCOMES_MIGRATION);
+  const checkMatch = sql.match(/check\s*\(\s*event_kind\s+in\s*\(([^)]*)\)/i);
+  ok(checkMatch, '0020 must re-add an IN (...) CHECK on event_kind');
+  const kinds = (checkMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  ok(JSON.stringify([...kinds].sort()) === JSON.stringify([...ALL_EVENT_KINDS].sort()),
+    `0020 allowlist must be exactly ${JSON.stringify(ALL_EVENT_KINDS)}, found ${JSON.stringify(kinds)}`);
   const domain = read('src/server/cei/events.js');
-  const evMatch = domain.match(/EVENT_KINDS\s*=\s*Object\.freeze\(\[([^\]]*)\]/);
+  // Anchor on "export const" — OUTCOME_EVENT_KINDS contains the substring
+  // EVENT_KINDS and would otherwise match first.
+  const evMatch = domain.match(/export const EVENT_KINDS\s*=\s*Object\.freeze\(\[([^\]]*)\]/);
   ok(evMatch, 'events.js must export a frozen EVENT_KINDS array');
   const evKinds = (evMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
-  ok(evKinds.length === 1 && evKinds[0] === 'exception_proposed_from_exposure',
-    'events.js EVENT_KINDS must match the single migration allowlist value');
+  ok(JSON.stringify([...evKinds].sort()) === JSON.stringify([...ALL_EVENT_KINDS].sort()),
+    'events.js EVENT_KINDS must match the 0020 migration allowlist exactly');
+  // The drop is LOUD: no "if exists" — a constraint-name mismatch must fail
+  // the migration, not leave the old single-value CHECK silently rejecting
+  // every outcome insert.
+  ok(/drop constraint component_exposure_events_event_kind_check/.test(sql)
+    && !/drop constraint if exists/.test(sql),
+    '0020 must drop the 0019 CHECK by name, without "if exists"');
 });
 
 test('event row may reference an exception as audit context, set-null on delete (PR-6D)', () => {
@@ -433,17 +469,13 @@ test('reviewer source-exposure endpoint reads events by related_exception_id (PR
     'reviewer context route must dispatch handleListEventsByException');
 });
 
-test('PR-6E adds NO new event kind + NO exposure/exception mutation', () => {
-  // The event-kind allowlist is STILL exactly one value (6E adds a reader,
-  // not a writer).
+test('PR-6E reader stays a reader + NO exposure/exception mutation', () => {
+  // 6E itself added a reader, not a writer, and no migration: 0019 is
+  // reused as-is (the 6F allowlist widening lives in its OWN migration,
+  // 0020_cei_outcome_event_kinds.sql — 6E's filename stays unused).
   const sql = readSqlNoComments(EVENTS_MIGRATION);
   const kinds = (sql.match(/'exception_proposed_from_exposure'/g) || []);
   ok(kinds.length >= 1, 'event_kind allowlist must still contain the 6D value');
-  const evMatch = read('src/server/cei/events.js').match(/EVENT_KINDS\s*=\s*Object\.freeze\(\[([^\]]*)\]/);
-  const evKinds = (evMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
-  ok(evKinds.length === 1, 'EVENT_KINDS must remain a single value in 6E');
-  // 6E touches NO new migration — the 0019 events table is reused as-is.
-  // (The only migrations beyond 0018 is 0019; there is no 0020+ for 6E.)
   ok(!fs.existsSync(path.join(root, 'supabase/migrations/0020_component_exposure_events.sql')),
     '6E must not add a migration (it reuses the 0019 events table)');
   // The reviewer context handler must not write to exposures or exceptions.
@@ -452,6 +484,95 @@ test('PR-6E adds NO new event kind + NO exposure/exception mutation', () => {
     'events module must not mutate component_exposures');
   ok(!/from\(['"]vault_exceptions['"]\)/.test(events),
     'events module must not write vault_exceptions');
+});
+
+// ---------- PR-6F: CEI reviewer-outcome audit ----------
+
+test('outcome recorder discovers the exposure from the 6D proposal event only (PR-6F)', () => {
+  const events = read('src/server/cei/events.js');
+  ok(/export async function recordOutcomeFromExposure/.test(events),
+    'events.js must export recordOutcomeFromExposure');
+  const body = stripJsComments(events).match(/export async function recordOutcomeFromExposure[\s\S]*?\n}/);
+  ok(body, 'recordOutcomeFromExposure body not found');
+  // The exception row carries NO exposure reference — the link is read from
+  // the proposal event by related_exception_id, then a new event is inserted.
+  ok(/related_exception_id/.test(body[0]),
+    'recorder must look up the proposal event by related_exception_id');
+  ok(/PROPOSAL_EVENT_KIND|'exception_proposed_from_exposure'/.test(body[0]),
+    'recorder must filter the lookup to the proposal kind');
+  ok(/skipped:\s*true/.test(body[0]),
+    'recorder must no-op (skip) when the exception was not exposure-born');
+  // Insert-only against component_exposure_events; nothing else is written.
+  ok(!/\.(update|delete|upsert)\(/.test(body[0]),
+    'recorder must only insert (audit is append-only)');
+  ok(!/from\(['"]vault_exceptions['"]\)/.test(body[0]),
+    'recorder must not read or write vault_exceptions');
+});
+
+test('approve/reject/revoke record their outcome AFTER the transition (PR-6F)', () => {
+  const ex = stripJsComments(read('src/server/vault/exceptions.js'));
+  const cases = [
+    ['handleApproveException', 'exception_approved_from_exposure'],
+    ['handleRejectException', 'exception_rejected_from_exposure'],
+    ['handleRevokeException', 'exception_revoked_from_exposure'],
+  ];
+  for (const [fn, kind] of cases) {
+    const body = ex.match(new RegExp(`async function ${fn}[\\s\\S]*?\\n}`));
+    ok(body, `${fn} not found`);
+    ok(new RegExp(`recordOutcomeFromExposure[\\s\\S]*?'${kind}'`).test(body[0]),
+      `${fn} must record ${kind}`);
+    // The audit row is written only after the guarded state UPDATE — the
+    // transition is the trust record; the event is its echo.
+    ok(body[0].indexOf('.update(') !== -1
+      && body[0].indexOf('.update(') < body[0].indexOf('recordOutcomeFromExposure'),
+      `${fn} must record the outcome AFTER the state update`);
+  }
+});
+
+test('extend and propose record NO outcome event (PR-6F)', () => {
+  const ex = stripJsComments(read('src/server/vault/exceptions.js'));
+  for (const fn of ['handleExtendException', 'handleProposeException']) {
+    const body = ex.match(new RegExp(`async function ${fn}[\\s\\S]*?\\n}`));
+    ok(body, `${fn} not found`);
+    ok(!/recordOutcomeFromExposure/.test(body[0]),
+      `${fn} must not record an outcome event (extend is not an outcome; propose records the proposal kind only)`);
+  }
+});
+
+test('outcome recording is best-effort — a failed audit row never blocks the decision (PR-6F)', () => {
+  const ex = stripJsComments(read('src/server/vault/exceptions.js'));
+  ok(!/recordOutcomeFromExposure\(supabase[\s\S]{0,400}?sendError/.test(ex),
+    'no sendError may follow an outcome-record call — the decision already committed');
+});
+
+test('no expired kind + actor still required until the reaper scope block (PR-6F)', () => {
+  // exception_expired_from_exposure is DELIBERATELY absent: nothing in the
+  // application transitions active -> expired (no reaper), and the event
+  // table requires an actor while expiry has none. Both arrive together.
+  const sql = readSqlNoComments(OUTCOMES_MIGRATION);
+  ok(!/exception_expired_from_exposure/.test(sql),
+    '0020 must not include the expired kind (reaper scope)');
+  ok(!/actor_user_id/.test(sql),
+    '0020 must not touch actor_user_id nullability (actor stays required)');
+  const events = stripJsComments(read('src/server/cei/events.js'));
+  ok(!/exception_expired_from_exposure/.test(events),
+    'events.js must not carry the expired kind yet');
+});
+
+test('PR-6F preserves the firewall: only the events CHECK changes', () => {
+  const sql = readSqlNoComments(OUTCOMES_MIGRATION);
+  ok(!/vault_timeline_events/.test(sql),
+    '0020 must not reference vault_timeline_events (Phase 5 contract untouched)');
+  ok(!/alter table public\.(component_exposures|vault_exceptions)\b/.test(sql),
+    '0020 must not alter component_exposures or vault_exceptions');
+  ok(!/create table/i.test(sql), '0020 must not create any table');
+  ok(!/add column/i.test(sql), '0020 must not add any column');
+  // No migration ever gave the exception row an exposure reference — the
+  // link still lives ONLY on the event rows.
+  for (const m of [TYPES_MIGRATION, EXPOSURES_MIGRATION, EVENTS_MIGRATION, OUTCOMES_MIGRATION]) {
+    ok(!/source_exposure_id/.test(readSqlNoComments(m)),
+      `${m} must not persist a source_exposure_id column`);
+  }
 });
 
 // ---------- wiring ----------
