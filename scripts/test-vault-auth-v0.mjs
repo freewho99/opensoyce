@@ -338,6 +338,76 @@ test('server.ts wires registerVaultRoutes', () => {
 });
 
 // ---------------------------------------------------------------------------
+// PR-RUNTIME-1: production runtime presence
+//
+// Production finding #2: the route family was registered only in server.ts
+// (local dev) and was never deployed — every /api/vault/* request died at
+// the Vercel platform layer. Doctrine: a route registered locally is not a
+// route deployed; the record is only real when the runtime can produce it.
+// ---------------------------------------------------------------------------
+
+test('PR-RUNTIME-1: the Vercel vault function exists and mounts the EXISTING route family', () => {
+  const src = read('api/vault.js');
+  ok(/from '\.\.\/src\/server\/vault\/routes\.js'/.test(src),
+    'api/vault.js must import the existing registerVaultRoutes module');
+  ok(/registerVaultRoutes\(app\)/.test(src),
+    'api/vault.js must call registerVaultRoutes(app)');
+  ok(/export default app/.test(src), 'api/vault.js must export the express app');
+  // Pure mounting: the function may install body parsing but must not
+  // define, rename, or reinterpret any route or handler.
+  for (const banned of ['app.get(', 'app.post(', 'app.patch(', 'app.delete(', 'app.put(']) {
+    ok(!src.includes(banned),
+      `api/vault.js contains ${banned} — it must mount the existing family, not define routes`);
+  }
+});
+
+test('PR-RUNTIME-1: vercel.json rewrites /api/vault/:path* to the vault function', () => {
+  const cfg = JSON.parse(read('vercel.json'));
+  const rewrites = Array.isArray(cfg.rewrites) ? cfg.rewrites : [];
+  ok(rewrites.some((r) => r.source === '/api/vault/:path*' && r.destination === '/api/vault'),
+    'vercel.json must rewrite /api/vault/:path* to /api/vault');
+});
+
+test('PR-RUNTIME-1: every registered vault/CEI route has a production surface', () => {
+  // The runtime-presence guard: collect every route literal the vault/CEI
+  // registrars register and prove the production routing layer can reach
+  // it. Today the whole family lives under /api/vault and is served by
+  // api/vault.js + the rewrite. A future route family registered in
+  // server.ts OUTSIDE /api/vault fails here until it is given a deployed
+  // surface — route families must not be local-only ever again.
+  const routeFiles = ['src/server/vault/routes.js', 'src/server/cei/routes.js'];
+  const literals = [];
+  for (const rel of routeFiles) {
+    const src = read(rel);
+    for (const m of src.matchAll(/'(\/api\/[^']+)'/g)) literals.push(m[1]);
+  }
+  ok(literals.length >= 20, `expected the full route family, found ${literals.length} literals`);
+  for (const route of literals) {
+    ok(route.startsWith('/api/vault/'),
+      `${route} is outside /api/vault/ — it has NO production surface; give it a deployed function/rewrite and extend this guard`);
+  }
+  ok(fs.existsSync(path.join(root, 'api', 'vault.js')),
+    'the /api/vault family must be served by api/vault.js in production');
+  const cfg = JSON.parse(read('vercel.json'));
+  ok((cfg.rewrites || []).some((r) => r.source === '/api/vault/:path*'),
+    'the /api/vault family must be reachable via the vercel.json rewrite');
+});
+
+test('PR-RUNTIME-1: the Vercel Hobby function cap is respected (max 12 functions)', () => {
+  // The deployment platform rejects builds with >12 serverless functions on
+  // the Hobby plan — discovered the hard way when api/vault.js was function
+  // #13 (the band-drop-tick fold freed the slot). Every non-underscore .js
+  // file in api/ counts as one function; underscore-prefixed files are
+  // import-only by repo convention. This guard makes the cap a structural
+  // failure instead of a deployment surprise. If the team upgrades plans,
+  // raise the cap here DELIBERATELY, in its own commit.
+  const fns = fs.readdirSync(path.join(root, 'api'))
+    .filter((n) => n.endsWith('.js') && !n.startsWith('_'));
+  ok(fns.length <= 12,
+    `api/ has ${fns.length} serverless functions (${fns.join(', ')}) — the Hobby cap is 12; fold via the underscore + action pattern or raise the cap deliberately`);
+});
+
+// ---------------------------------------------------------------------------
 // Isolation invariants
 // ---------------------------------------------------------------------------
 

@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/vault/:path*",
+      "destination": "/api/vault"
+    },
+    {
       "source": "/api/compliance/gate",
       "destination": "/api/exceptions?action=compliance-gate"
     },
@@ -19,6 +23,10 @@
     {
       "source": "/api/cron/update-registry",
       "destination": "/api/exceptions?action=cron-update-registry"
+    },
+    {
+      "source": "/api/band-drop-tick",
+      "destination": "/api/exceptions?action=band-drop-tick"
     },
     {
       "source": "/api/github/:owner/:repo",

@@ -20,10 +20,20 @@
  * Failure isolation: per-subscriber errors are caught, logged, and counted as
  * `errored`. The tick always returns 200 with a summary so Vercel cron's
  * non-2xx-is-failure semantics don't false-alarm on partial failure.
+ *
+ * PR-RUNTIME-1 fold: underscore-prefixed so Vercel does NOT route this file
+ * as its own serverless function (same convention as _supabase.js) — it is
+ * mounted as `?action=band-drop-tick` inside api/exceptions.js, reached via
+ * the vercel.json rewrite `/api/band-drop-tick` -> the exceptions action.
+ * Public URL and cron path are byte-identical; only the function count
+ * changed (Hobby cap is 12; this fold freed the slot api/vault.js
+ * occupies). Also fixed in the fold: the import below pointed at
+ * ./claim-submit.js, which was merged into ./claim.js — the tick had been
+ * failing at module resolution ever since that merge.
  */
 
 import { signAppJwt } from './github-webhook.js';
-import { findInstallationId, getInstallationToken } from './claim-submit.js';
+import { findInstallationId, getInstallationToken } from './claim.js';
 import { analyzeRepo, githubHeaders } from '../src/shared/analyzeRepo.js';
 import { verdictFor } from '../src/shared/verdict.js';
 import { mapWithConcurrency } from '../src/shared/runScan.js';
