@@ -238,6 +238,29 @@ export async function getException(slug: string, id: string) {
   });
 }
 
+// PR-6C: propose a NEW exception draft (state = 'proposed'). This calls the
+// existing PR-V2-B propose endpoint, which HARDCODES state: 'proposed' on
+// the server — there is no way for this helper to create an active
+// exception, approve one, or change the state machine. It is used by the
+// "Propose exception from this exposure" action on VaultExposureDetail.
+export interface ProposeExceptionBody {
+  subject: { kind: 'package' | 'repo'; name: string };
+  original_action: 'BLOCK' | 'WARN';
+  allowed_action: 'WARN' | 'ALLOW';
+  reason_public: string;
+  reason_private?: string;
+  proof_anchors: Array<Record<string, unknown>>;
+  idempotency_key?: string;
+}
+
+export async function proposeException(slug: string, body: ProposeExceptionBody) {
+  return vaultRequest<VaultException>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exceptions`,
+    method: 'POST',
+    body,
+  });
+}
+
 export async function approveException(slug: string, id: string, body: { expires_at?: string; idempotency_key?: string }) {
   return vaultRequest<VaultException>({
     path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exceptions/${encodeURIComponent(id)}/approve`,
