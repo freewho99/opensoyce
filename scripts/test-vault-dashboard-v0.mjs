@@ -404,12 +404,14 @@ test('PR-6D cites the source exposure when proposing', () => {
     'ProposeExceptionBody must carry an optional source_exposure_id');
 });
 
-test('PR-6D renders a read-only Proposal history from listExposureEvents', () => {
+test('PR-6D renders a read-only event history from listExposureEvents', () => {
   const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
   ok(/listExposureEvents/.test(src),
-    'exposure detail must read proposal history via listExposureEvents');
-  ok(/Proposal history/.test(src),
-    'exposure detail must surface a "Proposal history" section');
+    'exposure detail must read the event history via listExposureEvents');
+  // PR-6F deliberately renamed the section: the history now includes
+  // reviewer outcomes, so "Proposal history" became "Decision history".
+  ok(/Decision history/.test(src),
+    'exposure detail must surface a "Decision history" section');
   ok(/event_kind/.test(src), 'history rows must show the event kind');
   ok(/related_exception_id/.test(src), 'history rows must link the related exception');
   // The history is read-only: listExposureEvents is GET (no method literal
@@ -477,6 +479,40 @@ test('PR-6E source-context helper is GET-only — no new event kind / no event w
   // No event-mutation helper exists anywhere in the api-client.
   ok(!/createEvent|updateEvent|deleteEvent|recordEvent/.test(api),
     'api-client must expose no event-mutation helper');
+});
+
+// ---------- PR-6F: reviewer-outcome audit on the dashboard ----------
+
+test('PR-6F source card pins the PROPOSAL event — outcomes never impersonate the proposer', () => {
+  const src = readNoComments('src/pages/vault/VaultExceptionDetail.tsx');
+  // After 6F the related events include reviewer outcomes; the newest event
+  // is no longer guaranteed to be the proposal. The "Source exposure" card
+  // ("proposed by / proposed at") must select the proposal kind explicitly.
+  ok(/\.find\(/.test(src) && /event_kind === 'exception_proposed_from_exposure'/.test(src),
+    'exception detail must select the proposal event by kind');
+  ok(!/setSourceEvent\(\s*\w+\.data\.events\[0\]\s*\)/.test(src),
+    'exception detail must not blindly take events[0] as the source card');
+});
+
+test('PR-6F api-client kind union matches the server allowlist (no expired until reaper)', () => {
+  const api = read('src/shared/vault/api-client.ts');
+  const kindMatch = api.match(/export type ExposureEventKind\s*=([\s\S]*?);/);
+  ok(kindMatch, 'api-client must export the ExposureEventKind union');
+  const kinds = (kindMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  const expected = [
+    'exception_proposed_from_exposure',
+    'exception_approved_from_exposure',
+    'exception_rejected_from_exposure',
+    'exception_revoked_from_exposure',
+  ];
+  ok(JSON.stringify([...kinds].sort()) === JSON.stringify([...expected].sort()),
+    `ExposureEventKind must be exactly ${JSON.stringify(expected)}, found ${JSON.stringify(kinds)}`);
+  ok(!/exception_expired_from_exposure/.test(api),
+    'the expired kind must not appear client-side until the reaper scope block');
+  // Outcome events arrive through the SAME GET surfaces — 6F adds no event
+  // mutation helper and no new client write path.
+  ok(!/createEvent|updateEvent|deleteEvent|recordEvent|recordOutcome/.test(api),
+    'api-client must still expose no event-mutation helper');
 });
 
 test('CEI read pages use only GET helpers + VaultAuthGate (PR-6B)', () => {

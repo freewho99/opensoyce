@@ -277,13 +277,15 @@ export default function VaultExposureDetail() {
         </pre>
       </section>
 
-      {/* PR-6D: CEI-native proposal history. Read-only audit of actions
-          taken FROM this exposure — recorded without the shared Vault
-          Timeline. Renders nothing when there are no events. */}
+      {/* PR-6D: CEI-native event history. Read-only audit of actions taken
+          FROM this exposure — recorded without the shared Vault Timeline.
+          PR-6F: now includes reviewer outcomes (approved / rejected /
+          revoked), so the section reads "Decision history" — the full loop,
+          not just the proposal. Renders nothing when there are no events. */}
       {events.length > 0 && (
         <section className="mb-8">
           <h2 className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2">
-            Proposal history
+            Decision history
           </h2>
           <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono">
             {events.map((ev) => (
