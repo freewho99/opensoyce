@@ -16,7 +16,92 @@ export type BlogPost = {
 };
 
 export const blogPosts: BlogPost[] = [
-  {
+    {
+        slug: 'on-the-record-no2-wopa-trust-as-the-product',
+        primaryProductAction: 'scanner',
+        title: "On the Record, No. 2 — WOPA: Trust as the Product",
+        subtitle: "Unscripted with a solo founder building financial tooling for people who don't sit at desks. The honesty is the story.",
+        category: "ON THE RECORD",
+        emoji: "🎙️",
+        readTime: '6 min',
+        date: 'JUNE 9, 2026',
+        featured: false,
+        heroImage: '/blog/on-the-record-no1-hero.svg',
+        metaDescription: "A candid interview with the founder of WOPA, the WhatsApp invoicing tool for UK tradespeople. We point our detection / evidence / policy / enforcement instinct at a person for once — and land on ALLOW, with exceptions.",
+        tags: ['on-the-record', 'founder-interview', 'trust-decisions', 'fintech', 'allow-with-exceptions', 'opensoyce'],
+    content: `Unscripted with a solo founder building financial tooling for people who don't sit at desks. Lightly edited for length. Part of the "On the Record" series — the conversations we usually have behind the gate, said out loud. Inline GATE SAYS blocks are our running reaction: the same detection / evidence / policy / enforcement instinct we point at packages, aimed at a person for once. The full verdict lands at the bottom.
+
+## First — what is WOPA, in one breath?
+
+WOPA turns a plain-English chat message — "Invoice Dan 450 for electrics" — into a structured invoice PDF, shows the tradesperson a preview, and sends it only after they reply YES. Then it chases payment on a 7/14/28-day cadence. The pitch on the landing page is honest about the ambition: invoice in 30 seconds from WhatsApp, no app, no spreadsheet. The audience is UK tradespeople — good at their trade, on site, on WhatsApp, allergic to desks. The founder's framing: the problem was never invoice creation. It's the roughly 50 billion pounds sitting in unpaid invoices across UK micro-businesses, and the social awkwardness of chasing someone you'll see on the next job.
+
+## Was "yes before anything sends" a deliberate trust decision, or did it just make sense technically?
+
+Deliberate. "Trust is the product," he says, and he means it structurally. Firing an invoice to a customer the tradesperson never saw would break the one thing that matters. It also kills the two errors that turn an invoice into an argument: wrong amount, wrong name.
+
+> GATE SAYS: This is the whole ballgame, and he knows it. "Reply YES to send" is the cheapest, most powerful control in the entire product — a human-in-the-loop gate that costs one word and prevents the two failure modes that cause payment disputes. We spend our days begging package ecosystems to put a confirmation step between merge and production. A solo founder shipped one between type and send on day one. Detection without enforcement is anxiety with a UI. This is enforcement done right.
+
+## What actually happens between the message and the PDF hitting the inbox?
+
+Message in via chat. Backend routes it. An LLM turns the plain English into structured fields — customer, amount, job, due date. Then application logic takes over: save the draft, generate a PDF preview, send it back for confirmation. Nothing reaches the customer yet. On YES: invoice email goes out with the PDF, state is stored, reminder flow is scheduled.
+
+> GATE SAYS: The single most important sentence in this whole interview is buried in this answer: the LLM interprets the message, but it does not decide to send invoices or move money — the backend owns those actions. That is the correct architecture, stated out loud. The model is a translator, not a treasurer. Everyone shipping "agentic" anything in 2026 should tattoo this on the inside of their eyelids.
+
+## The stack — what's between a WhatsApp message and a sent invoice?
+
+TypeScript/Node on Postgres. Telegram via Telegraf, WhatsApp via the official Cloud API. OpenRouter/Claude for parsing. Puppeteer for PDFs. Resend for email. pg-boss for reminder jobs. Stripe for billing. Optional Google Drive and HMRC VAT integrations.
+
+## Official Meta WhatsApp Cloud API, or something else? That answer matters more than it sounds.
+
+Official Cloud API — so Meta's platform rules apply, and the honest risk is platform dependency. If WhatsApp access is interrupted, that part of the product is too. The mitigation: keep core invoice and payment records outside the messaging channel, so WhatsApp is the interface, not the system of record.
+
+> GATE SAYS: "WhatsApp is the interface, not the system of record" is exactly the right framing for a business built on a platform that can change its terms on a Tuesday and ruin your week. He's renting the front door from Meta and he knows it. Sound on paper; the thing to watch is whether the records stay genuinely portable as the product grows, or whether WhatsApp quietly becomes load-bearing anyway.
+
+## Your own demo shows sort codes and account numbers going through chat. That's regulated financial data. Where does it live?
+
+Bank details are stored in the database because they have to appear on invoices. The provider gives encryption at rest, and access is restricted to the founding team. The honest gap, in his words: no dedicated application-level encryption or key-management layer yet. An interim beta position, not the long-term security model.
+
+> GATE SAYS: Here's where the comedy stops and we read the label. The WOPA homepage demo literally shows "12-34-56, 12345678" on screen — and the honest answer is managed encryption-at-rest, founder-only access, no field-level encryption or real key management yet. To be clear about what encryption-at-rest buys you: it protects against someone stealing the physical disk. It does NOT protect against a leaked credential, a compromised laptop, or a SQL bug — the threats that actually happen. He says this himself and calls it interim. We believe him. We also note that "interim" and "regulated UK financial data in live use" are two phrases that should not share a sentence for long. This is the exception, not the ALLOW.
+
+## What's doing the parsing — and what are the data-retention terms?
+
+A third-party LLM via OpenRouter, currently Claude-backed, extracting customer name, amount, due date, and job description. No payment credentials are sent to the model. But invoice text can still carry personal or business data, so the stated direction is to keep the LLM's role narrow, avoid unnecessary context, and move toward stronger retention guarantees.
+
+> GATE SAYS: Good instinct — credentials stay out of the model — but "invoice text can still contain personal data" is doing quiet heavy lifting. A job description plus a name plus an address is plenty of PII to care about under UK GDPR, and "we'll move toward stronger retention guarantees" is a roadmap, not a data-processing agreement. Narrow the context, yes. Also: read your sub-processor's retention terms before a customer's solicitor reads them for you.
+
+## Right now your auth is basically "WhatsApp number equals identity." SIM swap, stolen phone, shared device?
+
+He didn't flinch: the threat model is accurate. In the early version the chat account is effectively the identity — very low friction, but a compromised account or device is serious. Acceptable, in his view, only for a limited, monitored beta. The next step is step-up authentication on sensitive actions: exports, viewing wider customer history, changing bank details, sending high-value invoices. A PIN or similar second factor.
+
+> GATE SAYS: We respect that he didn't flinch, so we'll say it plainly: right now your phone IS your password, and SIM-swap fraud is not hypothetical — it's a Tuesday for the kind of criminal who likes invoices. "WhatsApp number equals identity" is a brilliant onboarding decision and a terrifying security decision wearing the same coat. The proposed fix — step-up auth on the dangerous verbs — is exactly the right list. Detection: clear. Policy: correct. Enforcement: not yet built. That's the exception.
+
+## WOPA sends reminder emails saying "you owe money." That's what scammers send. How does a customer know it's real?
+
+The reminder comes from a WOPA-managed sending address, not a spoof of the tradesperson. It references the specific invoice number, the job, the amount, and the business identity, and it never asks the customer to reply with bank details. The defence is specificity and consistency — the details match the work and the original invoice. He's candid that wording matters: firm enough to get paid, not shaped like a generic payment scam.
+
+> GATE SAYS: Underrated risk, well spotted. An automated email saying "you owe money, here are bank details" is, structurally, a phishing email that happens to be telling the truth. Specificity is the right defence, and sending from a managed domain beats spoofing the tradesperson. The thing nobody mentioned: SPF/DKIM/DMARC alignment on that sending domain is what actually keeps these out of spam AND stops an attacker impersonating WOPA. Lock Resend down. A customer can't verify trust they never received.
+
+## Last one, the honest one — the one security thing you know isn't solved yet, and when you're fixing it?
+
+Sensitive-data protection. Bank and customer data sit behind managed infrastructure controls today, but not the application-level encryption, key management, access auditing, and step-up authentication he wants before calling it production-grade. The fix isn't one feature — it's a security hardening phase before leaving beta. Until then, in his own words, WOPA should be treated as an early beta, not as finished financial infrastructure.
+
+> GATE SAYS: Read that last line again, because it's the rarest thing in this industry: a founder voluntarily writing his own warning label. "Treat WOPA as an early beta, not finished financial infrastructure" is a sentence most companies need a breach and a regulator to say out loud. He said it unprompted, in an interview, while asking people to sign up. That's the honesty this whole series exists to reward. It doesn't patch the gaps. But it tells you he knows where they are — the difference between a beta and a liability.
+
+## The Gate's Verdict
+
+Detection: five honest security gaps surfaced — bank details without field-level encryption, phone-as-identity auth, third-party LLM PII exposure, platform dependency, and reminder-email deliverability and spoofing risk.
+
+Evidence: self-reported by the founder, on the record, with no deflection. The architecture — confirm-before-send, LLM-interprets-but-doesn't-act, records kept outside the channel — is genuinely sound. The hardening is named but not yet shipped.
+
+Policy: a live beta moving regulated UK financial data is a real-world risk, not a thought experiment. But a founder who labels his own product "not finished financial infrastructure" is doing the one thing this series asks for.
+
+Enforcement → ALLOW, WITH EXCEPTIONS. We'd let WOPA through the gate the same way we let five advisories and an ALLOW coexist in No. 1: not because there's nothing to fix, but because the decision is explainable and the gaps are known, named, and on a roadmap. The conditions on that ALLOW: field-level encryption and real key management for bank details, step-up auth on the dangerous verbs, audit logging, and DMARC on the sending domain — all before WOPA stops calling itself a beta.
+
+The joke writes itself: an invoicing tool named WOPA that's refreshingly un-WOPA about its own security. But the serious version is the one worth printing. Most founders bury the gaps, then a breach exhumes them. This one handed us the shovel and pointed at where the bodies aren't buried yet. Ship the hardening phase, earn the "production-grade" line, and there's no exception left to write.
+
+We'll keep putting these on the record.`,
+  },
+{
             slug: 'github-setup-js-your-ai-ran-it',
             primaryProductAction: 'guard',
             title: "Your AI Opened the Repo. It Ran the Setup. You Were at Lunch.",
