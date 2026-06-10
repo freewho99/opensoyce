@@ -62,16 +62,21 @@ do-not-claim:
 
 _(none — PR-7D closed the packaging lane; further lanes are parked and each requires explicit user approval with a scope block before any implementation begins)_
 
-## Parked — Component Exposure Intelligence (post-7D lanes)
+## Parked — forward lanes (per [`post-7c-strategy-update.md`](./post-7c-strategy-update.md))
 
-| Artifact | Status | Phase | Purpose |
+| Artifact | Status | Lane | Purpose |
 |---|---:|---|---|
-| Expiry reaper + expired-outcome event | parked | 6G+ | active→expired transition; owns `exception_expired_from_exposure` + the actor-nullability decision |
-| Exposure status lifecycle | parked | 6G+ | Move `observed` → `resolved` etc.; today the enum exists but nothing transitions it |
-| CLI seen_again reporting | parked | 7E+ | Teach the CLI to report created vs seen-again from the 7C response body; possibly drop the redundant client-side scan |
-| GitHub-native judgment surfaces (annotations / PR comments / check runs) | parked | 7E+ | A NEW product surface, deliberately not "packaging"; needs its own scope block after the observation lane earns operational trust |
-| Versioned action releases (`@v1` tags) | parked | 7E+ | Release-management decision after the wrapper is dogfooded |
-| Other manifest ecosystems / SBOM / scanner ingest | parked | 7E+ | yarn / pnpm / poetry / uv, SBOM import, scanner output; 7A–7D are npm package metadata only |
+| SOC 2 evidence map / audit-readiness rider | parked | 14B | Map OpenSoyce records to SOC 2-style control/evidence questions WITHOUT claiming compliance; docs-first |
+| Scanner + vulnerability-intelligence observations | parked | 15A | OSV / GHSA / CVE / scanner findings / malicious-package signals / license risk ingested as OBSERVATIONS |
+| Remediation Question Loop | parked | 15B | Vulnerability observations → reviewable decisions (fix / defer / except / reject / owner-review / not-applicable); the canonical Phase 7 idea, human-decided |
+| Broader ecosystems / SBOM | parked | 15C | pnpm / yarn / poetry / uv, CycloneDX/SPDX, scanner/SBOM input formats |
+| Expiry reaper + expired-outcome event | parked | 16 | active→expired transition; owns `exception_expired_from_exposure` + the actor-nullability decision |
+| Exposure status lifecycle | parked | 16 | `observed` → `resolved`, stale exposure, overdue remediation, exception review pressure |
+| Enterprise evidence exports | parked | 17 | SOC 2 evidence bundle, auditor packet, customer-security-review packet, Vanta/Drata-style export |
+| Trust agent | parked | 18 | Drafts recommendations / evidence summaries / remediation options / review prompts; NEVER decides |
+| CLI seen_again reporting | parked | minor | Teach the CLI to report created vs seen-again from the 7C response body; possibly drop the redundant client-side scan |
+| GitHub-native judgment surfaces (annotations / PR comments / check runs) | parked | minor | A NEW product surface, deliberately not "packaging"; own scope block after the observation lane earns operational trust |
+| Versioned action releases (`@v1` tags) | parked | minor | Release-management decision after the wrapper is dogfooded |
 | Custom exposure type registry | parked | 6G+ | Workspace-defined types beyond the 6 native |
 | Dynamic JSON Schema validation | parked | 6G+ | `validation_schema` for custom exposure metadata |
 | Shared Vault Timeline integration | parked | 6G+ | The 6A deferral stands; CEI audits stay in CEI's own surface |
