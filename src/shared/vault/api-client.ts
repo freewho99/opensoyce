@@ -411,3 +411,35 @@ export async function listExposureEvents(slug: string, exposureId: string) {
     path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(exposureId)}/events`,
   });
 }
+
+// PR-6E: reviewer-side source-exposure context. Given a proposed exception,
+// list the CEI events that relate to it — each embeds the SOURCE exposure
+// (read-only). The exception review page uses this to show "this exception
+// came from this exposure".
+export interface SourceExposureContext {
+  exposure_id: string;
+  exposure_type: string | null;
+  subject_kind: string;
+  subject_name: string;
+  source_kind: string;
+  source_ref: string | null;
+  status: ExposureStatus;
+}
+export interface ExceptionSourceEvent {
+  event_id: string;
+  workspace_id: string;
+  exposure_id: string;
+  event_kind: 'exception_proposed_from_exposure';
+  related_exception_id: string | null;
+  actor: ExposureEventActor | null;
+  source_exposure: SourceExposureContext | null;
+  created_at: string;
+  visibility: 'private';
+}
+
+export async function listExceptionSourceEvents(slug: string, exceptionId: string) {
+  const params = new URLSearchParams({ related_exception_id: exceptionId });
+  return vaultRequest<{ events: ExceptionSourceEvent[]; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposure-events?${params.toString()}`,
+  });
+}

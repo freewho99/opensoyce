@@ -435,6 +435,50 @@ test('PR-6D adds no exposure mutation and no decision helpers on the detail page
     'the dashboard must not reference vault_timeline_events');
 });
 
+// ---------- PR-6E: reviewer-side source-exposure context ----------
+
+test('VaultExceptionDetail shows read-only source-exposure context (PR-6E)', () => {
+  const src = readNoComments('src/pages/vault/VaultExceptionDetail.tsx');
+  ok(/listExceptionSourceEvents/.test(src),
+    'exception detail must read source context via listExceptionSourceEvents');
+  ok(/Source exposure/.test(src),
+    'exception detail must render a "Source exposure" section');
+  ok(/source_exposure/.test(src), 'must surface the source exposure fields');
+  ok(/\/vault\/\$\{slug\}\/exposures\/\$\{sourceEvent\.source_exposure\.exposure_id\}/.test(src)
+    || /exposures\/\$\{sourceEvent\.source_exposure\.exposure_id\}/.test(src),
+    'must link back to the source exposure');
+});
+
+test('PR-6E source context is informational — no review-semantics change', () => {
+  const src = readNoComments('src/pages/vault/VaultExceptionDetail.tsx');
+  // The existing reviewer actions are unchanged: approve/reject/extend/revoke
+  // still present (this page legitimately decides). 6E adds a READ, not a
+  // new decision path. Assert the source-context block writes nothing.
+  ok(/listExceptionSourceEvents/.test(src), 'source context is a read');
+  // No mutation of exposures from the exception page.
+  for (const banned of ['createExposure', 'updateExposure', 'deleteExposure', 'recordProposalFromExposure']) {
+    ok(!src.includes(banned), `exception detail must not reference ${banned}`);
+  }
+  // No shared Vault Timeline reference.
+  ok(!/vault_timeline_events/.test(src),
+    'exception detail must not reference vault_timeline_events');
+});
+
+test('PR-6E source-context helper is GET-only — no new event kind / no event write', () => {
+  const api = read('src/shared/vault/api-client.ts');
+  ok(/export async function listExceptionSourceEvents/.test(api),
+    'api-client must export listExceptionSourceEvents');
+  const block = api.match(/export async function listExceptionSourceEvents[\s\S]*?\n}/);
+  ok(block, 'listExceptionSourceEvents block not found');
+  ok(/exposure-events\?/.test(block[0]) && /related_exception_id/.test(block[0]),
+    'must GET /exposure-events filtered by related_exception_id');
+  ok(!/method:\s*['"](POST|PATCH|DELETE)['"]/.test(block[0]),
+    'listExceptionSourceEvents must be a GET');
+  // No event-mutation helper exists anywhere in the api-client.
+  ok(!/createEvent|updateEvent|deleteEvent|recordEvent/.test(api),
+    'api-client must expose no event-mutation helper');
+});
+
 test('CEI read pages use only GET helpers + VaultAuthGate (PR-6B)', () => {
   for (const rel of ['src/pages/vault/VaultExposureList.tsx', 'src/pages/vault/VaultExposureDetail.tsx']) {
     const src = readNoComments(rel);

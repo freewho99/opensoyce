@@ -21,7 +21,7 @@ import {
   handleGetExposure,
   handleCreateExposure,
 } from './exposures.js';
-import { handleListExposureEvents } from './events.js';
+import { handleListExposureEvents, handleListEventsByException } from './events.js';
 
 export function registerCeiRoutes(app) {
   app.get(
@@ -50,5 +50,14 @@ export function registerCeiRoutes(app) {
     setPrivateCacheHeaders,
     requireVaultSession,
     handleListExposureEvents,
+  );
+  // PR-6E: reviewer-side source-exposure context. Lists CEI events related
+  // to an exception (filtered by ?related_exception_id=), each embedding its
+  // source exposure. Read-only; CEI-namespaced (not under /exceptions).
+  app.get(
+    '/api/vault/workspaces/:slug/exposure-events',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleListEventsByException,
   );
 }
