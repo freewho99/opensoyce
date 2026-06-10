@@ -393,6 +393,27 @@ test('PR-RUNTIME-1: every registered vault/CEI route has a production surface', 
     'the /api/vault family must be reachable via the vercel.json rewrite');
 });
 
+test('PR-INTEGRITY-1: the release integrity guard exists, is wired, and is read-only', () => {
+  const guardPath = path.join(root, 'scripts', 'check-release-integrity.mjs');
+  ok(fs.existsSync(guardPath), 'missing scripts/check-release-integrity.mjs');
+  const guard = fs.readFileSync(guardPath, 'utf8');
+  // All four layers present: static shape, schema presence, runtime
+  // presence, provider configuration.
+  for (const layer of ['layer0Static', 'layer1Schema', 'layer2Runtime', 'layer3Config']) {
+    ok(guard.includes(layer), `guard missing ${layer}`);
+  }
+  // Read-only by construction: the guard may probe, never write.
+  for (const banned of ['.insert(', '.update(', '.delete(', '.upsert(', '.rpc(']) {
+    ok(!guard.includes(banned), `guard contains ${banned} — the integrity guard must never write`);
+  }
+  // Target coherence: the schema layer must refuse env/target mismatches.
+  ok(/refusing to verify schema/.test(guard),
+    'guard must refuse to verify schema against a different environment than the live target');
+  // Wired as an npm script.
+  const pkg = JSON.parse(read('package.json'));
+  ok(pkg.scripts['check:release-integrity'], 'package.json missing check:release-integrity script');
+});
+
 test('PR-RUNTIME-1: the Vercel Hobby function cap is respected (max 12 functions)', () => {
   // The deployment platform rejects builds with >12 serverless functions on
   // the Hobby plan — discovered the hard way when api/vault.js was function

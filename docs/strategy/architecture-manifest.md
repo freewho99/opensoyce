@@ -53,7 +53,8 @@ do-not-claim:
 | CI-attributed ingestion | implemented | PR-7B | PR #101 / `107d941` | `--ci --ci-provider --repository --run-id [--job --sha --ref]` on the 7A path; `source_kind: ci`; run-specific source_ref; explicit flags only (no ambient env); attribution-only, no annotations / PR comments |
 | Server-side semantic dedupe | implemented | PR-7C | PR #102 / `7928c9f` | Migration 0021: `observation_identity` + `seen_count` + `latest_source_ref` + partial unique index; upsert-touch, not unique-reject; identity = fact (name/version/manager/manifest/class), never source_ref; repetition is quiet, provenance is not erased |
 | CI-native packaging (thin wrapper) | implemented | PR-7D | PR #103 / `66f9029` | `actions/ingest-dependencies` composite Action around the 7B CLI command; explicit inputs only (expressions live in the caller's workflow); session-token secret → 0600 session file, removed `if: always()`; no octokit / API / annotations / check runs / comments / policy |
-| Vault/CEI production runtime | implemented | PR-RUNTIME-1 | this PR | `api/vault.js` Vercel function mounting the existing `registerVaultRoutes` + `/api/vault/:path*` rewrite; fixes production finding #2 (route family was local-only since Phase 5); runtime-presence structural guard added |
+| Vault/CEI production runtime | implemented | PR-RUNTIME-1 | PR #105 / `bc24bb1` | `api/vault.js` Vercel function mounting the existing `registerVaultRoutes` + `/api/vault/:path*` rewrite; fixes production finding #2 (route family was local-only since Phase 5); runtime-presence + 12-function-cap structural guards; band-drop-tick folded (and its dead claim-submit import fixed) |
+| Release Integrity Guard | implemented | PR-INTEGRITY-1 | this PR | `scripts/check-release-integrity.mjs` — 4 layers (static shape / schema presence / runtime presence / provider config), read-only by construction, target-coherent, strict release-gate mode; see [`release-integrity-guard.md`](./release-integrity-guard.md) |
 
 **Phase 5 is CLOSED.** See [`phase-5-closeout.md`](./phase-5-closeout.md) for the full handoff record.
 
@@ -75,7 +76,7 @@ _(none — PR-7D closed the packaging lane; further lanes are parked and each re
 | Exposure status lifecycle | parked | 16 | `observed` → `resolved`, stale exposure, overdue remediation, exception review pressure |
 | Enterprise evidence exports | parked | 17 | SOC 2 evidence bundle, auditor packet, customer-security-review packet, Vanta/Drata-style export |
 | Trust agent | parked | 18 | Drafts recommendations / evidence summaries / remediation options / review prompts; NEVER decides |
-| Release Integrity Guard (live half) | parked | next | Two layers per [`pr-runtime-1-production-runtime.md`](./pr-runtime-1-production-runtime.md): schema presence + runtime presence, proven against PRODUCTION (health surface / release checklist), not just local structural tests. The structural half (route-family coverage guard) shipped with PR-RUNTIME-1 |
+| Vault health endpoint (`/api/vault/health`) | parked | optional | Would let the integrity guard verify schema presence without service credentials; new endpoint, own scope block |
 | CLI seen_again reporting | parked | minor | Teach the CLI to report created vs seen-again from the 7C response body; possibly drop the redundant client-side scan |
 | GitHub-native judgment surfaces (annotations / PR comments / check runs) | parked | minor | A NEW product surface, deliberately not "packaging"; own scope block after the observation lane earns operational trust |
 | Versioned action releases (`@v1` tags) | parked | minor | Release-management decision after the wrapper is dogfooded |
