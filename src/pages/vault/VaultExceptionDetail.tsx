@@ -19,6 +19,7 @@ import {
   type VaultException,
   type VaultWorkspaceDetail,
 } from '../../shared/vault/api-client';
+import VaultAuthGate from '../../components/VaultAuthGate';
 
 type Phase = 'loading' | 'unauth' | 'notfound' | 'ready' | 'error';
 
@@ -26,6 +27,34 @@ function defaultExtension(): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + 30);
   return d.toISOString();
+}
+
+// PR-DOGFOOD-1: <input type="datetime-local"> returns a naive local
+// calendar string like "2026-07-09T14:00". The previous handler
+// appended ":00.000Z" — claiming UTC — which silently shifted the
+// reviewer's intent by their timezone offset. The Date constructor
+// interprets a naive ISO string as LOCAL time, so wrapping with
+// new Date(localStr).toISOString() converts to true UTC correctly.
+function localInputToUtcIso(localValue: string): string {
+  if (!localValue) return defaultExtension();
+  const d = new Date(localValue);
+  if (Number.isNaN(d.getTime())) return defaultExtension();
+  return d.toISOString();
+}
+
+// Inverse: turn the stored UTC ISO into a "datetime-local"-friendly
+// string in the reviewer's LOCAL timezone for display in the input.
+// The native input expects "YYYY-MM-DDTHH:MM" without offset.
+function utcIsoToLocalInput(utcIso: string): string {
+  const d = new Date(utcIso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
 export default function VaultExceptionDetail() {
@@ -95,7 +124,7 @@ export default function VaultExceptionDetail() {
   }
 
   if (phase === 'loading') return <p className="text-sm font-mono text-slate-400">Loading...</p>;
-  if (phase === 'unauth') return <p className="text-sm font-mono text-slate-300">Sign in to view this exception.</p>;
+  if (phase === 'unauth') return <VaultAuthGate message="Sign in to view this exception. You'll land back here." />;
   if (phase === 'notfound') {
     return (
       <div className="border border-slate-700 bg-slate-800/40 p-5 max-w-xl">
@@ -219,8 +248,8 @@ export default function VaultExceptionDetail() {
                 <div className="flex items-start gap-2">
                   <input
                     type="datetime-local"
-                    value={extendIso.slice(0, 16)}
-                    onChange={(e) => setExtendIso(`${e.target.value}:00.000Z`)}
+                    value={utcIsoToLocalInput(extendIso)}
+                    onChange={(e) => setExtendIso(localInputToUtcIso(e.target.value))}
                     className="bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
                   />
                   <button

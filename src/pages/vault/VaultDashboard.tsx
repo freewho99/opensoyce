@@ -7,6 +7,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchVaultMe, isOk, type VaultUser, type VaultWorkspaceSummary } from '../../shared/vault/api-client';
+import { startVaultOAuth } from '../../shared/vault/oauth-start';
 
 type Phase = 'loading' | 'unauth' | 'ready' | 'error';
 
@@ -38,8 +39,17 @@ export default function VaultDashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  function handleLoginRedirect() {
-    window.location.href = `/api/vault/auth/login?redirect_to=${encodeURIComponent('/vault')}`;
+  const [oauthError, setOauthError] = React.useState('');
+
+  async function handleLoginRedirect() {
+    // PR-DOGFOOD-1 fix: actually start GitHub OAuth. Previously this
+    // navigated to /api/vault/auth/login directly — the callback handler,
+    // which returned 400 "missing code" because GitHub wasn't in the loop.
+    setOauthError('');
+    const result = await startVaultOAuth('/vault');
+    if (result) {
+      setOauthError(result.message);
+    }
   }
 
   if (phase === 'loading') {
@@ -53,6 +63,9 @@ export default function VaultDashboard() {
           The Vault Dashboard is private. Sign in once to view the workspaces you
           belong to.
         </p>
+        {oauthError && (
+          <p className="text-xs font-mono text-red-300 mb-3" role="alert">{oauthError}</p>
+        )}
         <button
           type="button"
           onClick={handleLoginRedirect}

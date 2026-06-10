@@ -168,6 +168,33 @@ test('vault-api.ts is the only module that sets a Cookie header', () => {
   }
 });
 
+// ---------- PR-DOGFOOD-1 dogfood fixes ----------
+
+test('exception list pages through API on --subject without --limit (PR-DOGFOOD-1)', () => {
+  // Previously the --subject filter ran client-side over a truncated
+  // first page (default 50). Exception #51+ was invisible. The fix
+  // pages with offset until either match is found OR the hard scan
+  // cap is hit, AND surfaces a truncation warning when capped.
+  const src = read('packages/cli/src/commands/exception/list.ts');
+  ok(/SUBJECT_SCAN_PAGE_SIZE/.test(src) || /offset:\s*0/.test(src),
+    'list.ts must page through the workspace via offset when --subject is set');
+  ok(/MAX_SCAN_RECORDS/.test(src),
+    'list.ts must enforce a hard scan cap to prevent runaway pagination');
+  ok(/truncated/.test(src),
+    'list.ts must surface a "truncated" flag/warning when the scan cap is hit');
+});
+
+test('login.ts emits a heartbeat while polling (PR-DOGFOOD-1)', () => {
+  // The 10-minute device-code pairing wait used to look like a frozen
+  // terminal. --quiet still suppresses the heartbeat. --json never
+  // includes it.
+  const src = read('packages/cli/src/commands/login.ts');
+  ok(/lastHeartbeatLine|heartbeat|HEARTBEAT/i.test(src),
+    'login.ts must track a heartbeat cadence while polling');
+  ok(/!args\.quiet/.test(src) && /!args\.json/.test(src),
+    'login.ts heartbeat must be gated on !args.quiet && !args.json');
+});
+
 // ---------- Group 5/6: exception subcommands present; four-eye verbs absent
 
 test('exception list / propose / revoke are present', () => {

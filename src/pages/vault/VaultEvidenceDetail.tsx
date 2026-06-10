@@ -10,6 +10,23 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getEvidence, isOk, type VaultEvidence } from '../../shared/vault/api-client';
+import VaultAuthGate from '../../components/VaultAuthGate';
+
+// PR-DOGFOOD-1: if the body looks like a JSON object/array, pretty-print
+// it inside a <pre> block so multi-line / structured payloads stay
+// readable. Otherwise treat as plain text with preserved newlines.
+function formatEvidenceBody(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) return body;
+  if (trimmed[0] === '{' || trimmed[0] === '[') {
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      // fall through to plain text
+    }
+  }
+  return body;
+}
 
 type Phase = 'loading' | 'unauth' | 'notfound' | 'ready' | 'error';
 
@@ -41,7 +58,7 @@ export default function VaultEvidenceDetail() {
   }, [slug, id]);
 
   if (phase === 'loading') return <p className="text-sm font-mono text-slate-400">Loading...</p>;
-  if (phase === 'unauth') return <p className="text-sm font-mono text-slate-300">Sign in to view this evidence.</p>;
+  if (phase === 'unauth') return <VaultAuthGate message="Sign in to view this evidence. You'll land back here." />;
   if (phase === 'notfound') {
     return (
       <div className="border border-slate-700 bg-slate-800/40 p-5 max-w-xl">
@@ -86,9 +103,9 @@ export default function VaultEvidenceDetail() {
               : 'promote your role to view'})
           </p>
         ) : (
-          <p className="font-mono text-sm text-slate-100 whitespace-pre-wrap border border-slate-800 p-3">
-            {evidence.body || '—'}
-          </p>
+          <pre className="font-mono text-sm text-slate-100 border border-slate-800 p-3 overflow-x-auto whitespace-pre">
+            {evidence.body ? formatEvidenceBody(evidence.body) : '—'}
+          </pre>
         )}
       </section>
 

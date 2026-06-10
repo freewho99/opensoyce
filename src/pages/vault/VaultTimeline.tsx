@@ -9,6 +9,7 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { listTimeline, isOk, type VaultTimelineEvent } from '../../shared/vault/api-client';
+import VaultAuthGate from '../../components/VaultAuthGate';
 
 type Phase = 'loading' | 'unauth' | 'notfound' | 'ready' | 'error';
 
@@ -44,6 +45,9 @@ export default function VaultTimeline() {
     let cancelled = false;
     if (!slug) return;
     setPhase('loading');
+    // PR-DOGFOOD-1: clear any stale error from a previous failed
+    // loadMore before the initial fetch.
+    setError('');
     (async () => {
       const res = await listTimeline(slug, { limit: 50 });
       if (cancelled) return;
@@ -64,6 +68,11 @@ export default function VaultTimeline() {
   async function loadMore() {
     if (!nextCursor) return;
     setLoadingMore(true);
+    // PR-DOGFOOD-1: clear the sticky error from a prior failure when
+    // the user explicitly retries — otherwise a brief network blip
+    // poisons the banner forever even after subsequent successful
+    // pagination.
+    setError('');
     const res = await listTimeline(slug, { limit: 50, cursor: nextCursor });
     setLoadingMore(false);
     if (!isOk(res)) {
@@ -75,7 +84,7 @@ export default function VaultTimeline() {
   }
 
   if (phase === 'loading') return <p className="text-sm font-mono text-slate-400">Loading...</p>;
-  if (phase === 'unauth') return <p className="text-sm font-mono text-slate-300">Sign in to view the Vault Timeline.</p>;
+  if (phase === 'unauth') return <VaultAuthGate message="Sign in to view the Vault Timeline. You'll land back here." />;
   if (phase === 'notfound') return <p className="text-sm font-mono text-slate-300">Workspace not found.</p>;
   if (phase === 'error') return <p className="text-sm font-mono text-red-300" role="alert">{error}</p>;
 
