@@ -1,6 +1,6 @@
-# Phase 7A/7B — Dependency-Exposure Ingestion (CLI + CI attribution)
+# Phase 7A/7B/7C — Dependency-Exposure Ingestion (CLI + CI attribution + server-side dedupe)
 
-Status: scope record for PR-7A and PR-7B
+Status: scope record for PR-7A, PR-7B, and PR-7C
 Scope: CLI/CI dependency-exposure ingestion ONLY. Create exposure records. No exceptions. No proposals. No policy. No lifecycle. No custom types. No claims expansion.
 
 ## Product thesis
@@ -57,9 +57,29 @@ CEI records the relationship.
 - **Dedupe semantics in CI mode**: the key is still package + version + source_ref, and the CI source_ref is run-specific BY DESIGN — a retry of the same run dedupes; a new run is a new observation. Aggregating repeat observations across runs (`last_seen_at` upsert) is the deferred server-side dedupe lane below.
 - **Zero server changes** (again): `source_kind: 'ci'` was already in the PR-6A `SOURCE_KINDS` allowlist.
 
+## PR-7C — server-side semantic dedupe (upsert-touch)
+
+7A/7B proved observations can enter CEI safely. The danger after that is volume noise: repeated CI observations of the same dependency fact growing fast and weakening reviewer trust. 7C makes repeated facts quiet without erasing provenance.
+
+```txt
+Observation is not judgment.
+Repetition is not new evidence.
+Provenance must not be erased.
+```
+
+The shape: **one stable exposure fact + repeat-observation metadata + latest/bounded provenance.** This is upsert-touch, NOT unique-reject — a unique-reject would keep the table clean but hide the fact that CI saw the same dependency again, erasing provenance.
+
+- **Migration 0021** adds three columns to `component_exposures` — `observation_identity` (nullable), `seen_count` (default 1, CHECK >= 1), `latest_source_ref` — and a **partial unique index** on `(workspace_id, observation_identity) where observation_identity is not null`. Nothing else changes; no lifecycle, no status touch, no other table referenced.
+- **The semantic identity is the dependency FACT, not the run**: `subject_name + version + package_manager + manifest_kind + dependency_class`, workspace-scoped. `source_ref` is DELIBERATELY absent from the key — it is provenance, not identity. That is what makes cross-run CI aggregation work: a new run re-observing the same fact touches the same row.
+- **Touch semantics**: an equivalent observation updates ONLY `seen_count` (+1), `last_seen_at` (now), and `latest_source_ref` (the repeat sighting's provenance). The original row keeps its first `source_ref`, `source_kind`, `first_seen_at`, and `created_at` — the first observation stays historically understandable. The incoming `status` (if any) is ignored on the touch path: repetition never transitions anything.
+- **Race safety**: the partial unique index is the transactional guard. Two concurrent ingests of the same fact race; one inserts, the other hits `23505` and falls back to the touch path — the repeat sighting is recorded, not dropped. The `seen_count` increment itself is read-then-write and may undercount under same-instant concurrency by design: it is bounded repeat metadata, not an audit ledger.
+- **Identity is opt-in by completeness**: only `dependency-exposure` bodies carrying `metadata.version`, `trust_boundary.package_manager`, and `trust_boundary.manifest_kind` get an identity (the 7A/7B CLI always sends all three). Other native types and sparse manual API creates keep NULL identity and behave exactly as 6A — the partial index ignores them.
+- **HTTP contract pinned at 201 for both paths.** The 7A/7B CLI accepts only 201, and the CLI lane is outside the 7C permitted files. The body carries the truth: `seen_again: true|false`, plus `seen_count` and `latest_source_ref` on every shaped row. Known bounded inaccuracy: the CLI's text output says "created" for absorbed repeats until the CLI lane is next open; the JSON body it prints is accurate.
+- Local CLI and CI-attributed ingestion hit the same server path, so both get identical dedupe semantics with zero CLI changes.
+
 ## Deferred (documented, not forgotten)
 
-- **Server-side uniqueness constraint** on `(workspace_id, exposure_type, subject_name, metadata.version, source_ref)` or a content hash. The client-side guard makes re-runs cheap, not transactional — two concurrent ingests can still double-create. Making dedupe transactional needs a schema decision (unique index vs upsert-touch of `last_seen_at`) and belongs to its own scope block. In CI mode this is also the lane that would aggregate per-run observations instead of accumulating one record set per run.
+- **CLI seen_again reporting**: teach `ingest-dependencies` to read `seen_again` from the response and report created vs seen-again counts honestly (and possibly drop the now-redundant client-side dedupe scan). Needs the CLI lane reopened.
 - **CI-native packaging** (a published GitHub Action wrapper, annotations, PR comments, check runs): all explicitly out of scope; the CI story today is "run the CLI in a workflow step with attribution flags."
 - Other manifest ecosystems (yarn, pnpm, poetry, uv), SBOM import, scanner output, and the other five native exposure types: all parked.
 
