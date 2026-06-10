@@ -515,6 +515,36 @@ test('PR-6F api-client kind union matches the server allowlist (no expired until
     'api-client must still expose no event-mutation helper');
 });
 
+// ---------- PR-15A: vulnerability-intelligence context on the dashboard ----
+
+test('PR-15A intel section is context-only on the exposure detail', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  ok(/listExposureVulnIntel/.test(src), 'detail page must read intel via listExposureVulnIntel');
+  ok(/refreshExposureVulnIntel/.test(src), 'detail page must refresh intel via the dedicated helper');
+  ok(/Vulnerability intelligence/.test(src), 'detail page must render a "Vulnerability intelligence" section');
+  ok(/does not decide the answer/.test(src),
+    'the section must carry the context-only doctrine copy');
+  // Intelligence never feeds a decision from this page: the decision verbs
+  // stay banned (re-asserted), and severity is display-only — the decision
+  // vocabulary may not appear in the intel section logic.
+  for (const banned of ['approveException', 'rejectException', 'revokeException', 'extendException', 'updateExposure']) {
+    ok(!src.includes(banned), `detail page must not reference ${banned}`);
+  }
+});
+
+test('PR-15A api-client intel helpers: private read + intel-scoped refresh only', () => {
+  const api = read('src/shared/vault/api-client.ts');
+  ok(/export interface ExposureVulnIntel/.test(api), 'api-client must export the ExposureVulnIntel type');
+  const listBlock = api.match(/export async function listExposureVulnIntel[\s\S]*?\n}/);
+  ok(listBlock, 'listExposureVulnIntel not found');
+  ok(!/method:\s*['"](POST|PATCH|DELETE)['"]/.test(listBlock[0]), 'list helper must be a GET');
+  const refreshBlock = api.match(/export async function refreshExposureVulnIntel[\s\S]*?\n}/);
+  ok(refreshBlock, 'refreshExposureVulnIntel not found');
+  ok(/vuln-intel\/refresh/.test(refreshBlock[0]) && /method:\s*['"]POST['"]/.test(refreshBlock[0]),
+    'refresh helper must POST to the vuln-intel/refresh sub-path only');
+  ok(!/exceptions/.test(refreshBlock[0]), 'refresh helper must never touch the exception lane');
+});
+
 test('CEI read pages use only GET helpers + VaultAuthGate (PR-6B)', () => {
   for (const rel of ['src/pages/vault/VaultExposureList.tsx', 'src/pages/vault/VaultExposureDetail.tsx']) {
     const src = readNoComments(rel);

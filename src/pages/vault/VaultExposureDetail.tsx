@@ -25,9 +25,12 @@ import {
   getExposure,
   proposeException,
   listExposureEvents,
+  listExposureVulnIntel,
+  refreshExposureVulnIntel,
   isOk,
   type ComponentExposure,
   type ComponentExposureEvent,
+  type ExposureVulnIntel,
   type ProposeExceptionBody,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
@@ -95,11 +98,36 @@ export default function VaultExposureDetail() {
   // PR-6D proposal-history (CEI-native audit). Read-only.
   const [events, setEvents] = React.useState<ComponentExposureEvent[]>([]);
 
+  // PR-15A vulnerability-intelligence context. Reading and refreshing it
+  // never mutates the exposure — intelligence is context, not judgment.
+  const [vulnIntel, setVulnIntel] = React.useState<ExposureVulnIntel[]>([]);
+  const [intelPending, setIntelPending] = React.useState(false);
+  const [intelError, setIntelError] = React.useState('');
+  const [intelChecked, setIntelChecked] = React.useState(false);
+
   const refreshEvents = React.useCallback(async () => {
     if (!slug || !id) return;
     const res = await listExposureEvents(slug, id);
     if (isOk(res)) setEvents(res.data.events);
   }, [slug, id]);
+
+  // PR-15A: best-effort context read; a failure never blocks the exposure
+  // view (same contract as the Decision history read).
+  const loadVulnIntel = React.useCallback(async () => {
+    if (!slug || !id) return;
+    const res = await listExposureVulnIntel(slug, id);
+    if (isOk(res)) setVulnIntel(res.data.intel);
+  }, [slug, id]);
+
+  async function handleRefreshIntel() {
+    setIntelError('');
+    setIntelPending(true);
+    const res = await refreshExposureVulnIntel(slug, id);
+    setIntelPending(false);
+    setIntelChecked(true);
+    if (!isOk(res)) { setIntelError(res.message); return; }
+    setVulnIntel(res.data.intel);
+  }
 
   React.useEffect(() => {
     let cancelled = false;
@@ -113,6 +141,7 @@ export default function VaultExposureDetail() {
         // Proposal history is a separate read; a failure here never blocks
         // the exposure view.
         refreshEvents();
+        loadVulnIntel();
         return;
       }
       if (res.status === 401) { setPhase('unauth'); return; }
@@ -121,7 +150,7 @@ export default function VaultExposureDetail() {
       setPhase('error');
     })();
     return () => { cancelled = true; };
-  }, [slug, id, refreshEvents]);
+  }, [slug, id, refreshEvents, loadVulnIntel]);
 
   function openReview(ex: ComponentExposure) {
     // Pre-fill the proposal from the exposure. The user reviews + edits
@@ -276,6 +305,61 @@ export default function VaultExposureDetail() {
           {formatJson(exposure.metadata)}
         </pre>
       </section>
+
+      {/* PR-15A: vulnerability-intelligence context. Intelligence is
+          observation, not judgment — it opens a review question; it does
+          not decide the answer. Refreshing asks the source (OSV) what it
+          currently asserts about this package@version and records/touches
+          context rows. The exposure itself is never mutated; no exception,
+          proposal, or outcome is ever created from here. */}
+      {exposure.exposure_type === 'dependency-exposure' && (
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2">
+            Vulnerability intelligence
+          </h2>
+          <p className="text-xs font-mono text-slate-400 mb-3">
+            [PRIVATE] Intelligence is context only — it opens a review question;
+            it does not decide the answer.
+          </p>
+          {intelError && <p className="mb-2 text-xs font-mono text-red-300" role="alert">{intelError}</p>}
+          {vulnIntel.length > 0 && (
+            <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono mb-3">
+              {vulnIntel.map((iv) => (
+                <li key={iv.vuln_intel_id} className="px-3 py-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  {iv.source_ref ? (
+                    <a href={iv.source_ref} target="_blank" rel="noreferrer noopener" className="text-slate-100 underline hover:text-white shrink-0">
+                      {iv.vuln_id}
+                    </a>
+                  ) : (
+                    <span className="text-slate-100 shrink-0">{iv.vuln_id}</span>
+                  )}
+                  <span className="text-slate-400 shrink-0">{iv.severity || 'severity unrated'}</span>
+                  <span className="text-slate-500 shrink-0">{iv.source} · {iv.match_basis}</span>
+                  <span className="text-slate-500 shrink-0">
+                    seen ×{iv.seen_count} · first {iv.first_seen_at.slice(0, 10)} · last {iv.last_seen_at.slice(0, 10)}
+                  </span>
+                  {typeof iv.metadata?.summary === 'string' && iv.metadata.summary && (
+                    <span className="text-slate-400 basis-full">{iv.metadata.summary}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {vulnIntel.length === 0 && intelChecked && !intelError && (
+            <p className="text-xs font-mono text-slate-500 mb-3">
+              No known intelligence reported by the source for this package@version.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={handleRefreshIntel}
+            disabled={intelPending}
+            className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {intelPending ? 'checking…' : vulnIntel.length > 0 ? 'Re-check vulnerability intelligence' : 'Check vulnerability intelligence'}
+          </button>
+        </section>
+      )}
 
       {/* PR-6D: CEI-native event history. Read-only audit of actions taken
           FROM this exposure — recorded without the shared Vault Timeline.

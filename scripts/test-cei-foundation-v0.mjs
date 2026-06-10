@@ -28,6 +28,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// PR-15A functional surface: the OSV mapper is pure and exported precisely
+// so this suite can prove determinism and boundedness without network.
+import { mapOsvResponseToIntelRows, MAX_VULNS_PER_REFRESH } from '../src/server/cei/vuln-intel.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -82,6 +85,7 @@ const EXPOSURES_MIGRATION = 'supabase/migrations/0018_component_exposures.sql';
 const EVENTS_MIGRATION = 'supabase/migrations/0019_component_exposure_events.sql';
 const OUTCOMES_MIGRATION = 'supabase/migrations/0020_cei_outcome_event_kinds.sql';
 const DEDUPE_MIGRATION = 'supabase/migrations/0021_cei_observation_dedupe.sql';
+const VULN_INTEL_MIGRATION = 'supabase/migrations/0022_cei_vulnerability_intelligence.sql';
 
 // PR-6F: the full event-kind allowlist — the 6D proposal kind plus one kind
 // per reviewer outcome that exists as a REAL transition in the application.
@@ -653,6 +657,129 @@ test('dedupe keeps the HTTP contract and tells the truth in the body (PR-7C)', (
   ok(!/vault_exceptions/.test(src), 'exposures.js must not touch vault_exceptions');
   ok(!/recordProposalFromExposure|recordOutcomeFromExposure/.test(src),
     'dedupe must not record proposal/outcome events');
+});
+
+// ---------- PR-15A: vulnerability-intelligence observations ----------
+//
+// Vulnerability intelligence is observation. Observation is not judgment.
+// A scanner finding is not a trust decision. A vulnerability match opens a
+// review question; it does not decide the answer.
+
+test('0022 vuln-intel table is context-only: shape + firewall (PR-15A)', () => {
+  const sql = readSqlNoComments(VULN_INTEL_MIGRATION);
+  ok(/create table if not exists public\.component_exposure_vulnerabilities/.test(sql),
+    '0022 must create component_exposure_vulnerabilities');
+  ok(/workspace_id\s+uuid\s+not null[\s\S]*?references public\.vault_workspaces/.test(sql),
+    'workspace_id must be NOT NULL FK (isolation)');
+  ok(/exposure_id\s+uuid\s+not null[\s\S]*?references public\.component_exposures/.test(sql),
+    'exposure_id must be NOT NULL — no exposure, no record (unmatched intel cannot fabricate inventory)');
+  ok(/source in \('osv', 'ots', 'scanner'\)/.test(sql), 'source must carry the 3-value allowlist');
+  ok(/match_basis in \('osv-version-query', 'exact-version', 'semver-range'\)/.test(sql),
+    'match_basis must carry the 3-value allowlist');
+  ok(/create unique index[\s\S]*?\(workspace_id, exposure_id, vuln_id, source\)/.test(sql),
+    'the dedupe identity index must be (workspace, exposure, vuln_id, source)');
+  ok(/seen_count\s+integer\s+not null\s+default 1\s+check \(seen_count >= 1\)/.test(sql),
+    'seen_count must default 1 with a >= 1 CHECK');
+  ok(/alter table public\.component_exposure_vulnerabilities enable row level security/.test(sql),
+    'intel table must enable RLS');
+  // The firewall: context has NO lifecycle and never reaches the decision
+  // or timeline tables.
+  ok(!/\bstatus\b/.test(sql), 'intel table must have NO status column (context has no lifecycle)');
+  ok(!/vault_exceptions/.test(sql), '0022 must not reference vault_exceptions');
+  ok(!/vault_timeline_events/.test(sql), '0022 must not reference vault_timeline_events');
+  ok(!/proof_anchors/.test(sql), 'intel is not evidence — no proof_anchors');
+  ok(!/component_exposure_types/.test(sql),
+    '0022 must not touch the native type catalog (Option B: context table, not a new type)');
+});
+
+test('PR-15A deliberately adds NO new exposure type — the native catalog stays at six', () => {
+  const domain = read('src/server/cei/domain.js');
+  const listMatch = domain.match(/NATIVE_EXPOSURE_TYPES\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\)/);
+  const slugs = (listMatch[1].match(/'[a-z0-9-]+'/g) || []);
+  ok(slugs.length === 6, `native catalog must still have exactly 6 types, found ${slugs.length}`);
+  ok(!/vulnerability/.test(stripJsComments(domain)),
+    'domain.js must not define a vulnerability exposure type');
+});
+
+test('vuln-intel module is context-only — it can never decide anything (PR-15A)', () => {
+  const src = stripJsComments(read('src/server/cei/vuln-intel.js'));
+  // It never mutates the exposure, never reaches the exception lane, never
+  // records CEI proposal/outcome events.
+  ok(!/from\(['"]component_exposures['"]\)[\s\S]{0,120}\.(update|delete|upsert|insert)\(/.test(src),
+    'vuln-intel must never write component_exposures');
+  ok(!/vault_exceptions/.test(src), 'vuln-intel must never touch vault_exceptions');
+  ok(!/component_exposure_events/.test(src), 'vuln-intel must never write CEI decision events');
+  ok(!/recordProposalFromExposure|recordOutcomeFromExposure/.test(src),
+    'vuln-intel must never record proposals or outcomes');
+  // No severity-to-decision mapping: the decision vocabulary may not appear.
+  ok(!/'BLOCK'|'WARN'|'ALLOW'/.test(src),
+    'vuln-intel must not reference the decision vocabulary — severity is context, never policy');
+  // The touch path refreshes ONLY freshness fields; first provenance stays.
+  const touch = src.match(/async function touchIntelRow[\s\S]*?\n}/);
+  ok(touch, 'touchIntelRow not found');
+  const payload = touch[0].match(/\.update\(\{([\s\S]*?)\}\)/);
+  ok(payload, 'touch must issue an update');
+  for (const allowed of ['seen_count', 'last_seen_at', 'severity', 'affected_range', 'metadata']) {
+    ok(payload[1].includes(allowed), `touch must refresh ${allowed}`);
+  }
+  for (const banned of [/first_seen_at/, /created_at/, /source_ref\s*:/, /vuln_id\s*:/, /\bstatus\b/]) {
+    ok(!banned.test(payload[1]), `touch payload must not contain ${banned} — first provenance is preserved`);
+  }
+  // Refresh refuses non-dependency / version-less exposures honestly.
+  ok(/dependency-exposure/.test(src) && /observed version/.test(src),
+    'refresh must refuse exposures that have nothing for the source to assert against');
+  // Both handlers are workspace-scoped.
+  const calls = src.match(/resolveWorkspaceForMember/g) || [];
+  ok(calls.length >= 2, 'both vuln-intel handlers must resolve workspace membership');
+});
+
+test('OSV mapper is deterministic, bounded, and source-asserted (PR-15A)', () => {
+  const ctx = {
+    workspaceId: 'w-1', exposureId: 'e-1',
+    packageName: 'express', observedVersion: '4.21.2', ecosystem: 'npm',
+  };
+  const fixture = {
+    vulns: [
+      {
+        id: 'GHSA-xxxx-yyyy-zzzz',
+        summary: 'Test advisory',
+        aliases: ['CVE-2024-0001'],
+        database_specific: { severity: 'HIGH' },
+        affected: [{ package: { name: 'express' }, ranges: [{ events: [{ introduced: '0' }, { fixed: '4.22.0' }] }] }],
+      },
+      { id: 'GHSA-xxxx-yyyy-zzzz' }, // duplicate id — must collapse
+      { notAVuln: true },            // malformed — must be skipped
+      { id: 'OSV-2024-123' },
+    ],
+  };
+  const a = mapOsvResponseToIntelRows(fixture, ctx);
+  const b = mapOsvResponseToIntelRows(fixture, ctx);
+  ok(JSON.stringify(a) === JSON.stringify(b), 'mapper must be deterministic (same input, same output)');
+  ok(a.rows.length === 2, `duplicates and malformed entries must collapse (found ${a.rows.length})`);
+  const row = a.rows[0];
+  ok(row.vuln_id === 'GHSA-xxxx-yyyy-zzzz' && row.source === 'osv' && row.match_basis === 'osv-version-query',
+    'rows must carry the source-asserted match basis');
+  ok(row.severity === 'high', 'severity must normalize as-provided (HIGH -> high)');
+  ok(/osv\.dev\/vulnerability\/GHSA/.test(row.source_ref), 'source_ref must point at the advisory');
+  ok(/introduced 0, fixed 4\.22\.0/.test(row.affected_range), 'affected_range must capture the match basis');
+  // Empty response writes nothing — no false records.
+  ok(mapOsvResponseToIntelRows({ vulns: [] }, ctx).rows.length === 0, 'empty source response must map to zero rows');
+  ok(mapOsvResponseToIntelRows({}, ctx).rows.length === 0, 'missing vulns must map to zero rows');
+  // Bounded: more advisories than the cap truncates and says so.
+  const big = { vulns: Array.from({ length: MAX_VULNS_PER_REFRESH + 10 }, (_, i) => ({ id: `OSV-${i}` })) };
+  const capped = mapOsvResponseToIntelRows(big, ctx);
+  ok(capped.rows.length === MAX_VULNS_PER_REFRESH && capped.truncated === true,
+    'mapper must cap rows and report truncation');
+});
+
+test('PR-15A routes: GET read + CSRF-fronted POST refresh, private surface only', () => {
+  const routes = read('src/server/cei/routes.js');
+  ok(/\/api\/vault\/workspaces\/:slug\/exposures\/:id\/vuln-intel'/.test(routes),
+    'GET vuln-intel route must be registered');
+  const refreshBlock = routes.match(/app\.post\(\s*'\/api\/vault\/workspaces\/:slug\/exposures\/:id\/vuln-intel\/refresh'[\s\S]*?\);/);
+  ok(refreshBlock, 'POST vuln-intel/refresh route must be registered');
+  ok(/requireVaultSession/.test(refreshBlock[0]) && /requireCsrf/.test(refreshBlock[0]),
+    'refresh must require session + CSRF');
 });
 
 // ---------- wiring ----------

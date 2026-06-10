@@ -22,6 +22,10 @@ import {
   handleCreateExposure,
 } from './exposures.js';
 import { handleListExposureEvents, handleListEventsByException } from './events.js';
+// PR-15A: vulnerability-intelligence observations — context only. The
+// refresh action records what a source asserts; it never mutates the
+// exposure and never creates exceptions, proposals, or outcomes.
+import { handleListVulnIntel, handleRefreshVulnIntel } from './vuln-intel.js';
 
 export function registerCeiRoutes(app) {
   app.get(
@@ -59,5 +63,22 @@ export function registerCeiRoutes(app) {
     setPrivateCacheHeaders,
     requireVaultSession,
     handleListEventsByException,
+  );
+  // PR-15A: vulnerability-intelligence context for one dependency exposure.
+  // GET reads the recorded context; POST refresh is a member-level
+  // OBSERVATION action (CSRF-fronted) that asks the source and records or
+  // touches context rows. Neither route can decide anything.
+  app.get(
+    '/api/vault/workspaces/:slug/exposures/:id/vuln-intel',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleListVulnIntel,
+  );
+  app.post(
+    '/api/vault/workspaces/:slug/exposures/:id/vuln-intel/refresh',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    requireCsrf,
+    handleRefreshVulnIntel,
   );
 }

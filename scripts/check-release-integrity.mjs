@@ -111,6 +111,7 @@ const REQUIRED_TABLES = [
   'vault_sessions', 'vault_evidence', 'vault_exceptions',
   'vault_timeline_events', 'vault_idempotency_keys', 'vault_device_codes',
   'component_exposure_types', 'component_exposures', 'component_exposure_events',
+  'component_exposure_vulnerabilities',
 ];
 
 async function layer1Schema() {
