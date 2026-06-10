@@ -41,7 +41,8 @@
     "test:vault-dashboard-v0": "node scripts/test-vault-dashboard-v0.mjs",
     "test:cli-workspace-v0": "node scripts/test-cli-workspace-v0.mjs",
     "test:cei-foundation-v0": "node scripts/test-cei-foundation-v0.mjs",
-    "cli:build": "cd packages/cli && tsc -p tsconfig.json"
+    "cli:build": "cd packages/cli && tsc -p tsconfig.json",
+    "check:release-integrity": "node scripts/check-release-integrity.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
