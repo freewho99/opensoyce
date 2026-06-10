@@ -105,6 +105,7 @@ The proof package is a parent index. Each artifact lands as its own file under `
 4. **[Demo Script](proof/demo-script.md)** — two-path runnable walkthrough: `ua-parser-js` honesty path + workflow origin precision path. Shipped (markdown-only; `.mjs` driver deferred).
 5. **[Production Walkthrough](proof/production-walkthrough.md)** — screenshot-grounded record of an end-to-end run against `opensoyce-f336.vercel.app`. Captured 2026-06-01. Nine numbered slots filled plus GUARD probe documented. Shipped.
 6. **[Phase Closeout](proof/phase-closeout.md)** — the "we shipped the phase" doc. Captures the full arc (PRs #19 → #41 + the handoff folder + this closeout), names all four engineering gaps as closed, records the four doctrine transitions on `ua-parser-js@0.7.29`, names the future phases as out of scope. The OTS engineering arc is closed. Shipped.
+7. **[Production CEI Decision Loop Proof](proof/production-cei-decision-loop-proof.md)** — the first live trust-decision artifact: a production dependency observation, deduped under repetition, proposed as an exception, reviewed with source context, approved, and receipted in two independent audit surfaces. Captured 2026-06-10 against production. Shipped.
 
 ## The Story
 
