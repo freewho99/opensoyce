@@ -51,12 +51,14 @@ Doctrine on the record: *Observation is not judgment. Repetition is not new evid
 
 ## Q3 — "How do you know a vulnerable component was observed?"
 
-**Evidence (two surfaces, honestly separated):**
+**Evidence (the seam closed by PR-15A, scoped to what shipped):**
 
-- *Vulnerability identification* lives on the public OTS surface today: the gate, the OSV advisory overlay (bulk + detail, severity-normalized, compromise-indicator enrichment), and the workflow-pattern scan
-- *Component observation + decision trail* lives in the private record: `component_exposures` with full provenance, as in Q1/Q2
+- `component_exposure_vulnerabilities` — vulnerability intelligence recorded as CONTEXT attached to an observed dependency exposure: vulnerability id (OSV/GHSA/CVE), source, severity as-provided, affected range, `match_basis` (source-asserted: an OSV version query for the exact observed package@version), and full provenance (`source_ref`, `first_seen_at` / `last_seen_at` / `seen_count` with the 7C dedupe discipline)
+- The private exposure detail shows the intelligence beside the observation, under the doctrine copy: *intelligence is context only — it opens a review question; it does not decide the answer*
+- Structurally enforced: intelligence never mutates exposure status, never creates an exception/proposal/outcome, and the table has no status column — context has no lifecycle. Unmatched intelligence creates no records (`exposure_id` is NOT NULL by design)
+- *Vulnerability identification* on the public OTS surface (gate, OSV overlay, workflow-pattern scan) continues unchanged and never reads the private table
 
-**Honest gap — named deliberately:** these two surfaces are not yet joined. Vulnerability intelligence (OSV/GHSA/CVE, scanner findings, malicious-package signals, license risk) does not yet flow INTO the private record as observations. That join is lane 15A, the next authorized expansion after this map. Until it ships, "a vulnerable component was observed" is answered by the public surface; "this component was observed, decided on, and receipted" is answered by the private record.
+**Honest scope of the join:** association is on-demand per exposure ("check vulnerability intelligence"), against OSV, for npm dependency exposures with an observed version. Continuous/at-ingest enrichment, scanner-output ingestion, malicious-package signal feeds, and license-risk intelligence remain parked (15A+ extensions / 15C). Turning attached intelligence into a reviewable remediation question is lane 15B — deliberately separate, because the question and the answer belong to humans.
 
 ## Q4 — "How do you know risk acceptance was reviewed, and by whom?"
 

@@ -419,6 +419,50 @@ export async function listExposureEvents(slug: string, exposureId: string) {
   });
 }
 
+// PR-15A: vulnerability-intelligence context attached to a dependency
+// exposure. Intelligence is observation, not judgment — it opens a review
+// question; it never decides the answer, never mutates the exposure, and
+// never creates exceptions/proposals/outcomes.
+export interface ExposureVulnIntel {
+  vuln_intel_id: string;
+  exposure_id: string;
+  vuln_id: string;
+  source: string;
+  match_basis: string;
+  package_name: string;
+  observed_version: string;
+  ecosystem: string | null;
+  severity: string | null;
+  affected_range: string | null;
+  source_ref: string | null;
+  metadata: Record<string, unknown>;
+  first_seen_at: string;
+  last_seen_at: string;
+  seen_count: number;
+  visibility: 'private';
+}
+
+export async function listExposureVulnIntel(slug: string, exposureId: string) {
+  return vaultRequest<{ intel: ExposureVulnIntel[]; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(exposureId)}/vuln-intel`,
+  });
+}
+
+export async function refreshExposureVulnIntel(slug: string, exposureId: string) {
+  return vaultRequest<{
+    intel: ExposureVulnIntel[];
+    created: number;
+    seen_again: number;
+    total_reported_by_source: number;
+    truncated: boolean;
+    visibility: 'private';
+  }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(exposureId)}/vuln-intel/refresh`,
+    method: 'POST',
+    body: {},
+  });
+}
+
 // PR-6E: reviewer-side source-exposure context. Given a proposed exception,
 // list the CEI events that relate to it — each embeds the SOURCE exposure
 // (read-only). The exception review page uses this to show "this exception
