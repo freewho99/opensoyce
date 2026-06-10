@@ -6,6 +6,7 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { fetchWorkspace, isOk, type VaultWorkspaceDetail } from '../../shared/vault/api-client';
+import VaultAuthGate from '../../components/VaultAuthGate';
 
 type Phase = 'loading' | 'unauth' | 'notfound' | 'ready' | 'error';
 
@@ -41,7 +42,7 @@ export default function VaultWorkspace() {
   }, [slug]);
 
   if (phase === 'loading') return <p className="text-sm font-mono text-slate-400">Loading...</p>;
-  if (phase === 'unauth') return <p className="text-sm font-mono text-slate-300">Sign in to view this workspace.</p>;
+  if (phase === 'unauth') return <VaultAuthGate message="Sign in to view this workspace. You'll land back here." />;
   if (phase === 'notfound') {
     return (
       <div className="border border-slate-700 bg-slate-800/40 p-5">

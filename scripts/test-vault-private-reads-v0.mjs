@@ -261,6 +261,7 @@ test('no public source file contains the literal string visibility: "private" or
     `${'src'}${'/'}pages${'/'}vault${'/'}`,
     `${'src'}${'/'}pages${'/'}CliAuth`,
     `${'src'}${'/'}components${'/'}VaultLayout`,
+    `${'src'}${'/'}components${'/'}VaultAuthGate`,
     `${'src'}${'/'}server${'/'}vault\\`,
     `${'src'}${'/'}shared${'/'}vault\\`,
     `${'supabase'}${'/'}migrations\\`,
@@ -271,6 +272,7 @@ test('no public source file contains the literal string visibility: "private" or
     `${'src'}${'/'}pages${'/'}vault\\`,
     `${'src'}${'/'}pages${'/'}CliAuth`.replace(/\//g, '\\'),
     `${'src'}${'/'}components${'/'}VaultLayout`.replace(/\//g, '\\'),
+    `${'src'}${'/'}components${'/'}VaultAuthGate`.replace(/\//g, '\\'),
   ];
 
   const candidateRoots = ['src', 'packages/cli/src'];
@@ -377,6 +379,9 @@ test('public renderer + shared + badge files do not import any vault path', () =
     if (rel === 'src/pages/CliAuth.tsx' || rel === 'src/pages/CliAuth.ts') return true;
     if (rel.startsWith('src/pages/vault/')) return true;
     if (rel === 'src/components/VaultLayout.tsx' || rel === 'src/components/VaultLayout.ts') return true;
+    // PR-DOGFOOD-1: VaultAuthGate is a shared dashboard component used
+    // across the 5 deep-link pages. Same allowlist scope as VaultLayout.
+    if (rel === 'src/components/VaultAuthGate.tsx' || rel === 'src/components/VaultAuthGate.ts') return true;
     return false;
   };
   const candidates = [

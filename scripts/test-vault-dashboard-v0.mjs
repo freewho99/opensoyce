@@ -70,14 +70,51 @@ test('CliAuth page exists and gates on a logged-in session', () => {
   ok(/fetchVaultMe/.test(src), 'CliAuth must call fetchVaultMe to detect session');
   ok(/'unauth'/.test(src), 'CliAuth must surface an unauth phase when not logged in');
   ok(/approveCliCode/.test(src), 'CliAuth must POST through approveCliCode');
-  ok(/['"`]\/api\/vault\/auth\/login\?redirect_to=/.test(src),
-    'CliAuth must redirect anonymous visitors through the existing OAuth login with redirect_to');
+  // PR-DOGFOOD-1 correction: the previous invariant grep'd for
+  // `/api/vault/auth/login?redirect_to=` and passed because the literal
+  // existed — but that endpoint is the OAuth CALLBACK, not the start.
+  // It returned 400 missing-code. The corrected rule: CliAuth must
+  // delegate to startVaultOAuth() which actually constructs the
+  // GitHub authorize URL. See test below for the OAuth-start invariant.
+  ok(/startVaultOAuth/.test(src),
+    'CliAuth must delegate the login redirect to startVaultOAuth (the helper that builds the github.com/login/oauth/authorize URL)');
 });
 
 test('CliAuth route is wired in App.tsx', () => {
   const app = read('src/App.tsx');
   ok(/path="\/cli-auth"\s+element=\{<CliAuth\s*\/>\}/.test(app),
     'App.tsx must register a Route at /cli-auth that renders CliAuth');
+});
+
+test('startVaultOAuth helper constructs the real GitHub OAuth start URL', () => {
+  // PR-DOGFOOD-1: locks the fix for the broken login button.
+  // The helper must:
+  //   - fetch /api/config for the GitHub OAuth client_id
+  //   - mint a CSRF state and store it in sessionStorage
+  //   - redirect to https://github.com/login/oauth/authorize?... with
+  //     client_id + state + redirect_uri set
+  //   - round-trip redirect_to back to the calling page through the
+  //     server-side redirect_to query parameter
+  const src = read('src/shared/vault/oauth-start.ts');
+  ok(/['"`]\/api\/config['"`]/.test(src),
+    'startVaultOAuth must fetch /api/config to obtain the GitHub OAuth client_id');
+  ok(/sessionStorage\.setItem/.test(src),
+    'startVaultOAuth must persist the state in sessionStorage for CSRF round-trip');
+  ok(/https:\/\/github\.com\/login\/oauth\/authorize/.test(src),
+    'startVaultOAuth must redirect to the real github.com/login/oauth/authorize URL');
+  ok(/client_id/.test(src) && /state/.test(src) && /redirect_uri/.test(src),
+    'startVaultOAuth must include client_id, state, and redirect_uri in the GitHub authorize params');
+  ok(/redirect_to=/.test(src),
+    'startVaultOAuth must round-trip the return path through the server-side redirect_to query parameter');
+});
+
+test('VaultDashboard delegates login to startVaultOAuth (not the callback URL)', () => {
+  const src = read('src/pages/vault/VaultDashboard.tsx');
+  ok(/startVaultOAuth/.test(src),
+    'VaultDashboard must use startVaultOAuth — not navigate to /api/vault/auth/login directly');
+  // Negative assertion: the old broken pattern must be gone.
+  ok(!/window\.location\.href\s*=\s*[`'"]\/api\/vault\/auth\/login\?redirect_to=/.test(src),
+    'VaultDashboard must not navigate directly to the OAuth callback URL (that returns 400 missing-code)');
 });
 
 // ---------- 2. Vault Dashboard shell ----------
@@ -119,6 +156,88 @@ test('VaultExceptionList renders the Trust Expiry table with expires_at', () => 
   ok(/expires_at/.test(src), 'VaultExceptionList must surface expires_at');
   ok(/expiryUrgency/.test(src) || /urgency/.test(src),
     'VaultExceptionList must apply expiry urgency styling');
+});
+
+test('VaultExceptionList paginates with offset + load more (PR-DOGFOOD-1)', () => {
+  // The previous implementation hardcoded `limit: 100` with no
+  // pagination — exception #101 was invisible. Lock the fix:
+  // a Load More button + an offset-driven follow-up fetch.
+  const src = read('src/pages/vault/VaultExceptionList.tsx');
+  ok(/offset:\s*0/.test(src) || /offset:\s*items\.length/.test(src),
+    'VaultExceptionList must pass offset to listExceptions');
+  ok(/load more/.test(src),
+    'VaultExceptionList must render a load-more affordance');
+  ok(/loadMore/.test(src),
+    'VaultExceptionList must define a loadMore handler');
+});
+
+test('VaultExceptionList urgency labels ramp through hours + minutes (PR-DOGFOOD-1)', () => {
+  // The previous implementation floored to days, collapsing any
+  // sub-24h expiry to "0d ⚠". Lock the fix: explicit sub-day branches.
+  const src = read('src/pages/vault/VaultExceptionList.tsx');
+  ok(/hours\s*<\s*1/.test(src) && /minutes/.test(src),
+    'expiryUrgency must surface minutes for sub-hour expiries');
+  ok(/hours\s*<\s*24/.test(src),
+    'expiryUrgency must surface hours for sub-day expiries');
+});
+
+test('VaultExceptionDetail converts datetime-local to UTC ISO correctly (PR-DOGFOOD-1)', () => {
+  // Previous implementation appended ":00.000Z" to the naive local
+  // input value, silently shifting by the reviewer's timezone offset.
+  // The fix uses Date constructor + toISOString to convert properly.
+  const src = read('src/pages/vault/VaultExceptionDetail.tsx');
+  ok(/localInputToUtcIso/.test(src),
+    'VaultExceptionDetail must use a local-to-UTC conversion helper');
+  // Negative: the broken pattern must be gone.
+  ok(!/setExtendIso\(`\$\{[^}]+\}:00\.000Z`\)/.test(src),
+    'VaultExceptionDetail must not append ":00.000Z" to a naive local input value');
+  ok(/utcIsoToLocalInput/.test(src),
+    'VaultExceptionDetail must display stored UTC time in the reviewer\'s local timezone');
+});
+
+test('Vault deep-link pages use the shared VaultAuthGate (PR-DOGFOOD-1)', () => {
+  // Previously these pages returned plain text on unauth, dead-ending
+  // a user who deep-linked while unauthenticated. The shared
+  // VaultAuthGate component renders the same sign-in card on all of
+  // them and preserves the current path as the OAuth return target.
+  const TRAPPED_BEFORE = [
+    'src/pages/vault/VaultWorkspace.tsx',
+    'src/pages/vault/VaultExceptionList.tsx',
+    'src/pages/vault/VaultExceptionDetail.tsx',
+    'src/pages/vault/VaultTimeline.tsx',
+    'src/pages/vault/VaultEvidenceDetail.tsx',
+  ];
+  for (const rel of TRAPPED_BEFORE) {
+    const src = read(rel);
+    ok(/import VaultAuthGate/.test(src),
+      `${rel} must import VaultAuthGate`);
+    ok(/<VaultAuthGate\b/.test(src),
+      `${rel} must render <VaultAuthGate /> on the unauth phase`);
+  }
+  // The gate itself must use startVaultOAuth + preserve the current
+  // URL as the return target.
+  const gate = read('src/components/VaultAuthGate.tsx');
+  ok(/startVaultOAuth/.test(gate),
+    'VaultAuthGate must delegate to startVaultOAuth');
+  ok(/useLocation/.test(gate),
+    'VaultAuthGate must read the current location to preserve the return path');
+});
+
+test('VaultTimeline clears stale error on retry + initial fetch (PR-DOGFOOD-1)', () => {
+  // Previously the error banner stuck around after a successful retry.
+  const src = read('src/pages/vault/VaultTimeline.tsx');
+  // Both the useEffect initial fetch and loadMore must call setError('').
+  const setErrorEmpty = src.match(/setError\(\s*['"`]\s*['"`]\s*\)/g) || [];
+  ok(setErrorEmpty.length >= 2,
+    'VaultTimeline must clear error state on both the initial fetch AND loadMore retry');
+});
+
+test('VaultEvidenceDetail renders body in a <pre> with JSON pretty-print (PR-DOGFOOD-1)', () => {
+  const src = read('src/pages/vault/VaultEvidenceDetail.tsx');
+  ok(/<pre\b/.test(src),
+    'VaultEvidenceDetail must render body in a <pre> block to preserve formatting');
+  ok(/formatEvidenceBody/.test(src) || /JSON\.parse/.test(src),
+    'VaultEvidenceDetail must attempt JSON pretty-printing when body looks like JSON');
 });
 
 test('VaultWorkspace renders members and quick-action links', () => {

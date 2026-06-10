@@ -23,6 +23,7 @@
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchVaultMe, approveCliCode } from '../shared/vault/api-client';
+import { startVaultOAuth } from '../shared/vault/oauth-start';
 
 type Phase = 'loading' | 'unauth' | 'ready' | 'submitting' | 'approved' | 'error';
 
@@ -57,10 +58,23 @@ export default function CliAuth() {
   }, []);
 
   function normalisedCode(raw: string): string {
-    // Accept "XXXXXXXX" or "XXXX-XXXX"; always send the hyphenated form.
-    const upper = raw.trim().toUpperCase().replace(/\s+/g, '');
-    if (/^[A-Z2-9]{8}$/.test(upper)) return `${upper.slice(0, 4)}-${upper.slice(4)}`;
-    return upper;
+    // PR-DOGFOOD-1: accept more user-friendly input shapes.
+    // Server alphabet excludes O/I/0/1 so lookalikes typed/pasted by
+    // humans can be repaired safely:
+    //   0 -> O   1 -> I   l -> I
+    // Then strip any surrounding whitespace, normalise the optional
+    // hyphen, and uppercase. The validator still rejects everything
+    // off the alphabet — this just trims the common paste-noise.
+    const cleaned = raw
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '')
+      .replace(/0/g, 'O')
+      .replace(/1/g, 'I')
+      .replace(/L/g, 'I')
+      .replace(/-/g, '');
+    if (/^[A-Z2-9]{8}$/.test(cleaned)) return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+    return cleaned;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -87,12 +101,22 @@ export default function CliAuth() {
     setPhase('ready');
   }
 
-  function handleLoginRedirect() {
-    // Stash where to come back to. The OAuth callback URL is the
-    // public-spine /api/vault/auth/login route, which redirects to a
-    // configured post-login URL. We pass our path as the return target.
+  const [oauthError, setOauthError] = React.useState('');
+
+  async function handleLoginRedirect() {
+    // PR-DOGFOOD-1 fix: actually start the GitHub OAuth flow. The
+    // previous implementation called /api/vault/auth/login directly,
+    // which is the callback handler — it returned `400 missing code`
+    // because GitHub wasn't in the loop. startVaultOAuth() mints state,
+    // sessionStorage's it, builds the github.com/login/oauth/authorize
+    // URL, and round-trips redirect_to back through the existing
+    // server-side redirect_to query parameter.
+    setOauthError('');
     const returnTo = `/cli-auth${userCode ? `?user_code=${encodeURIComponent(userCode)}` : ''}`;
-    window.location.href = `/api/vault/auth/login?redirect_to=${encodeURIComponent(returnTo)}`;
+    const result = await startVaultOAuth(returnTo);
+    if (result) {
+      setOauthError(result.message);
+    }
   }
 
   return (
@@ -122,8 +146,11 @@ export default function CliAuth() {
             <h2 className="text-sm font-mono font-bold mb-2">Sign in required</h2>
             <p className="text-sm text-slate-400 mb-4">
               The CLI authorization page is private — sign in once to authorize the
-              CLI session. You will land back here.
+              CLI session. You will land back here{userCode ? ' with your code still filled in' : ''}.
             </p>
+            {oauthError && (
+              <p className="text-xs font-mono text-red-300 mb-3" role="alert">{oauthError}</p>
+            )}
             <button
               type="button"
               onClick={handleLoginRedirect}

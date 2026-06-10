@@ -41,9 +41,26 @@ export async function runLogin(args: ParsedArgs): Promise<number> {
   const deadlineMs = startedMs + expires_in * 1000;
   const intervalMs = Math.max(1, interval) * 1000;
 
+  // PR-DOGFOOD-1: surface a heartbeat while we wait so a 10-minute
+  // wait doesn't look like a frozen terminal. One dot per poll plus
+  // a remaining-time line every ~30 seconds. --quiet suppresses the
+  // heartbeat. --json output never includes this stderr noise.
+  const HEARTBEAT_LINE_MS = 30_000;
+  let lastHeartbeatLine = startedMs;
+
   // Long-poll the token endpoint. Each call respects args.timeoutMs.
   while (Date.now() < deadlineMs) {
     await new Promise((r) => setTimeout(r, intervalMs));
+    if (!args.quiet && !args.json) {
+      const now = Date.now();
+      if (now - lastHeartbeatLine >= HEARTBEAT_LINE_MS) {
+        const remainingSec = Math.max(0, Math.round((deadlineMs - now) / 1000));
+        process.stderr.write(`\n  waiting (${remainingSec}s remaining)`);
+        lastHeartbeatLine = now;
+      } else {
+        process.stderr.write('.');
+      }
+    }
     const pollRes = await pollDeviceToken(args.apiBase, device_code, args.timeoutMs);
     if (pollRes.ok) {
       const { session_token, expires_at, user } = pollRes.data;
@@ -60,7 +77,8 @@ export async function runLogin(args: ParsedArgs): Promise<number> {
           `${JSON.stringify({ logged_in: true, user: { github_login: githubLogin }, api_base: args.apiBase })}\n`,
         );
       } else if (!args.quiet) {
-        process.stdout.write(`Logged in as ${githubLogin}.\n`);
+        // Newline first to land the success message after the heartbeat dots.
+        process.stdout.write(`\nLogged in as ${githubLogin}.\n`);
       }
       return EXIT_ALLOW;
     }
