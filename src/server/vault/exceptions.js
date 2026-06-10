@@ -23,6 +23,12 @@ import { sendError, ERROR_CODES } from './errors.js';
 import { resolveWorkspaceForMember, requireRole } from './rbac.js';
 import { computeExceptionEtag, checkIfMatch } from './etag.js';
 import { maybeReplayIdempotent, storeIdempotencyResponse } from './idempotency.js';
+// PR-6D: CEI-native proposal audit. The propose flow OPTIONALLY records an
+// event when a proposal was made from a component exposure. This does NOT
+// touch vault_timeline_events and does NOT change the exception state
+// machine — the exception is created exactly as before; the event is a
+// separate, best-effort audit row.
+import { validateExposureInWorkspace, recordProposalFromExposure } from '../cei/events.js';
 
 const PACKAGE_SUBJECT_RE = /^@?[a-z0-9][\w./-]*(@[\w.+-]+)?$/i;
 const REPO_SUBJECT_RE = /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/;
@@ -214,6 +220,21 @@ export async function handleProposeException(req, res) {
   }
 
   const supabase = vaultDb();
+
+  // PR-6D: if the proposal cites a source exposure, validate it belongs to
+  // THIS workspace BEFORE creating the exception — so we never create an
+  // orphan exception against a bogus/cross-workspace exposure id. Absent
+  // source_exposure_id → behavior is byte-for-byte the pre-6D propose flow.
+  const sourceExposureId = typeof body.source_exposure_id === 'string' ? body.source_exposure_id : null;
+  if (sourceExposureId) {
+    const exposureCheck = await validateExposureInWorkspace(supabase, workspace.workspace_id, sourceExposureId);
+    if (exposureCheck.error) {
+      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'CEI exposure lookup failed');
+    }
+    if (exposureCheck.notFound) {
+      return sendError(res, 404, ERROR_CODES.exposure_not_found, 'source exposure not found in this workspace');
+    }
+  }
   const { data, error } = await supabase
     .from('vault_exceptions')
     .insert({
@@ -241,6 +262,21 @@ export async function handleProposeException(req, res) {
   if (!row) {
     return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'Vault exception insert returned no row');
   }
+
+  // PR-6D: record the CEI-native audit event AFTER the proposed exception
+  // is created. Best-effort — the exception is the primary record; a
+  // failure to write the audit row does NOT undo the proposal or change
+  // its response. The exposure is never mutated.
+  if (sourceExposureId) {
+    await recordProposalFromExposure(supabase, {
+      workspaceId: workspace.workspace_id,
+      exposureId: sourceExposureId,
+      relatedExceptionId: row.exception_id,
+      actorUserId: req.vaultSession.user_id,
+      metadata: { subject_kind: subjectKind, subject_name: subjectName },
+    });
+  }
+
   const shape = shapeExceptionRow(row, membership.role);
   setEtagHeader(res, row);
   setMaskedHeader(res, membership.role);

@@ -24,8 +24,10 @@ import { Link, useParams } from 'react-router-dom';
 import {
   getExposure,
   proposeException,
+  listExposureEvents,
   isOk,
   type ComponentExposure,
+  type ComponentExposureEvent,
   type ProposeExceptionBody,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
@@ -90,6 +92,15 @@ export default function VaultExposureDetail() {
   const [proposeError, setProposeError] = React.useState('');
   const [proposedExceptionId, setProposedExceptionId] = React.useState<string | null>(null);
 
+  // PR-6D proposal-history (CEI-native audit). Read-only.
+  const [events, setEvents] = React.useState<ComponentExposureEvent[]>([]);
+
+  const refreshEvents = React.useCallback(async () => {
+    if (!slug || !id) return;
+    const res = await listExposureEvents(slug, id);
+    if (isOk(res)) setEvents(res.data.events);
+  }, [slug, id]);
+
   React.useEffect(() => {
     let cancelled = false;
     if (!slug || !id) return;
@@ -99,6 +110,9 @@ export default function VaultExposureDetail() {
       if (isOk(res)) {
         setExposure(res.data);
         setPhase('ready');
+        // Proposal history is a separate read; a failure here never blocks
+        // the exposure view.
+        refreshEvents();
         return;
       }
       if (res.status === 401) { setPhase('unauth'); return; }
@@ -107,7 +121,7 @@ export default function VaultExposureDetail() {
       setPhase('error');
     })();
     return () => { cancelled = true; };
-  }, [slug, id]);
+  }, [slug, id, refreshEvents]);
 
   function openReview(ex: ComponentExposure) {
     // Pre-fill the proposal from the exposure. The user reviews + edits
@@ -165,6 +179,9 @@ export default function VaultExposureDetail() {
           href: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(ex.exposure_id)}`,
         },
       ],
+      // PR-6D: cite the source exposure so the server records a CEI-native
+      // audit event. This does NOT mutate the exposure.
+      source_exposure_id: ex.exposure_id,
     };
     const res = await proposeException(slug, body);
     setProposePending(false);
@@ -173,9 +190,11 @@ export default function VaultExposureDetail() {
       return;
     }
     // Success: record the new proposed exception id, close the review card.
-    // The exposure row is intentionally NOT re-fetched or mutated.
+    // The exposure row is intentionally NOT re-fetched or mutated. Refresh
+    // the proposal-history list so the new audit event appears.
     setProposedExceptionId(res.data.exception_id);
     setReviewOpen(false);
+    refreshEvents();
   }
 
   if (phase === 'loading') return <p className="text-sm font-mono text-slate-400">Loading...</p>;
@@ -257,6 +276,37 @@ export default function VaultExposureDetail() {
           {formatJson(exposure.metadata)}
         </pre>
       </section>
+
+      {/* PR-6D: CEI-native proposal history. Read-only audit of actions
+          taken FROM this exposure — recorded without the shared Vault
+          Timeline. Renders nothing when there are no events. */}
+      {events.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2">
+            Proposal history
+          </h2>
+          <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono">
+            {events.map((ev) => (
+              <li key={ev.event_id} className="px-3 py-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 shrink-0">[PRIVATE]</span>
+                <span className="text-slate-400 shrink-0">{ev.created_at.slice(0, 19).replace('T', ' ')}</span>
+                <span className="text-slate-100 shrink-0">{ev.event_kind}</span>
+                <span className="text-slate-500 shrink-0">
+                  {ev.actor ? `@${ev.actor.github_login}` : '—'}
+                </span>
+                {ev.related_exception_id && (
+                  <Link
+                    to={`/vault/${slug}/exceptions/${ev.related_exception_id}`}
+                    className="text-slate-400 hover:text-slate-100 underline shrink-0"
+                  >
+                    exception {ev.related_exception_id.slice(0, 8)}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* PR-6C: propose a NEW exception draft from this exposure. The
           exposure is never mutated; only a proposed exception is created,
