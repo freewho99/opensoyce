@@ -304,16 +304,93 @@ test('VaultExposureList is read-only — no create / propose / mutate (PR-6B)', 
     'VaultExposureList must not offer exposure->exception linkage or create UI');
 });
 
-test('VaultExposureDetail is read-only — no edit / linkage controls (PR-6B)', () => {
+test('VaultExposureDetail renders the exposure read-only (no exposure mutation)', () => {
+  // PR-6B read invariant, REVISED by PR-6C: the EXPOSURE itself is never
+  // mutated. proposeException (creating a NEW exception draft) is the
+  // authorized 6C linkage and is asserted separately below — but the
+  // exposure-write and exception-decision verbs stay banned here.
   const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
   ok(/getExposure/.test(src), 'VaultExposureDetail must call getExposure');
   ok(/metadata/.test(src) && /trust_boundary/.test(src),
     'VaultExposureDetail must render metadata and trust_boundary');
   ok(/\[PRIVATE\]/.test(read('src/pages/vault/VaultExposureDetail.tsx')),
     'VaultExposureDetail must surface the [PRIVATE] marker');
-  for (const banned of ['createExposure', 'proposeException', 'approveException', 'rejectException', 'revokeException', 'extendException', 'handleApprove', 'handleReject']) {
-    ok(!src.includes(banned), `VaultExposureDetail must not reference ${banned} (read-only surface)`);
+  // No exposure mutation, and no exception DECISION verbs (approve/reject/
+  // revoke/extend). proposeException is intentionally NOT in this list —
+  // 6C authorizes proposing a draft, not deciding.
+  for (const banned of ['createExposure', 'updateExposure', 'deleteExposure', 'approveException', 'rejectException', 'revokeException', 'revokeExceptionApi', 'extendException', 'handleApprove', 'handleReject']) {
+    ok(!src.includes(banned), `VaultExposureDetail must not reference ${banned}`);
   }
+});
+
+// ---------- PR-6C: exposure -> proposed exception linkage ----------
+
+test('VaultExposureDetail proposes a PROPOSED exception only (PR-6C)', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  ok(/proposeException/.test(src),
+    'VaultExposureDetail must call proposeException (the 6C linkage)');
+  // The action targets the existing propose endpoint via the api-client
+  // helper; the server hardcodes state: proposed. The page must NOT pass a
+  // state field or hit any approve/active path.
+  ok(!/state:\s*['"]active['"]/.test(src),
+    'VaultExposureDetail must not request an active exception');
+  ok(!/\/approve|\/reject|\/revoke|\/extend/.test(src),
+    'VaultExposureDetail must not call approve/reject/revoke/extend paths');
+});
+
+test('PR-6C requires explicit review + submit (no one-click auto-submit)', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  // Two distinct steps: the entry button opens a review card (openReview),
+  // and a SEPARATE submit button inside the card does the POST
+  // (submitProposal). The proposal POST happens only from submitProposal.
+  ok(/onClick=\{\(\)\s*=>\s*openReview\(/.test(src),
+    'the entry button must open a review step (openReview), not submit');
+  ok(/onClick=\{\(\)\s*=>\s*submitProposal\(/.test(src),
+    'a separate submit button must call submitProposal');
+  // The actual proposeException call must live inside submitProposal, not
+  // inside openReview (review must not auto-submit).
+  const openReviewBody = src.match(/function openReview[\s\S]*?\n  \}/);
+  ok(openReviewBody && !/proposeException/.test(openReviewBody[0]),
+    'openReview must not call proposeException (review must not auto-submit)');
+  const submitBody = src.match(/async function submitProposal[\s\S]*?\n  \}/);
+  ok(submitBody && /proposeException/.test(submitBody[0]),
+    'submitProposal must be the only place that calls proposeException');
+});
+
+test('PR-6C does not mutate the exposure when proposing (separation preserved)', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  // After a successful proposal the page records the new exception id and
+  // does NOT re-fetch or write the exposure. There is exactly ONE
+  // setExposure call (the initial load) and no exposure-status writer.
+  ok(/proposedExceptionId/.test(src),
+    'success path must surface the new proposed exception id');
+  const setExposureCount = (src.match(/setExposure\(/g) || []).length;
+  ok(setExposureCount <= 1,
+    `exposure must be set only on initial load (found ${setExposureCount} setExposure calls)`);
+  // No exposure-status mutation helper anywhere.
+  ok(!/setExposureStatus|updateExposureStatus|patchExposure/.test(src),
+    'proposing must not mutate exposure status');
+});
+
+test('PR-6C surfaces a link to the new proposed exception on success', () => {
+  const src = read('src/pages/vault/VaultExposureDetail.tsx');
+  ok(/\/vault\/\$\{slug\}\/exceptions\/\$\{proposedExceptionId\}/.test(src)
+    || /exceptions\/\$\{proposedExceptionId\}/.test(src),
+    'success state must link to the new proposed exception');
+});
+
+test('PR-6C propose helper is GET+POST propose only — no decision helpers added', () => {
+  const api = read('src/shared/vault/api-client.ts');
+  ok(/export async function proposeException/.test(api),
+    'api-client must export proposeException');
+  // proposeException must hit the base exceptions collection (POST), not a
+  // decision sub-path.
+  const proposeBlock = api.match(/export async function proposeException[\s\S]*?\n}/);
+  ok(proposeBlock, 'proposeException block not found');
+  ok(/\/exceptions`/.test(proposeBlock[0]) && /method:\s*['"]POST['"]/.test(proposeBlock[0]),
+    'proposeException must POST to the exceptions collection');
+  ok(!/approve|reject|revoke|extend/.test(proposeBlock[0]),
+    'proposeException must not touch a decision sub-path');
 });
 
 test('CEI read pages use only GET helpers + VaultAuthGate (PR-6B)', () => {

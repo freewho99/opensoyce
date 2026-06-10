@@ -147,8 +147,50 @@ hook, no mutating request. The pages render OUTSIDE the public Layout and
 use `VaultAuthGate` on unauth deep links (return path preserved). Public
 Trust Center / Badge / public Timeline / Gate untouched.
 
-Sequence: **6A made exposure records real; 6B made them visible; 6C will
-decide how exposures lead to trust decisions** (not authorized).
+Sequence: **6A made exposure records real; 6B made them visible; 6C lets a
+human propose a trust decision from an exposure.**
+
+## PR-6C — exposure → proposed exception (shipped)
+
+Phase 6C added ONE narrow write to `VaultExposureDetail`: **"Propose
+exception from this exposure"**. Doctrine locked:
+
+```txt
+An exposure can suggest a trust decision.
+A user must still propose the decision.
+A reviewer must still approve the decision.
+The record must remember who decided.
+```
+
+What it does:
+
+- Creates a **proposed** exception only. It calls the existing PR-V2-B
+  propose endpoint, which **hardcodes `state: 'proposed'` server-side** —
+  there is no path to an active exception, no approve/reject/revoke/extend,
+  no state-machine change.
+- Requires **explicit review + submit**. The entry button opens a review
+  card (subject, original/allowed action, public + private reason
+  pre-filled from the exposure); a separate Submit button does the POST.
+  No one-click auto-submit.
+- Pre-fills the proposal from the exposure: subject (package), a public
+  reason naming the exposure, and a private reason summarizing
+  source / status / trust_boundary / metadata. The proof anchor is a
+  `live-surface` pointer back at the exposure (the same client-constructed
+  anchor pattern the CLI `exception propose` uses — not a synthesized
+  `private-anchor`).
+- **Does not mutate the exposure.** No status change, no exposure write.
+  Exposure stays exposure; the new exception is a separate row.
+- On success, shows a link to the new proposed exception.
+
+Subject mapping boundary: exceptions cover `package` / `repo` subjects.
+Only `dependency-exposure` (subject_kind `package`) maps cleanly, so the
+action is **enabled only for package exposures**; the other five native
+types show the action disabled with an honest note rather than inventing a
+stretch mapping. No FK from exposures to exceptions was added — the link is
+the proof anchor + the private reason, not a schema edge.
+
+No CEI Timeline events, no `vault_timeline_events` change, no server change
+(the propose endpoint already existed from PR-V2-B).
 
 ## Next (parked, not authorized)
 
