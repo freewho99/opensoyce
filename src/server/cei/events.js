@@ -95,6 +95,48 @@ function shapeEventRow(row) {
 const EVENT_SELECT =
   '*, actor:actor_user_id(user_id, github_login, display_name)';
 
+// PR-6E: the reviewer-side select additionally embeds the SOURCE exposure
+// (and its type slug) so the proposed-exception review page can show
+// read-only "this exception came from this exposure" context in one call.
+const EVENT_WITH_EXPOSURE_SELECT =
+  '*,'
+  + ' actor:actor_user_id(user_id, github_login, display_name),'
+  + ' source_exposure:exposure_id('
+  + 'exposure_id, subject_kind, subject_name, source_kind, source_ref, status,'
+  + ' exposure_type:exposure_type_id(type_slug))';
+
+function shapeSourceExposure(row) {
+  if (!row) return null;
+  return {
+    exposure_id: row.exposure_id,
+    exposure_type: row.exposure_type ? row.exposure_type.type_slug : null,
+    subject_kind: row.subject_kind,
+    subject_name: row.subject_name,
+    source_kind: row.source_kind,
+    source_ref: row.source_ref || null,
+    status: row.status,
+  };
+}
+
+function shapeEventWithExposure(row) {
+  if (!row) return null;
+  return {
+    event_id: row.event_id,
+    workspace_id: row.workspace_id,
+    exposure_id: row.exposure_id,
+    event_kind: row.event_kind,
+    related_exception_id: row.related_exception_id || null,
+    actor: row.actor ? {
+      user_id: row.actor.user_id,
+      github_login: row.actor.github_login,
+      display_name: row.actor.display_name || null,
+    } : null,
+    source_exposure: shapeSourceExposure(row.source_exposure),
+    created_at: row.created_at,
+    visibility: 'private',
+  };
+}
+
 /**
  * GET /api/vault/workspaces/:slug/exposures/:id/events
  *
@@ -131,6 +173,47 @@ export async function handleListExposureEvents(req, res) {
   const rows = Array.isArray(data) ? data : [];
   res.status(200).json({
     events: rows.map(shapeEventRow),
+    visibility: 'private',
+  });
+}
+
+/**
+ * GET /api/vault/workspaces/:slug/exposure-events?related_exception_id=:id
+ *
+ * PR-6E reviewer-side context: list CEI events related to a given exception,
+ * each carrying its SOURCE exposure (read-only). Used by the proposed-
+ * exception review page to show "this exception came from this exposure".
+ *
+ * Read-only. Workspace-scoped (404-on-non-member via resolveWorkspaceForMember).
+ * Returns an empty events array when the exception has no CEI origin — the
+ * exception still exists; it just wasn't proposed from an exposure.
+ */
+export async function handleListEventsByException(req, res) {
+  const slug = (req.params && req.params.slug) || '';
+  const relatedExceptionId = (req.query && typeof req.query.related_exception_id === 'string')
+    ? req.query.related_exception_id
+    : '';
+  if (!isUuid(relatedExceptionId)) {
+    return sendError(res, 400, ERROR_CODES.bad_request, 'related_exception_id must be a UUID');
+  }
+  const resolved = await resolveWorkspaceForMember(req, res, slug);
+  if (!resolved) return;
+  const { workspace } = resolved;
+
+  const supabase = vaultDb();
+  const { data, error } = await supabase
+    .from('component_exposure_events')
+    .select(EVENT_WITH_EXPOSURE_SELECT)
+    .eq('workspace_id', workspace.workspace_id)
+    .eq('related_exception_id', relatedExceptionId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'CEI event lookup failed');
+  }
+  const rows = Array.isArray(data) ? data : [];
+  res.status(200).json({
+    events: rows.map(shapeEventWithExposure),
     visibility: 'private',
   });
 }

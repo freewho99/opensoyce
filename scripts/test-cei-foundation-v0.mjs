@@ -188,8 +188,11 @@ test('create handler refuses non-native / inactive types', () => {
 test('no create-exposure-type endpoint exists (native catalog is read-only)', () => {
   for (const { rel, src } of allCeiSource()) {
     ok(!/handleCreate\w*ExposureType/.test(src), `${rel} defines a create-exposure-type handler`);
-    ok(!/\.insert\(\s*\{[\s\S]*?type_slug/.test(src),
-      `${rel} inserts into the exposure-type catalog (must stay read-only in 6A)`);
+    // Precise: an INSERT/UPSERT into the component_exposure_types table.
+    // (A loose "insert ... type_slug" grep false-positives when type_slug
+    // merely appears later in a SELECT embed string.)
+    ok(!/from\(['"]component_exposure_types['"]\)[\s\S]{0,120}\.(insert|upsert)\(/.test(src),
+      `${rel} inserts into the exposure-type catalog (must stay read-only)`);
   }
 });
 
@@ -405,6 +408,50 @@ test('events module never mutates the exposure or the exception (PR-6D)', () => 
     'events module must not mutate component_exposures');
   ok(!/from\(['"]vault_exceptions['"]\)/.test(src),
     'events module must not touch vault_exceptions directly');
+});
+
+// ---------- PR-6E: reviewer-side source-exposure context ----------
+
+test('reviewer source-exposure endpoint reads events by related_exception_id (PR-6E)', () => {
+  const events = read('src/server/cei/events.js');
+  ok(/handleListEventsByException/.test(events),
+    'events.js must export handleListEventsByException');
+  // It filters by related_exception_id and is workspace-scoped + read-only.
+  const handler = events.match(/export async function handleListEventsByException[\s\S]*?\n}/);
+  ok(handler, 'handleListEventsByException body not found');
+  ok(/related_exception_id/.test(handler[0]),
+    'handler must filter by related_exception_id');
+  ok(/resolveWorkspaceForMember/.test(handler[0]),
+    'handler must be workspace-scoped (404-on-non-member)');
+  ok(!/\.(insert|update|delete|upsert)\(/.test(handler[0]),
+    'reviewer context endpoint must be read-only (no writes)');
+  // Route is CEI-namespaced (exposure-events), NOT under the /exceptions tree.
+  const routes = read('src/server/cei/routes.js');
+  ok(/\/api\/vault\/workspaces\/:slug\/exposure-events/.test(routes),
+    'reviewer context route must be /exposure-events (CEI-namespaced)');
+  ok(/handleListEventsByException/.test(routes),
+    'reviewer context route must dispatch handleListEventsByException');
+});
+
+test('PR-6E adds NO new event kind + NO exposure/exception mutation', () => {
+  // The event-kind allowlist is STILL exactly one value (6E adds a reader,
+  // not a writer).
+  const sql = readSqlNoComments(EVENTS_MIGRATION);
+  const kinds = (sql.match(/'exception_proposed_from_exposure'/g) || []);
+  ok(kinds.length >= 1, 'event_kind allowlist must still contain the 6D value');
+  const evMatch = read('src/server/cei/events.js').match(/EVENT_KINDS\s*=\s*Object\.freeze\(\[([^\]]*)\]/);
+  const evKinds = (evMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  ok(evKinds.length === 1, 'EVENT_KINDS must remain a single value in 6E');
+  // 6E touches NO new migration — the 0019 events table is reused as-is.
+  // (The only migrations beyond 0018 is 0019; there is no 0020+ for 6E.)
+  ok(!fs.existsSync(path.join(root, 'supabase/migrations/0020_component_exposure_events.sql')),
+    '6E must not add a migration (it reuses the 0019 events table)');
+  // The reviewer context handler must not write to exposures or exceptions.
+  const events = read('src/server/cei/events.js');
+  ok(!/from\(['"]component_exposures['"]\)[\s\S]{0,80}\.(update|delete|upsert)\(/.test(events),
+    'events module must not mutate component_exposures');
+  ok(!/from\(['"]vault_exceptions['"]\)/.test(events),
+    'events module must not write vault_exceptions');
 });
 
 // ---------- wiring ----------

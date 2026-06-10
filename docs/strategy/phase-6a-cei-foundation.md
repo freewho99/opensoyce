@@ -240,6 +240,40 @@ Separation preserved and asserted:
 - **No `vault_timeline_events` change.** No new exception state. No active
   exception creation. No auto-approval. No exposure-status mutation.
 
+## PR-6E — reviewer-side source-exposure context (shipped)
+
+Phase 6E shows the OTHER side of the 6D relationship: when a reviewer opens a
+proposed exception, they see read-only **"this exception came from this
+exposure"** context.
+
+```txt
+The exposure suggested.
+The user proposed.
+The CEI event recorded the relationship.
+The reviewer sees the context.
+The reviewer still decides.
+```
+
+What shipped (no migration — the 0019 event table is reused):
+
+- `src/server/cei/events.js` — `handleListEventsByException`: lists CEI
+  events filtered by `related_exception_id`, each embedding its **source
+  exposure** (type, subject, source, status) + actor. Workspace-scoped,
+  read-only.
+- `GET /api/vault/workspaces/:slug/exposure-events?related_exception_id=:id`
+  — CEI-namespaced (NOT under the `/exceptions` route tree), read-only.
+- `src/shared/vault/api-client.ts` — `listExceptionSourceEvents` GET helper
+  plus `ExceptionSourceEvent` / `SourceExposureContext` types. No event
+  mutation helper.
+- `VaultExceptionDetail` — a read-only **"Source exposure"** card (exposure
+  type, subject, source, status, proposer, timestamp, link back to the
+  exposure). Best-effort load; a failure never blocks the review.
+
+Review semantics unchanged: the reviewer still approves / rejects / extends
+/ revokes exactly as before. The source-exposure card is **informational
+only** — no approval automation, no risk/action auto-change, no exposure
+mutation, no new event kind, no `vault_timeline_events`.
+
 ## Next (parked, not authorized)
 
 Phase 6 continues from this foundation, but every next step requires its own explicit approval block:

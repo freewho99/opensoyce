@@ -15,9 +15,11 @@ import {
   extendException,
   revokeExceptionApi,
   fetchWorkspace,
+  listExceptionSourceEvents,
   isOk,
   type VaultException,
   type VaultWorkspaceDetail,
+  type ExceptionSourceEvent,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
 
@@ -69,6 +71,11 @@ export default function VaultExceptionDetail() {
   const [revokeReason, setRevokeReason] = React.useState('');
   const [extendIso, setExtendIso] = React.useState(defaultExtension());
 
+  // PR-6E reviewer-side context: the CEI source exposure this exception was
+  // proposed from (if any). Read-only, informational. A failure to load it
+  // never blocks the review.
+  const [sourceEvent, setSourceEvent] = React.useState<ExceptionSourceEvent | null>(null);
+
   React.useEffect(() => {
     let cancelled = false;
     if (!slug || !id) return;
@@ -87,6 +94,13 @@ export default function VaultExceptionDetail() {
       setWorkspace(ws.data);
       setException(ex.data);
       setPhase('ready');
+      // Source-exposure context is a separate, best-effort read. The newest
+      // related CEI event (if any) carries the source exposure.
+      const src = await listExceptionSourceEvents(slug, id);
+      if (cancelled) return;
+      if (isOk(src) && src.data.events.length > 0) {
+        setSourceEvent(src.data.events[0]);
+      }
     })();
     return () => { cancelled = true; };
   }, [slug, id]);
@@ -211,6 +225,63 @@ export default function VaultExceptionDetail() {
           })}
         </ul>
       </section>
+
+      {/* PR-6E: read-only source-exposure context. If this exception was
+          proposed from a component exposure, show the reviewer where it came
+          from. Informational only — it does not change review semantics. */}
+      {sourceEvent && sourceEvent.source_exposure && (
+        <section className="mb-8 border border-sky-900 bg-sky-950/30 p-4">
+          <h2 className="text-sm font-mono font-bold mb-2 uppercase tracking-wider text-sky-300">
+            Source exposure
+          </h2>
+          <p className="text-xs font-mono text-slate-400 mb-3">
+            [PRIVATE] This exception was proposed from a component exposure.
+            Context only — you still decide.
+          </p>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs font-mono">
+            <div>
+              <dt className="text-slate-500 uppercase tracking-wider">exposure type</dt>
+              <dd className="text-slate-100">{sourceEvent.source_exposure.exposure_type || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 uppercase tracking-wider">status</dt>
+              <dd className="text-slate-100">{sourceEvent.source_exposure.status}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 uppercase tracking-wider">subject</dt>
+              <dd className="text-slate-100">
+                <span className="text-slate-500">{sourceEvent.source_exposure.subject_kind}</span>{' '}
+                {sourceEvent.source_exposure.subject_name}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 uppercase tracking-wider">source</dt>
+              <dd className="text-slate-100">
+                {sourceEvent.source_exposure.source_kind}
+                {sourceEvent.source_exposure.source_ref ? ` · ${sourceEvent.source_exposure.source_ref}` : ''}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 uppercase tracking-wider">proposed by</dt>
+              <dd className="text-slate-100">
+                {sourceEvent.actor ? `@${sourceEvent.actor.github_login}` : '—'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 uppercase tracking-wider">proposed at</dt>
+              <dd className="text-slate-100">{sourceEvent.created_at.slice(0, 19).replace('T', ' ')}</dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-xs font-mono">
+            <Link
+              to={`/vault/${slug}/exposures/${sourceEvent.source_exposure.exposure_id}`}
+              className="text-sky-300 underline hover:text-white"
+            >
+              View source exposure {sourceEvent.source_exposure.exposure_id.slice(0, 8)}
+            </Link>
+          </p>
+        </section>
+      )}
 
       {isReviewerOrOwner && (isProposed || isActive) && (
         <section className="border border-slate-700 bg-slate-800/40 p-4">
