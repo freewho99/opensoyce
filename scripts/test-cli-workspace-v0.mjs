@@ -430,11 +430,15 @@ test('PR-7A vault-api exposure surface is create + list only, on the private bou
   ok(/\/api\/vault\/workspaces\//.test(exposureBlock), 'exposure helpers must call /api/vault/workspaces/');
 });
 
-test('PR-7A ingest shape is fixed: dependency-exposure / package / cli (no custom types, no schemas)', () => {
+test('PR-7A ingest shape is fixed: dependency-exposure / package / cli|ci (no custom types, no schemas)', () => {
   const src = stripJsComments(read('packages/cli/src/commands/exposure/ingest-dependencies.ts'));
   ok(/exposure_type:\s*'dependency-exposure'/.test(src), 'must hardcode exposure_type: dependency-exposure');
   ok(/subject_kind:\s*'package'/.test(src), 'must hardcode subject_kind: package');
-  ok(/source_kind:\s*'cli'/.test(src), 'must hardcode source_kind: cli');
+  // PR-7B deliberately widened source_kind from the 7A literal 'cli' to the
+  // attribution conditional: 'ci' when --ci, 'cli' otherwise. NOTHING else.
+  ok(/source_kind:\s*ci \? 'ci' : 'cli'/.test(src),
+    "source_kind must be exactly the ci ? 'ci' : 'cli' conditional");
+  ok(!/source_kind:\s*'(manual|api)'/.test(src), 'ingest must never claim manual or api source kinds');
   for (const { rel, src: s } of exposureCommandSources()) {
     const code = stripJsComments(s);
     for (const banned of [
@@ -472,6 +476,50 @@ test('PR-7A output is marked private; exposure command never leaks the session t
   const src = read('packages/cli/src/commands/exposure/ingest-dependencies.ts');
   ok(/\[PRIVATE\]/.test(src), 'ingest text output must carry the [PRIVATE] marker');
   ok(/visibility:\s*'private'/.test(src), 'ingest JSON output must carry visibility: private');
+});
+
+// ---------- PR-7B: CI attribution on the 7A ingestion path ----------------
+//
+// CI observes. CI does not decide. CI creates exposure records. Humans
+// still propose. Reviewers still decide. CEI records the relationship.
+
+test('PR-7B CI attribution flags exist and are gated behind --ci', () => {
+  const args = read('packages/cli/src/args.ts');
+  for (const flag of ['--ci', '--ci-provider', '--run-id', '--job', '--sha', '--ref', '--repository']) {
+    ok(args.includes(`'${flag}'`), `args.ts must parse ${flag}`);
+  }
+  const src = stripJsComments(read('packages/cli/src/commands/exposure/ingest-dependencies.ts'));
+  // Attribution flags without --ci are a usage error (no silent mis-attribution).
+  ok(/require --ci/.test(src), 'attribution flags without --ci must be a usage error');
+  // --ci requires the minimum a reviewer needs to find the run.
+  ok(/--ci requires --ci-provider/.test(src), '--ci must require --ci-provider');
+  ok(/--ci requires --repository/.test(src), '--ci must require --repository');
+  ok(/--ci requires --run-id/.test(src), '--ci must require --run-id');
+  // CI source_ref is the provider/repo/run summary.
+  ok(/function ciSourceRef/.test(src) && /\/run\//.test(src),
+    'CI source_ref must be a provider/repo/run summary');
+});
+
+test('PR-7B attribution is explicit flags only — no ambient CI environment reads', () => {
+  for (const { rel, src } of exposureCommandSources()) {
+    const code = stripJsComments(src);
+    ok(!/process\.env/.test(code),
+      `${rel} reads process.env — CI attribution must come from explicit flags, never ambient env`);
+    ok(!/GITHUB_/.test(code), `${rel} references GITHUB_* env vars`);
+  }
+});
+
+test('PR-7B CI mode adds attribution only — no annotations, no PR comments, no GitHub API', () => {
+  for (const { rel, src } of exposureCommandSources()) {
+    const code = stripJsComments(src).toLowerCase();
+    for (const banned of ['octokit', 'annotation', 'pull_request', 'api.github.com', 'workflow_dispatch', 'check_run']) {
+      ok(!code.includes(banned), `${rel} references ${banned} — CI lane is attribution-only`);
+    }
+  }
+  // The CI metadata vocabulary is exactly the authorized attribution set.
+  const src = stripJsComments(read('packages/cli/src/commands/exposure/ingest-dependencies.ts'));
+  ok(/ci_provider:/.test(src) && /run_id:/.test(src) && /repository:/.test(src),
+    'CI metadata must carry ci_provider / run_id / repository');
 });
 
 // ---------- Wiring -------------------------------------------------------
