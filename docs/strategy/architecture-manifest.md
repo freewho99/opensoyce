@@ -49,7 +49,8 @@ do-not-claim:
 | Reviewer-side source-exposure context | implemented | PR-6E | PR #97 / `1a48e84` | Read-only "Source exposure" card on the exception review page; reviewer actions unchanged |
 | CEI reviewer-outcome audit | implemented | PR-6F | PR #98 / `da986f4` | Migration 0020 widens event-kind allowlist to 4; approve/reject/revoke additively record the outcome back to the exposure; expired kind deliberately deferred to the reaper scope |
 | Phase 6 proposal/audit loop closeout | implemented | PR-6-CLOSEOUT | PR #99 / `578ee18` | Phase 6 loop marked CLOSED; doctrine; demo walkthrough; 6G+ parked-not-authorized language |
-| Dependency-exposure ingestion (CLI) | implemented | PR-7A | this PR | `opensoyce exposure ingest-dependencies` — package.json / package-lock.json / explicit JSON → dependency-exposure records via the PR-6A create API; dry-run; client-side dedupe; ingestion observes, never decides |
+| Dependency-exposure ingestion (CLI) | implemented | PR-7A | PR #100 / `1b3b30b` | `opensoyce exposure ingest-dependencies` — package.json / package-lock.json / explicit JSON → dependency-exposure records via the PR-6A create API; dry-run; client-side dedupe; ingestion observes, never decides |
+| CI-attributed ingestion | implemented | PR-7B | this PR | `--ci --ci-provider --repository --run-id [--job --sha --ref]` on the 7A path; `source_kind: ci`; run-specific source_ref; explicit flags only (no ambient env); attribution-only, no annotations / PR comments |
 
 **Phase 5 is CLOSED.** See [`phase-5-closeout.md`](./phase-5-closeout.md) for the full handoff record.
 
@@ -65,9 +66,9 @@ _(none — PR-7A closed the first ingestion lane; further lanes are parked and e
 |---|---:|---|---|
 | Expiry reaper + expired-outcome event | parked | 6G+ | active→expired transition; owns `exception_expired_from_exposure` + the actor-nullability decision |
 | Exposure status lifecycle | parked | 6G+ | Move `observed` → `resolved` etc.; today the enum exists but nothing transitions it |
-| Server-side ingest dedupe constraint | parked | 7B+ | Unique index or upsert-touch of `last_seen_at`; PR-7A dedupe is client-side only |
-| `source_kind: ci` + CI-native ingestion | parked | 7B+ | Distinct CI source attribution, packaging, annotations; today CI runs the CLI and records say `cli` |
-| Other manifest ecosystems / SBOM / scanner ingest | parked | 7B+ | yarn / pnpm / poetry / uv, SBOM import, scanner output; PR-7A is npm package metadata only |
+| Server-side ingest dedupe constraint | parked | 7C+ | Unique index or upsert-touch of `last_seen_at`; 7A/7B dedupe is client-side only; also the lane that would aggregate per-run CI observations |
+| CI-native packaging (Action wrapper / annotations / PR comments) | parked | 7C+ | Today the CI story is "run the CLI in a workflow step with attribution flags" |
+| Other manifest ecosystems / SBOM / scanner ingest | parked | 7C+ | yarn / pnpm / poetry / uv, SBOM import, scanner output; 7A/7B are npm package metadata only |
 | Custom exposure type registry | parked | 6G+ | Workspace-defined types beyond the 6 native |
 | Dynamic JSON Schema validation | parked | 6G+ | `validation_schema` for custom exposure metadata |
 | Shared Vault Timeline integration | parked | 6G+ | The 6A deferral stands; CEI audits stay in CEI's own surface |

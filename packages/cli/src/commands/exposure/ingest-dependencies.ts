@@ -36,6 +36,32 @@ const EXPOSURE_SCAN_PAGE_SIZE = 200;
 const MAX_SCAN_RECORDS = 5000;
 const MAX_SOURCE_REF_LEN = 512;
 
+// PR-7B CI attribution. Attribution only: --ci flips source_kind to 'ci'
+// and records WHERE the observation ran. It changes nothing about WHAT is
+// recorded (still dependency-exposure / package) and adds no verbs.
+const CI_PROVIDER_RE = /^[a-z0-9][a-z0-9-]*$/;
+const CI_REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+
+interface CiAttribution {
+  provider: string;
+  repository: string;
+  runId: string;
+  job?: string;
+  sha?: string;
+  ref?: string;
+}
+
+// CI source_ref: a provider/repo/run/job/sha summary. Run-specific BY
+// DESIGN — a retry of the same run dedupes; a new run is a new
+// observation. Aggregating repeat observations (last_seen_at upsert)
+// is the deferred server-side dedupe lane.
+function ciSourceRef(ci: CiAttribution): string {
+  let ref = `${ci.provider}/${ci.repository}/run/${ci.runId}`;
+  if (ci.job) ref += `/job/${ci.job}`;
+  if (ci.sha) ref += `/sha/${ci.sha}`;
+  return ref;
+}
+
 function dedupeKey(name: string, version: string, sourceRef: string): string {
   return `${name}|${version}|${sourceRef}`;
 }
@@ -46,22 +72,40 @@ function existingKey(row: ComponentExposure): string | null {
   return dedupeKey(row.subject_name, version, row.source_ref || '');
 }
 
-function buildBody(entry: DependencyEntry, sourceRef: string, manifestKind: ManifestKind): CreateExposureBody {
+function buildBody(
+  entry: DependencyEntry,
+  sourceRef: string,
+  manifestKind: ManifestKind,
+  ci: CiAttribution | null,
+): CreateExposureBody {
   return {
     exposure_type: 'dependency-exposure',
     subject_kind: 'package',
     subject_name: entry.name,
-    source_kind: 'cli',
+    source_kind: ci ? 'ci' : 'cli',
     source_ref: sourceRef,
     metadata: {
       package: entry.name,
       version: entry.version,
       dev: entry.dev,
       dependency_class: entry.dev ? 'dev' : 'prod',
+      ...(ci ? {
+        ci_provider: ci.provider,
+        repository: ci.repository,
+        run_id: ci.runId,
+        ...(ci.job ? { job: ci.job } : {}),
+        ...(ci.sha ? { sha: ci.sha } : {}),
+        ...(ci.ref ? { ref: ci.ref } : {}),
+      } : {}),
     },
     trust_boundary: {
       package_manager: 'npm',
       manifest_kind: manifestKind,
+      ...(ci ? {
+        ci_provider: ci.provider,
+        repository: ci.repository,
+        ...(ci.ref ? { ref: ci.ref } : {}),
+      } : {}),
     },
   };
 }
@@ -74,6 +118,37 @@ export async function runExposureIngestDependencies(args: ParsedArgs): Promise<n
   if (!args.file) {
     process.stderr.write('Usage error: --file <package.json|package-lock.json|deps.json> is required.\n');
     return EXIT_USAGE_ERROR;
+  }
+
+  // PR-7B CI attribution validation. Attribution flags without --ci are a
+  // usage error (never silently mis-attribute); --ci requires the minimum
+  // attribution a reviewer needs to find the run: provider, repo, run id.
+  if (!args.ci && (args.ciProvider || args.ciRunId || args.ciJob || args.ciSha || args.ciRef || args.ciRepository)) {
+    process.stderr.write('Usage error: CI attribution flags (--ci-provider, --run-id, --job, --sha, --ref, --repository) require --ci.\n');
+    return EXIT_USAGE_ERROR;
+  }
+  let ci: CiAttribution | null = null;
+  if (args.ci) {
+    if (!args.ciProvider || !CI_PROVIDER_RE.test(args.ciProvider)) {
+      process.stderr.write('Usage error: --ci requires --ci-provider <provider> (e.g. github-actions).\n');
+      return EXIT_USAGE_ERROR;
+    }
+    if (!args.ciRepository || !CI_REPO_RE.test(args.ciRepository)) {
+      process.stderr.write('Usage error: --ci requires --repository <owner/repo>.\n');
+      return EXIT_USAGE_ERROR;
+    }
+    if (!args.ciRunId) {
+      process.stderr.write('Usage error: --ci requires --run-id <id>.\n');
+      return EXIT_USAGE_ERROR;
+    }
+    ci = {
+      provider: args.ciProvider,
+      repository: args.ciRepository,
+      runId: args.ciRunId,
+      job: args.ciJob,
+      sha: args.ciSha,
+      ref: args.ciRef,
+    };
   }
 
   const session = loadSession();
@@ -97,12 +172,15 @@ export async function runExposureIngestDependencies(args: ParsedArgs): Promise<n
     process.stderr.write(`Usage error: ${parsed.message}\n`);
     return EXIT_USAGE_ERROR;
   }
-  const sourceRef = args.file.slice(0, MAX_SOURCE_REF_LEN);
+  // CLI mode: source_ref is the file path. CI mode: source_ref is the
+  // provider/repo/run/job/sha summary (where the observation ran).
+  const sourceRef = (ci ? ciSourceRef(ci) : args.file).slice(0, MAX_SOURCE_REF_LEN);
 
   if (parsed.entries.length === 0) {
     if (args.json) {
       process.stdout.write(JSON.stringify({
         workspace, file: args.file, manifest_kind: parsed.manifestKind,
+        source_kind: ci ? 'ci' : 'cli', source_ref: sourceRef,
         planned: [], created: 0, skipped_existing: 0, failed: 0,
         dry_run: args.dryRun, visibility: 'private',
       }) + '\n');
@@ -156,6 +234,7 @@ export async function runExposureIngestDependencies(args: ParsedArgs): Promise<n
     if (args.json) {
       process.stdout.write(JSON.stringify({
         workspace, file: args.file, manifest_kind: parsed.manifestKind,
+        source_kind: ci ? 'ci' : 'cli', source_ref: sourceRef,
         planned: planned.map((e) => ({ name: e.name, version: e.version, dev: e.dev })),
         created: 0, skipped_existing: skippedExisting, failed: 0,
         dry_run: true, visibility: 'private',
@@ -177,7 +256,7 @@ export async function runExposureIngestDependencies(args: ParsedArgs): Promise<n
   for (const entry of planned) {
     const res = await createExposure(
       apiBase, session.session_token, workspace,
-      buildBody(entry, sourceRef, parsed.manifestKind), args.timeoutMs,
+      buildBody(entry, sourceRef, parsed.manifestKind, ci), args.timeoutMs,
     );
     if (res.ok) {
       created += 1;
@@ -196,6 +275,7 @@ export async function runExposureIngestDependencies(args: ParsedArgs): Promise<n
   if (args.json) {
     process.stdout.write(JSON.stringify({
       workspace, file: args.file, manifest_kind: parsed.manifestKind,
+      source_kind: ci ? 'ci' : 'cli', source_ref: sourceRef,
       created, skipped_existing: skippedExisting, failed: failures.length,
       failures, dry_run: false, visibility: 'private',
     }) + '\n');

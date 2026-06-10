@@ -1,6 +1,6 @@
-# Phase 7A — Dependency-Exposure Ingestion (CLI)
+# Phase 7A/7B — Dependency-Exposure Ingestion (CLI + CI attribution)
 
-Status: scope record for PR-7A
+Status: scope record for PR-7A and PR-7B
 Scope: CLI/CI dependency-exposure ingestion ONLY. Create exposure records. No exceptions. No proposals. No policy. No lifecycle. No custom types. No claims expansion.
 
 ## Product thesis
@@ -37,13 +37,37 @@ opensoyce exposure ingest-dependencies --workspace <slug> --file <path> [--dry-r
 - **`--dry-run`**: prints the plan, writes nothing. The early return is structurally pinned to come before any create call.
 - **Dedupe guard**: before creating, the CLI pages the workspace's existing exposures (200/page, 5000-record cap — same shape as the exception-list subject scan) and skips entries whose package + version + source_ref already exist. When the cap truncates the scan, the CLI says so instead of pretending dedupe was complete.
 
+## PR-7B — CI attribution (same path, attributed source)
+
+7A proved a developer can ingest from the CLI. 7B proves the same observation can come from CI — while still only creating exposure records.
+
+```txt
+CI observes.
+CI does not decide.
+CI creates exposure records.
+Humans still propose.
+Reviewers still decide.
+CEI records the relationship.
+```
+
+- **Flags**: `--ci` (switches `source_kind` to `ci`) plus attribution: `--ci-provider`, `--repository`, `--run-id` (all three required with `--ci`), and optional `--job`, `--sha`, `--ref`.
+- **Gating**: attribution flags without `--ci` are a usage error — the CLI never silently mis-attributes. `--ci` without provider/repo/run-id is a usage error — a reviewer must be able to find the run.
+- **Explicit flags only**: the ingestion lane structurally bans `process.env` and `GITHUB_*` reads. CI attribution is what the workflow passes, never ambient environment sniffing.
+- **Record changes** (attribution only): `source_kind: ci`; `source_ref` = `provider/owner-repo/run/<id>[/job/<job>][/sha/<sha>]`; metadata additionally carries `ci_provider`, `repository`, `run_id`, and optional `job` / `sha` / `ref`; trust_boundary additionally carries `ci_provider`, `repository`, optional `ref`. `exposure_type` / `subject_kind` / the parser / dry-run / transport are byte-for-byte the 7A path.
+- **Dedupe semantics in CI mode**: the key is still package + version + source_ref, and the CI source_ref is run-specific BY DESIGN — a retry of the same run dedupes; a new run is a new observation. Aggregating repeat observations across runs (`last_seen_at` upsert) is the deferred server-side dedupe lane below.
+- **Zero server changes** (again): `source_kind: 'ci'` was already in the PR-6A `SOURCE_KINDS` allowlist.
+
 ## Deferred (documented, not forgotten)
 
-- **Server-side uniqueness constraint** on `(workspace_id, exposure_type, subject_name, metadata.version, source_ref)` or a content hash. The client-side guard makes re-runs cheap, not transactional — two concurrent ingests can still double-create. Making dedupe transactional needs a schema decision (unique index vs upsert-touch of `last_seen_at`) and belongs to its own scope block.
-- **`source_kind: ci`** as a distinct value. The command runs fine inside CI today, but records say `cli` — distinguishing the two (and any CI-native packaging, annotations, or PR comments) is future scope.
+- **Server-side uniqueness constraint** on `(workspace_id, exposure_type, subject_name, metadata.version, source_ref)` or a content hash. The client-side guard makes re-runs cheap, not transactional — two concurrent ingests can still double-create. Making dedupe transactional needs a schema decision (unique index vs upsert-touch of `last_seen_at`) and belongs to its own scope block. In CI mode this is also the lane that would aggregate per-run observations instead of accumulating one record set per run.
+- **CI-native packaging** (a published GitHub Action wrapper, annotations, PR comments, check runs): all explicitly out of scope; the CI story today is "run the CLI in a workflow step with attribution flags."
 - Other manifest ecosystems (yarn, pnpm, poetry, uv), SBOM import, scanner output, and the other five native exposure types: all parked.
 
-## Structural enforcement (test-cli-workspace-v0, +7 invariants)
+## Structural enforcement (test-cli-workspace-v0; +7 in 7A, +3 in 7B = 30)
+
+PR-7B additions: CI flags exist and are gated behind `--ci` with required provider/repo/run-id; attribution is explicit-flags-only (no `process.env`, no `GITHUB_*`); CI mode is attribution-only (no octokit / annotation / pull_request / GitHub API vocabulary in the lane); `source_kind` is structurally pinned to exactly the `ci ? 'ci' : 'cli'` conditional and may never claim `manual` or `api`.
+
+PR-7A invariants:
 
 - `exposure ingest-dependencies` exists, is dispatched, and is workspace-required.
 - The ingestion lane references NO exception verb — no propose, no revoke, no approve/reject/extend/withdraw, no `/exceptions` path.

@@ -36,6 +36,16 @@ export interface ParsedArgs {
   // Exposure-ingestion flag bag (PR-7A):
   file?: string;
   dryRun: boolean;
+  // CI attribution flag bag (PR-7B). --ci switches source_kind to 'ci';
+  // the rest attribute WHERE the observation ran. Attribution only — the
+  // record is still just an exposure record.
+  ci: boolean;
+  ciProvider?: string;
+  ciRunId?: string;
+  ciJob?: string;
+  ciSha?: string;
+  ciRef?: string;
+  ciRepository?: string;
   unknownFlag?: string;
   unknownFlagValue?: string;
 }
@@ -66,8 +76,19 @@ const EXCEPTION_FILTER_FLAGS = new Set([
   '--reason',
   '--expires-at',
 ]);
-// PR-7A exposure-ingestion flags. Validated on dispatch.
-const EXPOSURE_INGEST_FLAGS = new Set(['--file', '--dry-run']);
+// PR-7A exposure-ingestion flags + PR-7B CI attribution flags. Validated
+// on dispatch.
+const EXPOSURE_INGEST_FLAGS = new Set([
+  '--file',
+  '--dry-run',
+  '--ci',
+  '--ci-provider',
+  '--run-id',
+  '--job',
+  '--sha',
+  '--ref',
+  '--repository',
+]);
 
 // Commands that REJECT --workspace per PR-V1-E §3.1. Passing --workspace to
 // these is a USAGE_ERROR.
@@ -89,6 +110,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     help: false,
     version: false,
     dryRun: false,
+    ci: false,
   };
 
   let i = 0;
@@ -232,6 +254,47 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (tok === '--dry-run') {
       result.dryRun = true;
       i += 1; continue;
+    }
+    // CI attribution flags (PR-7B). Validated on dispatch.
+    if (tok === '--ci') {
+      result.ci = true;
+      i += 1; continue;
+    }
+    if (tok === '--ci-provider') {
+      const v = argv[i + 1];
+      if (!v) { result.unknownFlag = '--ci-provider'; return result; }
+      result.ciProvider = v;
+      i += 2; continue;
+    }
+    if (tok === '--run-id') {
+      const v = argv[i + 1];
+      if (!v) { result.unknownFlag = '--run-id'; return result; }
+      result.ciRunId = v;
+      i += 2; continue;
+    }
+    if (tok === '--job') {
+      const v = argv[i + 1];
+      if (!v) { result.unknownFlag = '--job'; return result; }
+      result.ciJob = v;
+      i += 2; continue;
+    }
+    if (tok === '--sha') {
+      const v = argv[i + 1];
+      if (!v) { result.unknownFlag = '--sha'; return result; }
+      result.ciSha = v;
+      i += 2; continue;
+    }
+    if (tok === '--ref') {
+      const v = argv[i + 1];
+      if (!v) { result.unknownFlag = '--ref'; return result; }
+      result.ciRef = v;
+      i += 2; continue;
+    }
+    if (tok === '--repository') {
+      const v = argv[i + 1];
+      if (!v) { result.unknownFlag = '--repository'; return result; }
+      result.ciRepository = v;
+      i += 2; continue;
     }
 
     if (tok.startsWith('-')) {

@@ -144,26 +144,38 @@ EXAMPLES:
 ${FOOTER}
 `,
 
-  exposure: `opensoyce exposure ingest-dependencies --workspace <id> --file <path> [--dry-run]
+  exposure: `opensoyce exposure ingest-dependencies --workspace <id> --file <path> [--dry-run] [--ci ...]
 
 Create dependency-exposure RECORDS in a Vault workspace from package
 metadata. Requires a Vault session and the --workspace flag.
 
 Ingestion observes; it does not decide. Created records are observations
 only — proposing an exception stays a human action, and reviewing it
-stays a reviewer action.
+stays a reviewer action. The same holds in CI: --ci attributes WHERE the
+observation ran; it adds no verbs and decides nothing.
 
-  --file       package.json, package-lock.json (npm v1/v2/v3), or an
-               explicit JSON file: { "dependencies": [ { "name", "version", "dev"? } ] }
-  --dry-run    Print what would be created; write nothing.
+  --file          package.json, package-lock.json (npm v1/v2/v3), or an
+                  explicit JSON file: { "dependencies": [ { "name", "version", "dev"? } ] }
+  --dry-run       Print what would be created; write nothing.
+  --ci            Record source_kind 'ci' instead of 'cli'. Requires
+                  --ci-provider, --repository, and --run-id.
+  --ci-provider   CI provider slug (e.g. github-actions)
+  --repository    <owner/repo> the run belongs to
+  --run-id        CI run id
+  --job           CI job name (optional)
+  --sha           Commit SHA the run observed (optional)
+  --ref           Git ref (e.g. refs/heads/main) (optional)
 
-Records already ingested with the same package, version, and source file
-are skipped.
+Records already ingested with the same package, version, and source_ref
+are skipped. In CI mode the source_ref is the provider/repo/run summary,
+so a RETRY of the same run dedupes while a new run records anew.
 
 EXAMPLES:
   opensoyce exposure ingest-dependencies --workspace acme --file package-lock.json --dry-run
   opensoyce exposure ingest-dependencies --workspace acme --file package-lock.json
-  opensoyce exposure ingest-dependencies --workspace acme --file deps.json --json
+  opensoyce exposure ingest-dependencies --workspace acme --file package-lock.json \\
+    --ci --ci-provider github-actions --repository org/repo --run-id 123456 \\
+    --job dependency-check --sha abc123 --ref refs/heads/main
 
 ${FOOTER}
 `,
