@@ -41,21 +41,33 @@ do-not-claim:
 | CLI workspace mode | implemented | PR-V2-D | PR #84 / `15fc8eb` | Device-code login, `--workspace`, exception list/propose/revoke, atomic CLI v0 lock lift |
 | CEI architecture lock-in + v3 addendum | implemented | strategy docs | PR #85 / `34ef316` | Do-not-claim firewall, parking lot, resilience doctrine, v3 enterprise boundaries |
 | Vault Dashboard + `/cli-auth` approval | implemented | PR-V2-E | PR #86 / `47f86bc` | Browser approval page + Dashboard shell (workspaces, Trust Expiry table, exception detail w/ reviewer actions, Vault Timeline, evidence detail) |
-| Phase 5 closeout | implemented | PR-V3 | this PR | Phase 5 marked COMPLETE; final doctrine; closeout checklist; Phase 6 parked-not-authorized language |
+| Phase 5 closeout | implemented | PR-V3 | PR #87 / `83486c8` | Phase 5 marked COMPLETE; final doctrine; closeout checklist; Phase 6 parked-not-authorized language |
+| CEI foundation (native catalog + exposure records) | implemented | PR-6A | PR #93 / `4b3127a` | `component_exposure_types` (6 native, read-only) + workspace-scoped `component_exposures`; migrations 0017/0018; private, RLS deny-by-default |
+| Exposure read surface | implemented | PR-6B | PR #94 / `adbb4f2` | Read-only `/vault/:slug/exposures` list + detail inside VaultLayout; GET-only api-client |
+| Propose exception from exposure | implemented | PR-6C | PR #95 / `abfe03f` | Two-step review→submit draft via the existing Phase 5 propose endpoint; proposed-only; exposure never mutated |
+| CEI-native proposal audit | implemented | PR-6D | PR #96 / `9a3c46f` | `component_exposure_events` (migration 0019); single proposal event kind; additive best-effort recording; `vault_timeline_events` untouched |
+| Reviewer-side source-exposure context | implemented | PR-6E | PR #97 / `1a48e84` | Read-only "Source exposure" card on the exception review page; reviewer actions unchanged |
+| CEI reviewer-outcome audit | implemented | PR-6F | PR #98 / `da986f4` | Migration 0020 widens event-kind allowlist to 4; approve/reject/revoke additively record the outcome back to the exposure; expired kind deliberately deferred to the reaper scope |
+| Phase 6 proposal/audit loop closeout | implemented | PR-6-CLOSEOUT | this PR | Phase 6 loop marked CLOSED; doctrine; demo walkthrough; 6G+ parked-not-authorized language |
 
 **Phase 5 is CLOSED.** See [`phase-5-closeout.md`](./phase-5-closeout.md) for the full handoff record.
 
+**The Phase 6 proposal/audit loop is CLOSED.** See [`phase-6-closeout.md`](./phase-6-closeout.md) for the full handoff record and [`../proof/cei-decision-loop-demo.md`](../proof/cei-decision-loop-demo.md) for the runnable walkthrough.
+
 ## Approved Next
 
-_(none — Phase 5 is closed; Phase 6 is parked and requires explicit user approval before any implementation begins)_
+_(none — the Phase 6 proposal/audit loop is closed; 6G+ lanes are parked and each requires explicit user approval with a scope block before any implementation begins)_
 
-## Parked — Component Exposure Intelligence
+## Parked — Component Exposure Intelligence (post-6F lanes)
 
 | Artifact | Status | Phase | Purpose |
 |---|---:|---|---|
-| Component exposure type registry | parked | Phase 6 | Native/custom exposure types |
-| Component exposure records | parked | Phase 6 | Store observed exposure evidence separate from exceptions |
-| Dynamic JSON Schema validation | parked | Phase 6 | Validate custom exposure metadata |
+| Expiry reaper + expired-outcome event | parked | 6G+ | active→expired transition; owns `exception_expired_from_exposure` + the actor-nullability decision |
+| Exposure status lifecycle | parked | 6G+ | Move `observed` → `resolved` etc.; today the enum exists but nothing transitions it |
+| Exposure ingestion (CLI/CI) | parked | 6G+ / Phase 7 | Upload real exposures; today only manual API create exists |
+| Custom exposure type registry | parked | 6G+ | Workspace-defined types beyond the 6 native |
+| Dynamic JSON Schema validation | parked | 6G+ | `validation_schema` for custom exposure metadata |
+| Shared Vault Timeline integration | parked | 6G+ | The 6A deferral stands; CEI audits stay in CEI's own surface |
 | Cloud permission drift evidence | parked | Phase 6+ | Compare cloud entitlement changes against trust policy |
 | Decision-Event Reconciliation | parked | Phase 6+ | Decide whether external events were allowed by trust record |
 
