@@ -20,6 +20,7 @@ COMMANDS:
   login                        Sign in to a Vault workspace via device code
   logout                       Clear the local Vault session
   exception <subcommand>       Vault workspace exceptions (list | propose | revoke)
+  exposure <subcommand>        Vault workspace exposures (ingest-dependencies)
 
 GLOBAL OPTIONS:
   --json                       Machine-consumable JSON output
@@ -139,6 +140,30 @@ EXAMPLES:
   opensoyce exception list --workspace acme --state active
   opensoyce exception propose --workspace acme --subject ua-parser-js@0.7.29 --from BLOCK --to WARN --reason "Patched fork pinned for 30 days"
   opensoyce exception revoke b4d6a47d-1e9c-4ce4-9c63-79c6c4f1c0a3 --reason "Patched upstream" --workspace acme
+
+${FOOTER}
+`,
+
+  exposure: `opensoyce exposure ingest-dependencies --workspace <id> --file <path> [--dry-run]
+
+Create dependency-exposure RECORDS in a Vault workspace from package
+metadata. Requires a Vault session and the --workspace flag.
+
+Ingestion observes; it does not decide. Created records are observations
+only — proposing an exception stays a human action, and reviewing it
+stays a reviewer action.
+
+  --file       package.json, package-lock.json (npm v1/v2/v3), or an
+               explicit JSON file: { "dependencies": [ { "name", "version", "dev"? } ] }
+  --dry-run    Print what would be created; write nothing.
+
+Records already ingested with the same package, version, and source file
+are skipped.
+
+EXAMPLES:
+  opensoyce exposure ingest-dependencies --workspace acme --file package-lock.json --dry-run
+  opensoyce exposure ingest-dependencies --workspace acme --file package-lock.json
+  opensoyce exposure ingest-dependencies --workspace acme --file deps.json --json
 
 ${FOOTER}
 `,

@@ -11,7 +11,8 @@
 
 export interface ParsedArgs {
   command: string | null;
-  // Exception subcommand: 'list' | 'propose' | 'revoke' when command === 'exception'.
+  // Subcommand: 'list' | 'propose' | 'revoke' when command === 'exception';
+  // 'ingest-dependencies' when command === 'exposure' (PR-7A).
   subcommand?: string;
   positional: string[];
   json: boolean;
@@ -32,6 +33,9 @@ export interface ParsedArgs {
   exceptionTo?: string;
   exceptionReason?: string;
   exceptionExpiresAt?: string;
+  // Exposure-ingestion flag bag (PR-7A):
+  file?: string;
+  dryRun: boolean;
   unknownFlag?: string;
   unknownFlagValue?: string;
 }
@@ -62,14 +66,16 @@ const EXCEPTION_FILTER_FLAGS = new Set([
   '--reason',
   '--expires-at',
 ]);
+// PR-7A exposure-ingestion flags. Validated on dispatch.
+const EXPOSURE_INGEST_FLAGS = new Set(['--file', '--dry-run']);
 
 // Commands that REJECT --workspace per PR-V1-E §3.1. Passing --workspace to
 // these is a USAGE_ERROR.
 export const WORKSPACE_FORBIDDEN_COMMANDS = new Set(['trust', 'login', 'logout']);
 
 // Commands that REQUIRE --workspace whenever invoked (the exception
-// subcommand group per PR-V1-E §4).
-export const WORKSPACE_REQUIRED_COMMANDS = new Set(['exception']);
+// subcommand group per PR-V1-E §4; the exposure ingestion group per PR-7A).
+export const WORKSPACE_REQUIRED_COMMANDS = new Set(['exception', 'exposure']);
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const result: ParsedArgs = {
@@ -82,6 +88,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     quiet: false,
     help: false,
     version: false,
+    dryRun: false,
   };
 
   let i = 0;
@@ -215,11 +222,23 @@ export function parseArgs(argv: string[]): ParsedArgs {
       result.exceptionExpiresAt = v;
       i += 2; continue;
     }
+    // Exposure-ingestion flags (PR-7A). Validated on dispatch.
+    if (tok === '--file') {
+      const v = argv[i + 1];
+      if (!v) { result.unknownFlag = '--file'; return result; }
+      result.file = v;
+      i += 2; continue;
+    }
+    if (tok === '--dry-run') {
+      result.dryRun = true;
+      i += 1; continue;
+    }
 
     if (tok.startsWith('-')) {
       if (!KNOWN_GLOBAL_FLAGS.has(tok)
         && !TIMELINE_FILTER_FLAGS.has(tok)
-        && !EXCEPTION_FILTER_FLAGS.has(tok)) {
+        && !EXCEPTION_FILTER_FLAGS.has(tok)
+        && !EXPOSURE_INGEST_FLAGS.has(tok)) {
         result.unknownFlag = tok;
         return result;
       }
@@ -231,6 +250,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
       result.command = tok;
     } else if (result.command === 'exception' && !result.subcommand) {
       // exception list | propose | revoke
+      result.subcommand = tok;
+    } else if (result.command === 'exposure' && !result.subcommand) {
+      // exposure ingest-dependencies (PR-7A)
       result.subcommand = tok;
     } else {
       result.positional.push(tok);
