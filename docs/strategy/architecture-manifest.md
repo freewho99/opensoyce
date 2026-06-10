@@ -54,7 +54,9 @@ do-not-claim:
 | Server-side semantic dedupe | implemented | PR-7C | PR #102 / `7928c9f` | Migration 0021: `observation_identity` + `seen_count` + `latest_source_ref` + partial unique index; upsert-touch, not unique-reject; identity = fact (name/version/manager/manifest/class), never source_ref; repetition is quiet, provenance is not erased |
 | CI-native packaging (thin wrapper) | implemented | PR-7D | PR #103 / `66f9029` | `actions/ingest-dependencies` composite Action around the 7B CLI command; explicit inputs only (expressions live in the caller's workflow); session-token secret → 0600 session file, removed `if: always()`; no octokit / API / annotations / check runs / comments / policy |
 | Vault/CEI production runtime | implemented | PR-RUNTIME-1 | PR #105 / `bc24bb1` | `api/vault.js` Vercel function mounting the existing `registerVaultRoutes` + `/api/vault/:path*` rewrite; fixes production finding #2 (route family was local-only since Phase 5); runtime-presence + 12-function-cap structural guards; band-drop-tick folded (and its dead claim-submit import fixed) |
-| Release Integrity Guard | implemented | PR-INTEGRITY-1 | this PR | `scripts/check-release-integrity.mjs` — 4 layers (static shape / schema presence / runtime presence / provider config), read-only by construction, target-coherent, strict release-gate mode; see [`release-integrity-guard.md`](./release-integrity-guard.md) |
+| Release Integrity Guard | implemented | PR-INTEGRITY-1 | PR #106 / `3da3cf0` | `scripts/check-release-integrity.mjs` — 4 layers (static shape / schema presence / runtime presence / provider config), read-only by construction, target-coherent, strict release-gate mode; see [`release-integrity-guard.md`](./release-integrity-guard.md) |
+| Production CEI decision loop proof | implemented | PR-PROOF-1 | PR #107 / `771cabb` | First category artifact: [`production-cei-decision-loop-proof.md`](../proof/production-cei-decision-loop-proof.md) + 7 production screenshots; proof-package artifact #7; honest-edges section; no compliance claims |
+| SOC 2 evidence map | implemented | PR-14B | this PR | Doc-level map of trust records to audit-relevant evidence questions — [`soc2-evidence-map.md`](./soc2-evidence-map.md); buyer/auditor language, honest gaps per lane, NO compliance claims; the bridge from proof artifact to evidence exports (lane 17) |
 
 **Phase 5 is CLOSED.** See [`phase-5-closeout.md`](./phase-5-closeout.md) for the full handoff record.
 
@@ -68,8 +70,7 @@ _(none — PR-7D closed the packaging lane; further lanes are parked and each re
 
 | Artifact | Status | Lane | Purpose |
 |---|---:|---|---|
-| SOC 2 evidence map / audit-readiness rider | parked | 14B | Map OpenSoyce records to SOC 2-style control/evidence questions WITHOUT claiming compliance; docs-first |
-| Scanner + vulnerability-intelligence observations | parked | 15A | OSV / GHSA / CVE / scanner findings / malicious-package signals / license risk ingested as OBSERVATIONS |
+| Scanner + vulnerability-intelligence observations | parked | 15A | OSV / GHSA / CVE / scanner findings / malicious-package signals / license risk ingested as OBSERVATIONS; joins the two surfaces named in the evidence map's Q3 |
 | Remediation Question Loop | parked | 15B | Vulnerability observations → reviewable decisions (fix / defer / except / reject / owner-review / not-applicable); the canonical Phase 7 idea, human-decided |
 | Broader ecosystems / SBOM | parked | 15C | pnpm / yarn / poetry / uv, CycloneDX/SPDX, scanner/SBOM input formats |
 | Expiry reaper + expired-outcome event | parked | 16 | active→expired transition; owns `exception_expired_from_exposure` + the actor-nullability decision |
