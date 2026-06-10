@@ -25,6 +25,10 @@
       "destination": "/api/exceptions?action=cron-update-registry"
     },
     {
+      "source": "/api/band-drop-tick",
+      "destination": "/api/exceptions?action=band-drop-tick"
+    },
+    {
       "source": "/api/github/:owner/:repo",
       "destination": "/api/github"
     },

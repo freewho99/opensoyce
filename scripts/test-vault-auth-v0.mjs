@@ -393,6 +393,20 @@ test('PR-RUNTIME-1: every registered vault/CEI route has a production surface', 
     'the /api/vault family must be reachable via the vercel.json rewrite');
 });
 
+test('PR-RUNTIME-1: the Vercel Hobby function cap is respected (max 12 functions)', () => {
+  // The deployment platform rejects builds with >12 serverless functions on
+  // the Hobby plan — discovered the hard way when api/vault.js was function
+  // #13 (the band-drop-tick fold freed the slot). Every non-underscore .js
+  // file in api/ counts as one function; underscore-prefixed files are
+  // import-only by repo convention. This guard makes the cap a structural
+  // failure instead of a deployment surprise. If the team upgrades plans,
+  // raise the cap here DELIBERATELY, in its own commit.
+  const fns = fs.readdirSync(path.join(root, 'api'))
+    .filter((n) => n.endsWith('.js') && !n.startsWith('_'));
+  ok(fns.length <= 12,
+    `api/ has ${fns.length} serverless functions (${fns.join(', ')}) — the Hobby cap is 12; fold via the underscore + action pattern or raise the cap deliberately`);
+});
+
 // ---------------------------------------------------------------------------
 // Isolation invariants
 // ---------------------------------------------------------------------------

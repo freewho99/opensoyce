@@ -38,6 +38,11 @@ import crypto from 'node:crypto';
 import { isValidGithubName } from '../src/shared/validateRepo.js';
 import { generateAppJwt, getInstallationToken, githubFetch } from './_guard-app.js';
 import { getSupabase } from './_supabase.js';
+// PR-RUNTIME-1 fold: the band-drop cron tick moved to an underscore-prefixed
+// import-only module (freeing a function slot under the 12-function Hobby
+// cap for api/vault.js). Same action-folding pattern as cron-update-registry;
+// the public URL /api/band-drop-tick is preserved via a vercel.json rewrite.
+import bandDropTickHandler from './_band-drop-tick.js';
 import { signReport } from '../src/shared/reportSigning.js';
 import { resolvePolicy, extractPolicyMetadata, parseYamlPolicy, DEFAULT_POLICY } from '../src/shared/policyInheritance.js';
 import { detectOtsPatternsForRow } from '../src/shared/otsPatterns.js';
@@ -2966,6 +2971,9 @@ export default async function handler(req, res) {
     if (method === 'GET' && action === 'compliance-evidence') return await handleComplianceEvidence(req, res);
     if (method === 'POST' && action === 'compliance-gate') return await handleComplianceGate(req, res);
     if (method === 'GET' && action === 'cron-update-registry') return await handleCronUpdateRegistry(req, res);
+    // band-drop-tick does its own CRON_SECRET bearer auth internally (it is
+    // not dashboard-session-gated), so it dispatches with the public branches.
+    if (method === 'GET' && action === 'band-drop-tick') return await bandDropTickHandler(req, res);
 
     // Auth-gated branches.
     const session = verifyDashboardSession(req);

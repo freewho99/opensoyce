@@ -34,7 +34,7 @@ import handler, {
   upsertLastBandMarker,
   buildDropCommentBody,
   BAND_LADDER,
-} from '../api/band-drop-tick.js';
+} from '../api/_band-drop-tick.js';
 
 let passed = 0;
 let failed = 0;
