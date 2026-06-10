@@ -51,6 +51,20 @@ function test(name, fn) {
 function ok(c, msg) { if (!c) throw new Error(msg || 'assertion failed'); }
 function read(rel) { return fs.readFileSync(path.join(root, rel), 'utf8'); }
 
+// Strip // line comments and /* */ block comments so content greps test the
+// actual code, not doctrine prose in the comments (which deliberately NAMES
+// the patterns it is explaining the ABSENCE of, e.g. "NO propose exception").
+function readNoComments(rel) {
+  return read(rel)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => {
+      const idx = line.indexOf('//');
+      return idx >= 0 ? line.slice(0, idx) : line;
+    })
+    .join('\n');
+}
+
 const VAULT_DASHBOARD_FILES = [
   'src/pages/CliAuth.tsx',
   'src/pages/vault/VaultDashboard.tsx',
@@ -59,7 +73,10 @@ const VAULT_DASHBOARD_FILES = [
   'src/pages/vault/VaultExceptionDetail.tsx',
   'src/pages/vault/VaultTimeline.tsx',
   'src/pages/vault/VaultEvidenceDetail.tsx',
+  'src/pages/vault/VaultExposureList.tsx',
+  'src/pages/vault/VaultExposureDetail.tsx',
   'src/components/VaultLayout.tsx',
+  'src/components/VaultAuthGate.tsx',
   'src/shared/vault/api-client.ts',
 ];
 
@@ -245,6 +262,89 @@ test('VaultWorkspace renders members and quick-action links', () => {
   ok(/fetchWorkspace/.test(src), 'VaultWorkspace must call fetchWorkspace');
   ok(/\/exceptions/.test(src) && /\/timeline/.test(src),
     'VaultWorkspace must link to /exceptions and /timeline sub-routes');
+});
+
+// ---------- CEI read surface (PR-6B) ----------
+
+test('CEI exposure routes are wired under VaultLayout only (PR-6B)', () => {
+  const app = read('src/App.tsx');
+  ok(/path=":slug\/exposures"\s+element=\{<VaultExposureList\s*\/>\}/.test(app),
+    'App.tsx must register :slug/exposures under VaultExposureList');
+  ok(/path=":slug\/exposures\/:id"\s+element=\{<VaultExposureDetail\s*\/>\}/.test(app),
+    'App.tsx must register :slug/exposures/:id under VaultExposureDetail');
+  // The exposure routes must sit inside the /vault VaultLayout group, NOT
+  // the public Layout. The public Layout block check below already asserts
+  // no /vault route leaks into it; here we assert the exposure routes
+  // appear in the file after the VaultLayout open tag.
+  const vaultGroup = app.match(/<Route path="\/vault" element=\{<VaultLayout[\s\S]*?<\/Route>/);
+  ok(vaultGroup, 'VaultLayout route group not found');
+  ok(/exposures/.test(vaultGroup[0]),
+    'exposure routes must live inside the VaultLayout group');
+});
+
+test('public Layout block does not include CEI exposures (PR-6B)', () => {
+  const app = read('src/App.tsx');
+  const layoutBlock = app.match(/<Route path="\/" element=\{<Layout[\s\S]*?<\/Route>/);
+  ok(layoutBlock, 'public Layout block not found');
+  ok(!/exposures/.test(layoutBlock[0]),
+    'public Layout must not contain any /exposures route');
+});
+
+test('VaultExposureList is read-only — no create / propose / mutate (PR-6B)', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureList.tsx');
+  ok(/listExposures/.test(src), 'VaultExposureList must call listExposures');
+  ok(/\[PRIVATE\]/.test(read('src/pages/vault/VaultExposureList.tsx')),
+    'VaultExposureList must surface the [PRIVATE] marker');
+  // No mutation helpers may be imported or referenced (code, not comments).
+  for (const banned of ['createExposure', 'proposeException', 'approveException', 'rejectException', 'revokeException', 'extendException']) {
+    ok(!src.includes(banned), `VaultExposureList must not reference ${banned} (read-only surface)`);
+  }
+  // No "propose exception" / "create exposure" affordance in rendered code.
+  ok(!/propose exception/i.test(src) && !/create exposure/i.test(src),
+    'VaultExposureList must not offer exposure->exception linkage or create UI');
+});
+
+test('VaultExposureDetail is read-only — no edit / linkage controls (PR-6B)', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  ok(/getExposure/.test(src), 'VaultExposureDetail must call getExposure');
+  ok(/metadata/.test(src) && /trust_boundary/.test(src),
+    'VaultExposureDetail must render metadata and trust_boundary');
+  ok(/\[PRIVATE\]/.test(read('src/pages/vault/VaultExposureDetail.tsx')),
+    'VaultExposureDetail must surface the [PRIVATE] marker');
+  for (const banned of ['createExposure', 'proposeException', 'approveException', 'rejectException', 'revokeException', 'extendException', 'handleApprove', 'handleReject']) {
+    ok(!src.includes(banned), `VaultExposureDetail must not reference ${banned} (read-only surface)`);
+  }
+});
+
+test('CEI read pages use only GET helpers + VaultAuthGate (PR-6B)', () => {
+  for (const rel of ['src/pages/vault/VaultExposureList.tsx', 'src/pages/vault/VaultExposureDetail.tsx']) {
+    const src = readNoComments(rel);
+    ok(/VaultAuthGate/.test(src), `${rel} must use VaultAuthGate on unauth`);
+    // No POST/PATCH/DELETE method literals (the api-client GET helpers carry
+    // no method field; any method literal here would mean a mutation).
+    ok(!/method:\s*['"](POST|PATCH|DELETE)['"]/.test(src),
+      `${rel} must not issue a mutating request`);
+  }
+  // The api-client exposure helpers must be GET-only: no exposure mutation
+  // export exists.
+  const api = read('src/shared/vault/api-client.ts');
+  ok(/export async function listExposures/.test(api), 'api-client must export listExposures');
+  ok(/export async function getExposure/.test(api), 'api-client must export getExposure');
+  ok(!/export async function createExposure/.test(api),
+    'api-client must NOT export a createExposure helper (6B is read-only)');
+});
+
+test('CEI read surface adds no ingestion / upload hooks (PR-6B)', () => {
+  // Ingestion-specific patterns only — NOT bare words like "import" which
+  // legitimately appear in ES import statements, NOR doctrine prose in the
+  // file header comments (which name the absence of these hooks).
+  for (const rel of ['src/pages/vault/VaultExposureList.tsx', 'src/pages/vault/VaultExposureDetail.tsx']) {
+    const src = readNoComments(rel).toLowerCase();
+    for (const banned of ['type="file"', 'filereader', 'multipart', 'formdata', 'sbom', 'ingest', 'onupload', 'handleupload', 'handleimport']) {
+      ok(!src.includes(banned),
+        `${rel} must not add an ingestion/upload hook (${banned})`);
+    }
+  }
 });
 
 // ---------- 5. Evidence private-read links + masking honesty ----------

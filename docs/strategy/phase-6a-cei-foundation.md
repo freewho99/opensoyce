@@ -127,6 +127,29 @@ check:mojibake                  unchanged
 npm run lint                    pre-existing blogPosts.ts:1820 typo only
 ```
 
+## PR-6B — read surface (shipped)
+
+Phase 6B added a **read-only** CEI surface to the Vault Dashboard. It makes
+the exposure records 6A created visible to humans, and nothing more.
+
+- `/vault/:slug/exposures` — read-only list (type / subject / status /
+  source / last_seen), status filter, offset pagination
+- `/vault/:slug/exposures/:id` — read-only detail (metadata, trust_boundary,
+  source, timestamps, status)
+- a "Component Exposures" nav card on the workspace home
+- consumes ONLY the existing PR-6A GET endpoints; `src/shared/vault/api-client.ts`
+  gained `listExposures` + `getExposure` (GET-only — there is no
+  `createExposure` browser helper)
+
+6B is read-only by structural test: no create button, no "propose
+exception" affordance, no exposure→exception linkage, no ingestion/upload
+hook, no mutating request. The pages render OUTSIDE the public Layout and
+use `VaultAuthGate` on unauth deep links (return path preserved). Public
+Trust Center / Badge / public Timeline / Gate untouched.
+
+Sequence: **6A made exposure records real; 6B made them visible; 6C will
+decide how exposures lead to trust decisions** (not authorized).
+
 ## Next (parked, not authorized)
 
 Phase 6 continues from this foundation, but every next step requires its own explicit approval block:
