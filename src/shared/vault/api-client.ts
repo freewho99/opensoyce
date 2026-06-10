@@ -250,6 +250,10 @@ export interface ProposeExceptionBody {
   reason_public: string;
   reason_private?: string;
   proof_anchors: Array<Record<string, unknown>>;
+  // PR-6D: when proposing FROM a component exposure, cite it so the server
+  // records a CEI-native audit event. Optional — absent means the legacy
+  // (non-CEI) propose flow.
+  source_exposure_id?: string;
   idempotency_key?: string;
 }
 
@@ -381,5 +385,29 @@ export async function listExposures(
 export async function getExposure(slug: string, id: string) {
   return vaultRequest<ComponentExposure>({
     path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(id)}`,
+  });
+}
+
+// PR-6D: CEI-native proposal-history for one exposure (read-only).
+export interface ExposureEventActor {
+  user_id: string;
+  github_login: string;
+  display_name: string | null;
+}
+export interface ComponentExposureEvent {
+  event_id: string;
+  workspace_id: string;
+  exposure_id: string;
+  event_kind: 'exception_proposed_from_exposure';
+  related_exception_id: string | null;
+  actor: ExposureEventActor | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  visibility: 'private';
+}
+
+export async function listExposureEvents(slug: string, exposureId: string) {
+  return vaultRequest<{ events: ComponentExposureEvent[]; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(exposureId)}/events`,
   });
 }

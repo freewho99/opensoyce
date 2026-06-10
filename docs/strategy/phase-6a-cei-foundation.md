@@ -48,7 +48,7 @@ This separation is enforced structurally, not just documented:
 ## What shipped
 
 | Artifact | File | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | Native type catalog | `supabase/migrations/0017_component_exposure_types.sql` | Six seeded native types; global system vocabulary; RLS deny-by-default |
 | Exposure records | `supabase/migrations/0018_component_exposures.sql` | Workspace-scoped private records; FK to native catalog; RLS deny-by-default |
 | Domain helpers | `src/server/cei/domain.js` | Native-type lookup; subject / metadata / source / status validation |
@@ -191,6 +191,54 @@ the proof anchor + the private reason, not a schema edge.
 
 No CEI Timeline events, no `vault_timeline_events` change, no server change
 (the propose endpoint already existed from PR-V2-B).
+
+## PR-6D — CEI-native proposal audit (shipped)
+
+Phase 6D records that a proposed exception was created **from** an exposure
+— on a **CEI-native** event table, **without** touching the shared
+`vault_timeline_events` table or the Phase 5 exception triggers.
+
+```txt
+The exposure suggested.
+The user proposed.
+The exception recorded the decision candidate.
+The CEI event recorded the relationship.
+The reviewer still decides.
+```
+
+What shipped:
+
+- `supabase/migrations/0019_component_exposure_events.sql` —
+  `component_exposure_events`: `workspace_id` (NOT NULL FK), `exposure_id`
+  (NOT NULL FK), `event_kind` (CHECK allowlist of exactly ONE value:
+  `exception_proposed_from_exposure`), `related_exception_id` (nullable
+  set-null FK to `vault_exceptions` — audit context only),
+  `actor_user_id` (NOT NULL FK), `metadata` (jsonb object), `created_at`.
+  RLS deny-by-default.
+- `src/server/cei/events.js` — `validateExposureInWorkspace`,
+  `recordProposalFromExposure` (best-effort insert), and
+  `handleListExposureEvents` (read surface). Never mutates the exposure or
+  the exception.
+- `src/server/vault/exceptions.js` — the propose handler is **additively**
+  extended: an optional `source_exposure_id` is validated up front (404 if
+  it isn't in the workspace), the proposed exception is created **exactly
+  as before**, then the CEI event is recorded. Absent `source_exposure_id`
+  → byte-for-byte the pre-6D flow. The audit insert is best-effort — a
+  failure never undoes the proposal or changes its 201 response.
+- `GET /api/vault/workspaces/:slug/exposures/:id/events` — read-only
+  proposal history (CEI route, not a vault-timeline route).
+- `VaultExposureDetail` — cites `source_exposure_id` when proposing, and
+  renders a read-only **"Proposal history"** section (event kind, actor,
+  linked exception, timestamp) that refreshes after a successful proposal.
+
+Separation preserved and asserted:
+
+- `component_exposures` **still has no FK to `vault_exceptions`**. The
+  exception link lives only on the EVENT row — audit context, not a
+  schema edge on the exposure.
+- Recording an event does **not** mutate the exposure or the exception.
+- **No `vault_timeline_events` change.** No new exception state. No active
+  exception creation. No auto-approval. No exposure-status mutation.
 
 ## Next (parked, not authorized)
 

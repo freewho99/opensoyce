@@ -21,6 +21,7 @@ import {
   handleGetExposure,
   handleCreateExposure,
 } from './exposures.js';
+import { handleListExposureEvents } from './events.js';
 
 export function registerCeiRoutes(app) {
   app.get(
@@ -41,5 +42,13 @@ export function registerCeiRoutes(app) {
     requireVaultSession,
     requireCsrf,
     handleCreateExposure,
+  );
+  // PR-6D: CEI-native proposal-history read surface for one exposure.
+  // Read-only; no shared Vault Timeline involved.
+  app.get(
+    '/api/vault/workspaces/:slug/exposures/:id/events',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleListExposureEvents,
   );
 }

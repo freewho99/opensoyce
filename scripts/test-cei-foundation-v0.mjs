@@ -64,8 +64,22 @@ function readSqlNoComments(rel) {
     .join('\n');
 }
 
+// Strip // line comments and /* */ block comments from JS/TS source so
+// structural greps test the actual code, not doctrine prose in comments.
+function stripJsComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => {
+      const idx = line.indexOf('//');
+      return idx >= 0 ? line.slice(0, idx) : line;
+    })
+    .join('\n');
+}
+
 const TYPES_MIGRATION = 'supabase/migrations/0017_component_exposure_types.sql';
 const EXPOSURES_MIGRATION = 'supabase/migrations/0018_component_exposures.sql';
+const EVENTS_MIGRATION = 'supabase/migrations/0019_component_exposure_events.sql';
 
 const NATIVE_TYPES = [
   'dependency-exposure',
@@ -235,7 +249,7 @@ test('component_exposures has NO proof_anchors column (exposure != evidence)', (
 
 test('PR-6A does not alter vault_timeline_events (exception semantics preserved)', () => {
   for (const { rel, src } of allCeiSource()) {
-    ok(!/vault_timeline_events/.test(src),
+    ok(!/vault_timeline_events/.test(stripJsComments(src)),
       `${rel} writes vault_timeline_events — 6A must not touch the shared timeline`);
   }
   // No migration in this PR alters the timeline CHECK constraint. Strip
@@ -300,6 +314,97 @@ test('public spine does not import CEI', () => {
     ok(!/from\s+['"][^'"]*\/cei\//.test(src) && !/from\s+['"][^'"]*server\/cei/.test(src),
       `${rel} imports a CEI module (public spine must not consume CEI)`);
   }
+});
+
+// ---------- PR-6D: CEI-native proposal audit event table ----------
+
+test('component_exposure_events table exists with RLS (PR-6D)', () => {
+  const sql = read(EVENTS_MIGRATION);
+  ok(/create table[\s\S]+component_exposure_events/i.test(sql), 'events table not created');
+  ok(/alter table public\.component_exposure_events enable row level security/.test(sql),
+    'events table must enable RLS');
+});
+
+test('event table is workspace-scoped + requires exposure + actor (PR-6D)', () => {
+  const sql = readSqlNoComments(EVENTS_MIGRATION);
+  ok(/workspace_id\s+uuid\s+not null[\s\S]*?references public\.vault_workspaces/.test(sql),
+    'workspace_id must be NOT NULL FK to vault_workspaces');
+  ok(/exposure_id\s+uuid\s+not null[\s\S]*?references public\.component_exposures/.test(sql),
+    'exposure_id must be NOT NULL FK to component_exposures');
+  ok(/actor_user_id\s+uuid\s+not null[\s\S]*?references public\.vault_users/.test(sql),
+    'actor_user_id must be NOT NULL FK to vault_users');
+});
+
+test('event_kind allowlist has ONLY exception_proposed_from_exposure (PR-6D)', () => {
+  const sql = readSqlNoComments(EVENTS_MIGRATION);
+  const checkMatch = sql.match(/event_kind[\s\S]*?check\s*\(\s*event_kind\s+in\s*\(([^)]*)\)/i);
+  ok(checkMatch, 'event_kind must carry an IN (...) CHECK');
+  const kinds = (checkMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  ok(kinds.length === 1 && kinds[0] === 'exception_proposed_from_exposure',
+    `event_kind allowlist must be exactly ['exception_proposed_from_exposure'], found ${JSON.stringify(kinds)}`);
+  const domain = read('src/server/cei/events.js');
+  const evMatch = domain.match(/EVENT_KINDS\s*=\s*Object\.freeze\(\[([^\]]*)\]/);
+  ok(evMatch, 'events.js must export a frozen EVENT_KINDS array');
+  const evKinds = (evMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  ok(evKinds.length === 1 && evKinds[0] === 'exception_proposed_from_exposure',
+    'events.js EVENT_KINDS must match the single migration allowlist value');
+});
+
+test('event row may reference an exception as audit context, set-null on delete (PR-6D)', () => {
+  const sql = readSqlNoComments(EVENTS_MIGRATION);
+  ok(/related_exception_id\s+uuid[\s\S]*?references public\.vault_exceptions\(exception_id\)\s+on delete set null/.test(sql),
+    'related_exception_id must be a nullable set-null FK to vault_exceptions (audit context only)');
+});
+
+test('PR-6D preserves separation: no FK from component_exposures to exceptions; timeline untouched', () => {
+  // The EXPOSURES table still has no FK to exceptions (the link lives only
+  // on the event row).
+  const exposures = readSqlNoComments(EXPOSURES_MIGRATION);
+  ok(!/references public\.vault_exceptions/.test(exposures),
+    'component_exposures must STILL have no FK to vault_exceptions');
+  // 6D touches NO migration referencing vault_timeline_events.
+  for (const m of [TYPES_MIGRATION, EXPOSURES_MIGRATION, EVENTS_MIGRATION]) {
+    ok(!/vault_timeline_events/.test(readSqlNoComments(m)),
+      `${m} must not reference vault_timeline_events`);
+  }
+  // No CEI source writes vault_timeline_events (comments stripped — the
+  // doctrine prose names the table it explains the deferral of).
+  for (const { rel, src } of allCeiSource()) {
+    ok(!/vault_timeline_events/.test(stripJsComments(src)), `${rel} must not touch vault_timeline_events`);
+  }
+});
+
+test('propose flow records the CEI event without changing exception state (PR-6D)', () => {
+  const ex = read('src/server/vault/exceptions.js');
+  ok(/recordProposalFromExposure/.test(ex),
+    'propose handler must record the CEI audit event');
+  ok(/validateExposureInWorkspace/.test(ex),
+    'propose handler must validate the source exposure belongs to the workspace');
+  // Scope to the propose handler body — the approve handler elsewhere in
+  // this file legitimately sets state 'active'; the PROPOSE insert must use
+  // 'proposed' and must not introduce an active insert.
+  const proposeBody = stripJsComments(ex).match(/async function handleProposeException[\s\S]*?\n}/);
+  ok(proposeBody, 'handleProposeException not found');
+  ok(/state:\s*'proposed'/.test(proposeBody[0]),
+    'propose insert must still use state: proposed');
+  ok(!/state:\s*'active'/.test(proposeBody[0]),
+    'propose flow must not create active exceptions');
+  ok(!/exception_extended|exception_approved/.test(proposeBody[0]),
+    'propose flow must not introduce approve/extend semantics');
+  // Best-effort recorder: the propose handler does not turn a failed audit
+  // insert into a 4xx/5xx (no sendError immediately after the record call).
+  ok(!/recordProposalFromExposure[\s\S]{0,120}sendError/.test(stripJsComments(ex)),
+    'a failed audit-event insert must not block the proposal response');
+});
+
+test('events module never mutates the exposure or the exception (PR-6D)', () => {
+  const src = read('src/server/cei/events.js');
+  // The events module only INSERTs into component_exposure_events and reads.
+  // It must not update/delete exposures or exceptions.
+  ok(!/from\(['"]component_exposures['"]\)[\s\S]{0,80}\.(update|delete|upsert)\(/.test(src),
+    'events module must not mutate component_exposures');
+  ok(!/from\(['"]vault_exceptions['"]\)/.test(src),
+    'events module must not touch vault_exceptions directly');
 });
 
 // ---------- wiring ----------

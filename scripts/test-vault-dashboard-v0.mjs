@@ -393,6 +393,48 @@ test('PR-6C propose helper is GET+POST propose only — no decision helpers adde
     'proposeException must not touch a decision sub-path');
 });
 
+// ---------- PR-6D: CEI-native proposal audit on the exposure detail ----------
+
+test('PR-6D cites the source exposure when proposing', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  ok(/source_exposure_id:\s*ex\.exposure_id/.test(src),
+    'the proposal body must cite source_exposure_id so the server records the audit event');
+  const api = read('src/shared/vault/api-client.ts');
+  ok(/source_exposure_id\?:\s*string/.test(api),
+    'ProposeExceptionBody must carry an optional source_exposure_id');
+});
+
+test('PR-6D renders a read-only Proposal history from listExposureEvents', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  ok(/listExposureEvents/.test(src),
+    'exposure detail must read proposal history via listExposureEvents');
+  ok(/Proposal history/.test(src),
+    'exposure detail must surface a "Proposal history" section');
+  ok(/event_kind/.test(src), 'history rows must show the event kind');
+  ok(/related_exception_id/.test(src), 'history rows must link the related exception');
+  // The history is read-only: listExposureEvents is GET (no method literal
+  // in the helper), and the detail page never mutates an event.
+  const api = read('src/shared/vault/api-client.ts');
+  const eventsBlock = api.match(/export async function listExposureEvents[\s\S]*?\n}/);
+  ok(eventsBlock, 'listExposureEvents helper not found');
+  ok(!/method:\s*['"](POST|PATCH|DELETE)['"]/.test(eventsBlock[0]),
+    'listExposureEvents must be a GET');
+  ok(!/createEvent|deleteEvent|updateEvent/.test(api),
+    'api-client must NOT expose event mutation helpers (audit is append-only via the propose flow)');
+});
+
+test('PR-6D adds no exposure mutation and no decision helpers on the detail page', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  // Still no exposure-write or exception-decision verbs (6C invariant holds).
+  for (const banned of ['createExposure', 'updateExposure', 'deleteExposure', 'approveException', 'rejectException', 'revokeException', 'extendException']) {
+    ok(!src.includes(banned), `VaultExposureDetail must not reference ${banned}`);
+  }
+  // The page must not write vault_timeline_events client-side (it can't, but
+  // assert the literal is absent so the separation is visible).
+  ok(!/vault_timeline_events/.test(src),
+    'the dashboard must not reference vault_timeline_events');
+});
+
 test('CEI read pages use only GET helpers + VaultAuthGate (PR-6B)', () => {
   for (const rel of ['src/pages/vault/VaultExposureList.tsx', 'src/pages/vault/VaultExposureDetail.tsx']) {
     const src = readNoComments(rel);
