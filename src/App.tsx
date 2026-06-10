@@ -56,6 +56,8 @@ import VaultExceptionList from './pages/vault/VaultExceptionList';
 import VaultExceptionDetail from './pages/vault/VaultExceptionDetail';
 import VaultTimeline from './pages/vault/VaultTimeline';
 import VaultEvidenceDetail from './pages/vault/VaultEvidenceDetail';
+import VaultExposureList from './pages/vault/VaultExposureList';
+import VaultExposureDetail from './pages/vault/VaultExposureDetail';
 
 // Route tree extracted so the prerender entry can wrap it in <StaticRouter>
 // while the browser entry uses <BrowserRouter>. Keep this in sync with the
@@ -74,6 +76,9 @@ export function AppRoutes() {
         <Route path=":slug/exceptions/:id" element={<VaultExceptionDetail />} />
         <Route path=":slug/timeline" element={<VaultTimeline />} />
         <Route path=":slug/evidence/:id" element={<VaultEvidenceDetail />} />
+        {/* CEI read surface (PR-6B) — read-only exposure list + detail. */}
+        <Route path=":slug/exposures" element={<VaultExposureList />} />
+        <Route path=":slug/exposures/:id" element={<VaultExposureDetail />} />
       </Route>
       <Route path="/" element={<Layout />}>
         <Route index element={<Home />} />

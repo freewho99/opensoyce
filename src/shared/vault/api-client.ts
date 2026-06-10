@@ -299,3 +299,64 @@ export async function approveCliCode(userCode: string) {
     body: { user_code: userCode },
   });
 }
+
+// ---------- Component Exposure Intelligence reads (PR-6B) ----------
+//
+// Read-only consumption of the PR-6A private exposure foundation. The
+// Vault Dashboard's CEI surface uses ONLY these GET helpers — there is no
+// create/update/delete exposure helper here, and no exposure-to-exception
+// linkage. An exposure is a private workspace observation, not a trust
+// decision.
+
+export type ExposureStatus =
+  | 'observed'
+  | 'review_required'
+  | 'allowed'
+  | 'blocked'
+  | 'excepted'
+  | 'resolved';
+
+export interface ComponentExposure {
+  exposure_id: string;
+  workspace_id: string;
+  exposure_type: string | null;
+  subject_kind: string;
+  subject_name: string;
+  trust_boundary: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  source_kind: string;
+  source_ref: string | null;
+  status: ExposureStatus;
+  first_seen_at: string;
+  last_seen_at: string;
+  created_at: string;
+  visibility: 'private';
+}
+
+export interface ComponentExposureListResponse {
+  exposures: ComponentExposure[];
+  total_count_estimate: number;
+  limit: number;
+  offset: number;
+  visibility: 'private';
+}
+
+export async function listExposures(
+  slug: string,
+  query?: { status?: string; limit?: number; offset?: number },
+) {
+  const params = new URLSearchParams();
+  if (query?.status) params.set('status', query.status);
+  if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query?.offset === 'number') params.set('offset', String(query.offset));
+  const qs = params.toString();
+  return vaultRequest<ComponentExposureListResponse>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures${qs ? `?${qs}` : ''}`,
+  });
+}
+
+export async function getExposure(slug: string, id: string) {
+  return vaultRequest<ComponentExposure>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(id)}`,
+  });
+}
