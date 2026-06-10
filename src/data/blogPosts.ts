@@ -26,8 +26,7 @@ export const blogPosts: BlogPost[] = [
         readTime: '6 min',
         date: 'JUNE 9, 2026',
         featured: false,
-    heroImage: 'https://mywopa.com/wopa-whatsapp-bot-profile.png',        metaDescription: "A candid interview with the founder of WOPA, the WhatsApp invoicing tool for UK tradespeople. We point our detection / evidence / policy / enforcement instinct at a person for once — and land on ALLOW, with exceptions.",
-        tags: ['on-the-record', 'founder-interview', 'trust-decisions', 'fintech', 'allow-with-exceptions', 'opensoyce'],
+    heroImage: '/blog/on-the-record-no2-hero.svg',        tags: ['on-the-record', 'founder-interview', 'trust-decisions', 'fintech', 'allow-with-exceptions', 'opensoyce'],
     content: `Unscripted with a solo founder building financial tooling for people who don't sit at desks. Lightly edited for length. Part of the "On the Record" series — the conversations we usually have behind the gate, said out loud. Inline GATE SAYS blocks are our running reaction: the same detection / evidence / policy / enforcement instinct we point at packages, aimed at a person for once. The full verdict lands at the bottom.
 
 ## First — what is WOPA, in one breath?
