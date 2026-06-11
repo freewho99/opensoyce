@@ -66,7 +66,7 @@ export const REPO_TRUST_POSTURES = Object.freeze([
     repo: 'opensoyce',
     postureLabel: 'watchlist',
     postureSummary:
-      'One HIGH-severity workflow finding (dangerous-release-permission). No risky deps in the lockfile. Gate example below illustrates the BLOCK + 4-pattern response on the canonical 2021 supply-chain compromise.',
+      'One LOW-severity workflow finding (workflow write access, pull-requests scope — affects maintainers only, not downstream users). No risky deps in the lockfile. Gate example below illustrates the BLOCK + 4-pattern response on the canonical 2021 supply-chain compromise.',
     lastEvaluated: '2026-06-05',
     gateExamples: Object.freeze([
       Object.freeze({
@@ -81,8 +81,8 @@ export const REPO_TRUST_POSTURES = Object.freeze([
     workflowFindings: Object.freeze([
       Object.freeze({
         patternId: 'dangerous-release-permission',
-        patternName: 'DANGEROUS RELEASE/WRITE PERMISSION',
-        severity: 'high',
+        patternName: 'WORKFLOW WRITE ACCESS',
+        severity: 'low',
         policyImpact: 'warn',
         source: 'GitHub workflow',
         origin: '.github/workflows/opensoyce-scan.yml#scan',

@@ -36,7 +36,7 @@ export const STATIC_POSTURES: ReadonlyArray<CliStaticPosture> = [
     repo: 'opensoyce',
     postureLabel: 'watchlist',
     postureSummary:
-      'One HIGH-severity workflow finding (dangerous-release-permission). No risky deps in the lockfile. Gate example below illustrates the BLOCK + 4-pattern response on the canonical 2021 supply-chain compromise.',
+      'One LOW-severity workflow finding (workflow write access, pull-requests scope — affects maintainers only, not downstream users). No risky deps in the lockfile. Gate example below illustrates the BLOCK + 4-pattern response on the canonical 2021 supply-chain compromise.',
     references: [
       { label: 'PR #28', href: 'https://github.com/freewho99/opensoyce/pull/28' },
       { label: 'PR #30', href: 'https://github.com/freewho99/opensoyce/pull/30' },
