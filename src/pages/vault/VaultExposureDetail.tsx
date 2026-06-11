@@ -28,11 +28,13 @@ import {
   listExposureVulnIntel,
   refreshExposureVulnIntel,
   openRemediationQuestion,
+  getEvidenceExport,
   isOk,
   type ComponentExposure,
   type ComponentExposureEvent,
   type ExposureVulnIntel,
   type ProposeExceptionBody,
+  type EvidenceExportResponse,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
 
@@ -114,6 +116,13 @@ export default function VaultExposureDetail() {
   const [questionError, setQuestionError] = React.useState('');
   const [openedQuestionId, setOpenedQuestionId] = React.useState<string | null>(null);
 
+  // PR-17A evidence export. Generating the bundle is a READ — the record
+  // is exactly the same after the export as before it.
+  const [exportPending, setExportPending] = React.useState(false);
+  const [exportError, setExportError] = React.useState('');
+  const [exportResult, setExportResult] = React.useState<EvidenceExportResponse | null>(null);
+  const [exportCopied, setExportCopied] = React.useState(false);
+
   const refreshEvents = React.useCallback(async () => {
     if (!slug || !id) return;
     const res = await listExposureEvents(slug, id);
@@ -151,6 +160,43 @@ export default function VaultExposureDetail() {
     setQuestionPending(false);
     if (!isOk(res)) { setQuestionError(res.message); return; }
     setOpenedQuestionId(res.data.question_id);
+  }
+
+  // PR-17A: assemble the evidence bundle for this component's trust-
+  // decision chain. Read-only; missing chain links are reported as "not
+  // present in the record", never fabricated.
+  async function handleGenerateExport() {
+    setExportError('');
+    setExportCopied(false);
+    setExportPending(true);
+    const res = await getEvidenceExport(slug, id);
+    setExportPending(false);
+    if (!isOk(res)) { setExportError(res.message); return; }
+    setExportResult(res.data);
+  }
+
+  async function handleCopyExport() {
+    if (!exportResult) return;
+    try {
+      await navigator.clipboard.writeText(exportResult.markdown);
+      setExportCopied(true);
+    } catch {
+      setExportError('Copy failed — select the text and copy manually.');
+    }
+  }
+
+  function handleDownloadExport() {
+    if (!exportResult || !exposure) return;
+    const safeName = exposure.subject_name.replace(/[^A-Za-z0-9.-]+/g, '-');
+    const blob = new Blob([exportResult.markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `evidence-bundle-${safeName}-${exportResult.bundle.generated_at.slice(0, 10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   React.useEffect(() => {
@@ -603,6 +649,70 @@ export default function VaultExposureDetail() {
             </div>
           </div>
         ) : null}
+      </section>
+
+      {/* PR-17A: auditor / customer evidence export. Export is not
+          certification, not a decision — a faithful view of the record.
+          Generating the bundle is a READ: no CEI event, no timeline event,
+          no state change. Private only — session + membership gated like
+          every other vault read. */}
+      <section className="mt-8 border border-slate-700 bg-slate-800/40 p-4">
+        <h2 className="text-sm font-mono font-bold mb-2 uppercase tracking-wider text-slate-300">
+          Evidence export
+        </h2>
+        <p className="text-xs font-mono text-slate-400 mb-3">
+          [PRIVATE] Assemble this component&apos;s trust-decision chain —
+          observation, context, question, decision, expiry pressure,
+          resolution, receipts — as an audit-ready bundle. The export is a
+          view of existing records; generating it changes nothing and
+          certifies nothing.
+        </p>
+        {exportError && <p className="mb-2 text-xs font-mono text-red-300" role="alert">{exportError}</p>}
+        {!exportResult ? (
+          <button
+            type="button"
+            onClick={handleGenerateExport}
+            disabled={exportPending}
+            className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {exportPending ? 'assembling…' : 'Generate evidence bundle'}
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCopyExport}
+                className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800"
+              >
+                {exportCopied ? 'copied ✓' : 'Copy Markdown'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadExport}
+                className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800"
+              >
+                Download .md
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateExport}
+                disabled={exportPending}
+                className="px-3 py-1 text-xs font-mono text-slate-400 hover:text-slate-100 disabled:opacity-50"
+              >
+                {exportPending ? 'assembling…' : 're-generate'}
+              </button>
+              {exportResult.bundle.honest_edges.missing.length > 0 && (
+                <span className="text-[10px] font-mono text-slate-500">
+                  {exportResult.bundle.honest_edges.missing.length} chain section(s) not present in the record — reported honestly, never fabricated.
+                </span>
+              )}
+            </div>
+            <pre className="font-mono text-xs text-slate-100 border border-slate-800 p-3 overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto">
+              {exportResult.markdown}
+            </pre>
+          </div>
+        )}
       </section>
     </div>
   );

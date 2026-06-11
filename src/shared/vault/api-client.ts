@@ -367,6 +367,50 @@ export async function getEvidence(slug: string, id: string) {
   });
 }
 
+// ---------- evidence export bundle (PR-17A) ----------
+//
+// Read-only assembly of one component trust-decision chain from existing
+// records. Export is not certification, not a decision — a faithful view
+// of the record. There is exactly ONE helper and it is a GET: generating
+// an export mutates nothing, so no mutating helper exists in this lane.
+
+export interface EvidenceBundleSection {
+  present: boolean;
+  [key: string]: unknown;
+}
+
+export interface EvidenceBundle {
+  format: 'opensoyce-evidence-bundle';
+  version: number;
+  generated_at: string;
+  visibility: 'private';
+  workspace: { slug: string; display_name: string | null };
+  subject: { kind: string; name: string; observed_version: string | null };
+  evidence_scope: string;
+  sections: {
+    observation: EvidenceBundleSection;
+    vulnerability_context: EvidenceBundleSection;
+    remediation_questions: EvidenceBundleSection;
+    exceptions: EvidenceBundleSection;
+    expiry_pressure: EvidenceBundleSection;
+    resolutions: EvidenceBundleSection;
+    receipts: EvidenceBundleSection;
+  };
+  honest_edges: { proves: string[]; does_not_prove: string[]; missing: string[] };
+}
+
+export interface EvidenceExportResponse {
+  bundle: EvidenceBundle;
+  markdown: string;
+  visibility: 'private';
+}
+
+export async function getEvidenceExport(slug: string, exposureId: string) {
+  return vaultRequest<EvidenceExportResponse>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exposures/${encodeURIComponent(exposureId)}/evidence-export`,
+  });
+}
+
 // ---------- CLI device-code approval ----------
 
 export async function approveCliCode(userCode: string) {

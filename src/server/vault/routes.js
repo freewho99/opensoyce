@@ -43,6 +43,7 @@ import {
 } from './cli.js';
 import { registerCeiRoutes } from '../cei/routes.js';
 import { registerResolutionRoutes } from './resolution-routes.js';
+import { registerEvidenceExportRoutes } from './evidence-export-routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -201,4 +202,11 @@ export function registerVaultRoutes(app) {
   // resolutions, never a state transition. Same session + CSRF middleware,
   // same 404-on-non-member doctrine.
   registerResolutionRoutes(app);
+
+  // ---------- Auditor / customer evidence export (PR-17A) ----------
+  // A read-only view of one component trust-decision chain, assembled from
+  // existing records. Export is not certification, not a decision — a
+  // faithful view of the record. Same session middleware, same
+  // 404-on-non-member doctrine. No public surface.
+  registerEvidenceExportRoutes(app);
 }
