@@ -36,13 +36,19 @@ function stateClass(state: string): string {
   return 'text-slate-300';
 }
 
-function expiryUrgency(expiresAt: string | null): { label: string; class: string } {
+function expiryUrgency(state: string, expiresAt: string | null): { label: string; class: string } {
   // PR-DOGFOOD-1: ramp the label by remaining time. The old version
   // floored to "days" which collapsed any sub-24h expiry to "0d ⚠"
   // and hid the fact that an exception was hours away from expiring.
   if (!expiresAt) return { label: '—', class: 'text-slate-500' };
   const ms = new Date(expiresAt).getTime() - Date.now();
-  if (ms < 0) return { label: 'expired', class: 'text-slate-500' };
+  if (ms < 0) {
+    // PR-16A review pressure: an exception past its window is not quiet.
+    // Still-active means the reaper has not yet observed it — that is the
+    // loudest state on the board: temporary trust outliving its window.
+    if (state === 'active') return { label: 'review due ⚠', class: 'text-red-300' };
+    return { label: 'elapsed', class: 'text-slate-500' };
+  }
   const hours = ms / (60 * 60 * 1000);
   if (hours < 1) {
     const minutes = Math.max(1, Math.floor(ms / (60 * 1000)));
@@ -180,7 +186,7 @@ export default function VaultExceptionList() {
             </thead>
             <tbody className="divide-y divide-slate-800">
               {items.map((ex) => {
-                const urgency = expiryUrgency(ex.expires_at);
+                const urgency = expiryUrgency(ex.state, ex.expires_at);
                 return (
                   <tr key={ex.exception_id} className="hover:bg-slate-800/40">
                     <td className={`px-3 py-2 ${stateClass(ex.state)}`}>{ex.state}</td>

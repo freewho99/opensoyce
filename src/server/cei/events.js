@@ -22,14 +22,17 @@ import { vaultDb } from '../vault/db.js';
 import { sendError, ERROR_CODES } from '../vault/errors.js';
 import { resolveWorkspaceForMember } from '../vault/rbac.js';
 
-// 6D opened the allowlist with exactly one kind (the proposal). 6F widens
-// it with one kind per reviewer outcome that exists as a real transition
-// in the application today. exception_expired_from_exposure is DELIBERATELY
-// absent: no reaper exists, nothing transitions active -> expired, and the
-// event table requires an actor while expiry has none — the kind joins the
-// allowlist with the reaper scope block, not before. 'extend' is not an
-// outcome (state stays active) and records nothing.
+// 6D opened the allowlist with exactly one kind (the proposal). 6F widened
+// it with one kind per reviewer outcome. 16A adds the kind 6F deferred to
+// the reaper scope block: exception_expired_from_exposure — the first
+// SYSTEM observation in this table (expiry has no human actor; migration
+// 0024 makes the actor nullable for this kind ONLY). Expiry is time
+// evidence, not reviewer judgment: it is NOT a member of
+// OUTCOME_EVENT_KINDS, because an outcome is a decision a reviewer made
+// and expiry decides nothing. 'extend' is not an outcome (state stays
+// active) and records nothing.
 export const PROPOSAL_EVENT_KIND = 'exception_proposed_from_exposure';
+export const EXPIRED_EVENT_KIND = 'exception_expired_from_exposure';
 export const OUTCOME_EVENT_KINDS = Object.freeze([
   'exception_approved_from_exposure',
   'exception_rejected_from_exposure',
@@ -40,6 +43,7 @@ export const EVENT_KINDS = Object.freeze([
   'exception_approved_from_exposure',
   'exception_rejected_from_exposure',
   'exception_revoked_from_exposure',
+  'exception_expired_from_exposure',
 ]);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -134,6 +138,66 @@ export async function recordOutcomeFromExposure(supabase, params) {
       metadata: metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {},
     });
   if (insertError) return { error: insertError };
+  return { ok: true };
+}
+
+/**
+ * PR-16A: insert the CEI-native audit event recording that an exception
+ * which was proposed from an exposure crossed its expiry window.
+ *
+ * Expiry is TIME EVIDENCE, not reviewer judgment — the actor is the system
+ * (actor_user_id NULL, permitted for this kind only by migration 0024),
+ * and the metadata carries the system provenance: previous/new state, the
+ * scheduled expiry, when the reaper observed it, and the reason.
+ *
+ * Discovery is identical to recordOutcomeFromExposure: the exception row
+ * carries NO exposure reference, so the link is read from the 6D proposal
+ * event. Exceptions that were not exposure-born record nothing —
+ * { skipped: true } (the Phase 5 timeline trigger already recorded the
+ * expiry itself; CEI records only the RELATIONSHIP, and only where one
+ * exists).
+ *
+ * IDEMPOTENT: the 0024 partial unique index allows at most one expired
+ * event per exception. A re-run's 23505 resolves to
+ * { ok: true, alreadyRecorded: true } — recorded once, never duplicated.
+ *
+ * Recording NEVER mutates the exposure or the exception.
+ */
+export async function recordExpiredFromExposure(supabase, params) {
+  const { workspaceId, exceptionId, expiredAt, observedAt } = params;
+  if (!isUuid(exceptionId)) return { skipped: true };
+  const { data, error } = await supabase
+    .from('component_exposure_events')
+    .select('exposure_id')
+    .eq('workspace_id', workspaceId)
+    .eq('related_exception_id', exceptionId)
+    .eq('event_kind', PROPOSAL_EVENT_KIND)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) return { error };
+  const proposal = Array.isArray(data) && data[0];
+  if (!proposal) return { skipped: true };
+  const { error: insertError } = await supabase
+    .from('component_exposure_events')
+    .insert({
+      workspace_id: workspaceId,
+      exposure_id: proposal.exposure_id,
+      event_kind: EXPIRED_EVENT_KIND,
+      related_exception_id: exceptionId,
+      actor_user_id: null,
+      metadata: {
+        actor_kind: 'system',
+        reason: 'expires_at elapsed',
+        previous_state: 'active',
+        new_state: 'expired',
+        expired_at: typeof expiredAt === 'string' ? expiredAt : null,
+        observed_at: typeof observedAt === 'string' ? observedAt : null,
+      },
+    });
+  if (insertError) {
+    if (insertError.code === '23505') return { ok: true, alreadyRecorded: true };
+    return { error: insertError };
+  }
   return { ok: true };
 }
 

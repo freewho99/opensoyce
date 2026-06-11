@@ -496,7 +496,7 @@ test('PR-6F source card pins the PROPOSAL event — outcomes never impersonate t
     'exception detail must not blindly take events[0] as the source card');
 });
 
-test('PR-6F api-client kind union matches the server allowlist (no expired until reaper)', () => {
+test('PR-6F/16A api-client kind union matches the server allowlist (expired arrived with the reaper)', () => {
   const api = read('src/shared/vault/api-client.ts');
   const kindMatch = api.match(/export type ExposureEventKind\s*=([\s\S]*?);/);
   ok(kindMatch, 'api-client must export the ExposureEventKind union');
@@ -506,13 +506,14 @@ test('PR-6F api-client kind union matches the server allowlist (no expired until
     'exception_approved_from_exposure',
     'exception_rejected_from_exposure',
     'exception_revoked_from_exposure',
+    'exception_expired_from_exposure',
   ];
   ok(JSON.stringify([...kinds].sort()) === JSON.stringify([...expected].sort()),
     `ExposureEventKind must be exactly ${JSON.stringify(expected)}, found ${JSON.stringify(kinds)}`);
-  ok(!/exception_expired_from_exposure/.test(api),
-    'the expired kind must not appear client-side until the reaper scope block');
-  // Outcome events arrive through the SAME GET surfaces — 6F adds no event
-  // mutation helper and no new client write path.
+  // Expired events render with a null actor (system observation) — the
+  // actor field was already nullable client-side.
+  // Outcome events arrive through the SAME GET surfaces — no event
+  // mutation helper and no new client write path, 16A included.
   ok(!/createEvent|updateEvent|deleteEvent|recordEvent|recordOutcome/.test(api),
     'api-client must still expose no event-mutation helper');
 });

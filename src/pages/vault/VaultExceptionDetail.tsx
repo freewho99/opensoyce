@@ -161,6 +161,17 @@ export default function VaultExceptionDetail() {
   const isReviewerOrOwner = role === 'reviewer' || role === 'owner';
   const isProposed = exception.state === 'proposed';
   const isActive = exception.state === 'active';
+  // PR-16A review pressure. Two distinct honest states:
+  //   - expired: the reaper observed that time passed (active -> expired).
+  //   - active past expires_at: the window elapsed but no reaper run has
+  //     observed it yet — still review-due, shown loudly, not hidden.
+  // Neither is a decision. Expired is NOT revoked; the original approval
+  // and reviewer are preserved below; the reviewer decides what happens
+  // next (renewal/closeout is its own future lane).
+  const isExpired = exception.state === 'expired';
+  const isPastDue = isActive
+    && !!exception.expires_at
+    && new Date(exception.expires_at).getTime() < Date.now();
 
   return (
     <div className="max-w-3xl">
@@ -177,6 +188,22 @@ export default function VaultExceptionDetail() {
           proposed {exception.proposed_at.slice(0, 10)}
         </p>
       </header>
+
+      {(isExpired || isPastDue) && (
+        <section className="mb-6 border border-amber-700 bg-amber-900/20 p-4">
+          <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-amber-200 mb-1">
+            {isExpired ? 'Expired — review due' : 'Past expiry window — review due'}
+          </h2>
+          <p className="text-xs font-mono text-amber-200/80">
+            {isExpired
+              ? 'This temporary acceptance passed its expiry window and the system marked it expired. '
+              : 'This temporary acceptance has passed its expiry window; the reaper has not yet recorded the transition. '}
+            Expired is not revoked, not renewed, and not proof of remediation —
+            the original decision below is preserved, and a reviewer still
+            decides what happens next.
+          </p>
+        </section>
+      )}
 
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mb-8 text-sm">
         <div>

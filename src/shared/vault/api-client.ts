@@ -389,13 +389,16 @@ export async function getExposure(slug: string, id: string) {
 }
 
 // PR-6D: CEI-native proposal-history for one exposure (read-only).
-// PR-6F widens the kind union with the reviewer outcomes. The expired kind
-// is deliberately absent until the reaper scope block exists server-side.
+// PR-6F widens the kind union with the reviewer outcomes. PR-16A adds the
+// expired kind the 6F note deferred to the reaper scope block — a SYSTEM
+// observation (actor is null on those events): time passed; review became
+// due; nothing was decided.
 export type ExposureEventKind =
   | 'exception_proposed_from_exposure'
   | 'exception_approved_from_exposure'
   | 'exception_rejected_from_exposure'
-  | 'exception_revoked_from_exposure';
+  | 'exception_revoked_from_exposure'
+  | 'exception_expired_from_exposure';
 export interface ExposureEventActor {
   user_id: string;
   github_login: string;

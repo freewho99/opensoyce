@@ -94,7 +94,16 @@ Nothing auto-decides. The exposure suggested; the human proposed; the reviewer d
 - `extend` must move `expires_at` forward and records the reviewer; `revoke` is always available and records actor + reason
 - Full status history in the Timeline; the decision trail never overwrites itself
 
-**Honest gap — parked explicitly, on the public proof page too:** there is no reaper. An expired exception keeps its `active` state value past `expires_at` until the lifecycle lane (16) ships; the expiry timestamp is recorded and visible, and read-time consumers can (and the compliance surface does) treat past-expiry as expired. The first live exception from the proof run will demonstrate this pressure on 2026-07-10.
+**Evidence (the reaper shipped by PR-16A, scoped to what shipped):**
+
+- The reaper (`reap:exceptions`) transitions `active → expired` when `expires_at` elapses — touching ONLY the state column. The original reviewer, approval timestamp, expiry, reasons, and anchors are preserved verbatim: the original decision remains the record
+- Three independent audit surfaces: the state machine (expired ≠ revoked ≠ rejected, distinct values since migration 0011), the Vault Timeline (`exception_expired`, trigger-emitted in the same transaction, NULL actor — the system does not impersonate a human), and the CEI relationship event (`exception_expired_from_exposure`, system actor, recorded only where an exposure relationship already exists)
+- Idempotency is structural: the transition is guarded (`state = 'active'`), and at most one expired CEI event can ever exist per exception (partial unique index, migration 0024)
+- Read-time pressure even before the reaper runs: the dashboard marks a still-active exception past its window as **review due ⚠**
+
+Doctrine: *expiry is time evidence, not reviewer judgment — the reaper observes that time passed; it does not decide the risk.* See [`expiry-reaper-doctrine.md`](./expiry-reaper-doctrine.md).
+
+**Honest gaps:** the reaper is an explicit command (safe-by-default dry-run), not a scheduled job — unattended enforcement cadence is an ops decision not yet wired. What a reviewer does WITH an expired exception (renew / revoke / remediate / close) is lane 16B. The live exception from the proof run (`b777fb25`, expires 2026-07-10) is the first real-world reap candidate.
 
 ## Q6 — "Can you trace a decision back to the observation that prompted it?"
 
@@ -137,7 +146,8 @@ The order is deliberate: prove the loop, translate the proof, then package it. A
 | Vulnerability intel joined into the private record | 15A scanner/intel observations — SHIPPED (Q3) |
 | Remediation decisions as first-class reviewable questions | 15B Remediation Question Loop — SHIPPED (Q3a); completion tracking remains future work |
 | Ecosystems beyond npm, SBOM formats | 15C |
-| Expiry enforcement, staleness pressure, review cadence, due_at pressure | 16 lifecycle/reaper |
+| Expiry reaper + review pressure | 16A — SHIPPED (Q5); renewal/closeout is 16B; scheduling is an ops decision |
+| Reviewer renewal / closeout of expired trust; staleness + due_at pressure | 16B+ lifecycle |
 | Auditor / customer packets, GRC-tool projection | 17 evidence exports |
 
 Each requires its own explicit scope block. This document authorizes none of them.
