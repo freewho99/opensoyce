@@ -102,6 +102,15 @@ export default function VaultWorkspace() {
               <span className="block font-mono text-xs text-slate-400 mt-1">Recorded component exposure records (private)</span>
             </Link>
           </li>
+          <li>
+            <Link
+              to={`/vault/${detail.slug}/remediation-questions`}
+              className="block border border-slate-700 hover:border-slate-500 bg-slate-800/40 p-4"
+            >
+              <span className="block font-mono text-sm text-slate-100">Remediation Questions</span>
+              <span className="block font-mono text-xs text-slate-400 mt-1">Open questions on observed component risk (private)</span>
+            </Link>
+          </li>
         </ul>
       </section>
 

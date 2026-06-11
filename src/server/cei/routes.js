@@ -26,6 +26,16 @@ import { handleListExposureEvents, handleListEventsByException } from './events.
 // refresh action records what a source asserts; it never mutates the
 // exposure and never creates exceptions, proposals, or outcomes.
 import { handleListVulnIntel, handleRefreshVulnIntel } from './vuln-intel.js';
+// PR-15B: the Remediation Question Loop — the question layer, not a
+// remediation engine. Opening a question changes nothing else; answering
+// records a human-selected direction; propose_exception still travels the
+// Phase 5 exception lane.
+import {
+  handleListRemediationQuestions,
+  handleGetRemediationQuestion,
+  handleOpenRemediationQuestion,
+  handleAnswerRemediationQuestion,
+} from './remediation-questions.js';
 
 export function registerCeiRoutes(app) {
   app.get(
@@ -80,5 +90,36 @@ export function registerCeiRoutes(app) {
     requireVaultSession,
     requireCsrf,
     handleRefreshVulnIntel,
+  );
+  // PR-15B: remediation questions. Reads are member-scoped; the two writes
+  // (open, answer) are member-level + CSRF-fronted. Neither write touches
+  // any table other than component_remediation_questions — the exposure,
+  // intelligence, exception, event, and timeline lanes stay structurally
+  // separate.
+  app.get(
+    '/api/vault/workspaces/:slug/remediation-questions',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleListRemediationQuestions,
+  );
+  app.get(
+    '/api/vault/workspaces/:slug/remediation-questions/:id',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    handleGetRemediationQuestion,
+  );
+  app.post(
+    '/api/vault/workspaces/:slug/remediation-questions',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    requireCsrf,
+    handleOpenRemediationQuestion,
+  );
+  app.post(
+    '/api/vault/workspaces/:slug/remediation-questions/:id/answer',
+    setPrivateCacheHeaders,
+    requireVaultSession,
+    requireCsrf,
+    handleAnswerRemediationQuestion,
   );
 }

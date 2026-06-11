@@ -86,6 +86,18 @@ const EVENTS_MIGRATION = 'supabase/migrations/0019_component_exposure_events.sql
 const OUTCOMES_MIGRATION = 'supabase/migrations/0020_cei_outcome_event_kinds.sql';
 const DEDUPE_MIGRATION = 'supabase/migrations/0021_cei_observation_dedupe.sql';
 const VULN_INTEL_MIGRATION = 'supabase/migrations/0022_cei_vulnerability_intelligence.sql';
+const REMEDIATION_MIGRATION = 'supabase/migrations/0023_cei_remediation_questions.sql';
+
+// PR-15B: the bounded human-direction vocabulary. Every entry is a
+// direction for a PERSON to act on, never a transition the system performs.
+const REMEDIATION_OUTCOMES = [
+  'fix_required',
+  'defer',
+  'propose_exception',
+  'not_applicable',
+  'needs_owner_review',
+  'replace_or_remove',
+];
 
 // PR-6F: the full event-kind allowlist — the 6D proposal kind plus one kind
 // per reviewer outcome that exists as a REAL transition in the application.
@@ -780,6 +792,195 @@ test('PR-15A routes: GET read + CSRF-fronted POST refresh, private surface only'
   ok(refreshBlock, 'POST vuln-intel/refresh route must be registered');
   ok(/requireVaultSession/.test(refreshBlock[0]) && /requireCsrf/.test(refreshBlock[0]),
     'refresh must require session + CSRF');
+});
+
+// ---------- PR-15B: the Remediation Question Loop ----------
+//
+// The scanner observes. Vulnerability intelligence adds context. The
+// system asks the remediation question. The human decides. The record
+// remembers. A remediation question is not a remediation decision.
+
+test('0023 remediation-question table: shape + answer coherence + firewall (PR-15B)', () => {
+  const sql = readSqlNoComments(REMEDIATION_MIGRATION);
+  ok(/create table if not exists public\.component_remediation_questions/.test(sql),
+    '0023 must create component_remediation_questions');
+  ok(/workspace_id\s+uuid\s+not null[\s\S]*?references public\.vault_workspaces/.test(sql),
+    'workspace_id must be NOT NULL FK (isolation)');
+  ok(/source_exposure_id\s+uuid\s+not null[\s\S]*?references public\.component_exposures/.test(sql),
+    'source_exposure_id must be NOT NULL — no exposure, no question');
+  ok(/source_vuln_intel_id\s+uuid\s*\n?[\s\S]{0,140}references public\.component_exposure_vulnerabilities\(vuln_intel_id\) on delete set null/.test(sql),
+    'source_vuln_intel_id must be a NULLABLE set-null FK to the intelligence table');
+  ok(/question_kind in \('vulnerability_review', 'component_risk_review'\)/.test(sql),
+    'question_kind must carry the 2-value allowlist');
+  ok(/status in \('open', 'answered', 'cancelled'\)/.test(sql),
+    'status must carry the 3-value allowlist');
+  // The outcome vocabulary is EXACTLY the six approved human directions.
+  const outcomeMatch = sql.match(/selected_outcome is null or selected_outcome in \(([^)]*)\)/);
+  ok(outcomeMatch, 'selected_outcome must carry a null-or-allowlist CHECK');
+  const outcomes = (outcomeMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  ok(JSON.stringify([...outcomes].sort()) === JSON.stringify([...REMEDIATION_OUTCOMES].sort()),
+    `selected_outcome allowlist must be exactly ${JSON.stringify(REMEDIATION_OUTCOMES)}, found ${JSON.stringify(outcomes)}`);
+  ok(/created_by\s+uuid\s+not null references public\.vault_users/.test(sql),
+    'created_by must be a NOT NULL FK to vault_users (a human opened it)');
+  // Answer coherence at the SCHEMA level: an answered question must carry a
+  // human + a direction + a timestamp; an unanswered one must carry none.
+  ok(/answer_coherence check \(/.test(sql), '0023 must carry the answer-coherence CHECK');
+  ok(/status = 'answered'[\s\S]*?and selected_outcome is not null[\s\S]*?and answered_by is not null[\s\S]*?and answered_at is not null/.test(sql),
+    'answered questions must require outcome + answered_by + answered_at');
+  ok(/status <> 'answered'[\s\S]*?and selected_outcome is null[\s\S]*?and answered_by is null[\s\S]*?and answered_at is null/.test(sql),
+    'unanswered questions must carry no outcome / answerer / answered_at');
+  // One OPEN question per fact: partial unique index on open status.
+  ok(/create unique index[\s\S]*?\(workspace_id, source_exposure_id, question_kind, coalesce\(vuln_id, ''\)\)[\s\S]*?where status = 'open'/.test(sql),
+    'the open-question identity index must be partial on status = open');
+  ok(/alter table public\.component_remediation_questions enable row level security/.test(sql),
+    'remediation-question table must enable RLS');
+  // The firewall: the question layer never reaches the decision, evidence,
+  // or timeline lanes, and adds no reaper machinery.
+  ok(!/vault_exceptions/.test(sql), '0023 must not reference vault_exceptions — propose_exception routes through the Phase 5 lane, never a FK');
+  ok(!/vault_timeline_events/.test(sql), '0023 must not reference vault_timeline_events');
+  ok(!/proof_anchors/.test(sql), 'a question is not evidence — no proof_anchors');
+  ok(!/component_exposure_types/.test(sql), '0023 must not touch the native type catalog');
+  ok(!/alter table public\.(component_exposures|component_exposure_vulnerabilities|component_exposure_events)\b/.test(sql),
+    '0023 must not alter any existing CEI table');
+  ok(!/overdue|reaper|cron|trigger/i.test(sql),
+    'due_at is recorded context only — no overdue transition, no reaper, no trigger in 15B');
+});
+
+test('remediation module is a question layer — it can never remediate or decide (PR-15B)', () => {
+  const src = stripJsComments(read('src/server/cei/remediation-questions.js'));
+  // It writes exactly one table. It never mutates the exposure, never
+  // writes intelligence, never records CEI events, never reaches the
+  // exception lane.
+  ok(!/from\(['"]component_exposures['"]\)[\s\S]{0,120}\.(update|delete|upsert|insert)\(/.test(src),
+    'remediation module must never write component_exposures');
+  ok(!/from\(['"]component_exposure_vulnerabilities['"]\)[\s\S]{0,120}\.(update|delete|upsert|insert)\(/.test(src),
+    'remediation module must never write the intelligence table (context stays context)');
+  ok(!/component_exposure_events/.test(src),
+    'remediation module must never touch CEI decision events');
+  ok(!/vault_exceptions/.test(src), 'remediation module must never touch vault_exceptions');
+  ok(!/vault_timeline_events/.test(src), 'remediation module must never touch the shared timeline');
+  ok(!/recordProposalFromExposure|recordOutcomeFromExposure/.test(src),
+    'remediation module must never record proposals or outcomes');
+  // No policy vocabulary: an outcome is a direction, never a gate action.
+  ok(!/'BLOCK'|'WARN'|'ALLOW'/.test(src),
+    'remediation module must not reference the decision vocabulary');
+  // No auto-remediation machinery of any kind.
+  for (const banned of ['octokit', 'github.com/login', 'pulls.create', 'createPullRequest', 'check_runs', 'child_process', 'npm install', 'npm update']) {
+    ok(!src.toLowerCase().includes(banned.toLowerCase()),
+      `remediation module must not contain auto-remediation machinery: ${banned}`);
+  }
+  // The module's outcome list matches the migration allowlist exactly.
+  const listMatch = src.match(/export const REMEDIATION_OUTCOMES\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\)/);
+  ok(listMatch, 'module must export a frozen REMEDIATION_OUTCOMES array');
+  const outcomes = (listMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  ok(JSON.stringify([...outcomes].sort()) === JSON.stringify([...REMEDIATION_OUTCOMES].sort()),
+    'module REMEDIATION_OUTCOMES must match the 0023 allowlist exactly');
+  // Every handler is workspace-scoped (404-on-non-member doctrine).
+  const handlers = src.match(/export async function handle\w+/g) || [];
+  ok(handlers.length === 4, `expected exactly 4 remediation handlers, found ${handlers.length}`);
+  const calls = src.match(/resolveWorkspaceForMember/g) || [];
+  ok(calls.length >= handlers.length,
+    'each remediation handler must call resolveWorkspaceForMember');
+});
+
+test('opening a question validates its anchors and dedupes open repeats (PR-15B)', () => {
+  const src = stripJsComments(read('src/server/cei/remediation-questions.js'));
+  const open = src.match(/export async function handleOpenRemediationQuestion[\s\S]*?\n}\n/);
+  ok(open, 'handleOpenRemediationQuestion not found');
+  // The exposure must exist IN THIS WORKSPACE; the question layer covers
+  // dependency exposures in this scope.
+  ok(/loadExposureForQuestion/.test(open[0]), 'open must validate the source exposure');
+  ok(/dependency-exposure/.test(open[0]), 'open must refuse non-dependency exposures honestly');
+  // Cited intelligence must belong to this workspace AND this exposure; the
+  // vuln id is denormalized from the cited row, never client-asserted.
+  ok(/loadVulnIntelForQuestion/.test(open[0]), 'open must validate cited intelligence');
+  ok(/vulnId = intel\.row\.vuln_id/.test(open[0]),
+    'vuln_id must be derived from the cited intelligence row, not the request body');
+  // The kind is derived server-side from the anchor.
+  ok(/sourceVulnIntelId \? 'vulnerability_review' : 'component_risk_review'/.test(open[0]),
+    'question_kind must be derived from the anchor, never accepted from the client');
+  // A second open for the same fact is repetition: 409 + pointer.
+  ok(/'23505'/.test(open[0]), 'open must catch the partial-unique race');
+  ok(/existing_question_id/.test(open[0]), 'the 409 must point at the existing open question');
+  ok(/status(\s*:\s*|\s+)'open'/.test(open[0]), 'open must insert status open (never answered)');
+  ok(!/selected_outcome/.test(open[0]), 'open must not write any outcome — the human has not decided yet');
+});
+
+test('answering is a guarded once-only transition recorded to a human (PR-15B)', () => {
+  const src = stripJsComments(read('src/server/cei/remediation-questions.js'));
+  const answer = src.match(/export async function handleAnswerRemediationQuestion[\s\S]*$/);
+  ok(answer, 'handleAnswerRemediationQuestion not found');
+  // The UPDATE only lands on a row that is still open — the answer is
+  // recorded exactly once and never overwritten.
+  ok(/\.eq\('status', 'open'\)/.test(answer[0]),
+    'answer must be a guarded transition (update gated on status = open)');
+  ok(/answered_by:\s*req\.vaultSession\.user_id/.test(answer[0]),
+    'answered_by must be the authenticated human, recorded from the session');
+  ok(/REMEDIATION_OUTCOMES\.includes\(outcome\)/.test(answer[0]),
+    'answer must validate the outcome against the bounded allowlist');
+  ok(/409/.test(answer[0]), 'a second answer must get a 409, not an overwrite');
+  // Answering writes the question row and NOTHING else — assert no other
+  // table appears in the handler body.
+  for (const banned of ['component_exposures\'', 'component_exposure_events', 'component_exposure_vulnerabilities\'', 'vault_exceptions']) {
+    ok(!answer[0].includes(banned), `answer handler must not touch ${banned}`);
+  }
+});
+
+test('propose_exception routes through the Phase 5 lane — no parallel mechanism (PR-15B)', () => {
+  // The module records the DIRECTION only. It never imports the exception
+  // handlers, never inserts an exception, never proposes.
+  const src = stripJsComments(read('src/server/cei/remediation-questions.js'));
+  ok(!/from\s+['"][^'"]*exceptions/.test(src),
+    'remediation module must not import the exception module');
+  ok(!/state:\s*'(proposed|active|reviewed|rejected|revoked|expired)'/.test(src),
+    'remediation module must not write any exception state');
+  // The Phase 5 propose handler is UNTOUCHED by 15B: it still hardcodes
+  // proposed and still records the 6D audit event.
+  const ex = stripJsComments(read('src/server/vault/exceptions.js'));
+  ok(!/remediation/i.test(ex),
+    'exceptions.js must not know remediation questions exist (lanes stay separate)');
+  const proposeBody = ex.match(/async function handleProposeException[\s\S]*?\n}/);
+  ok(proposeBody && /state:\s*'proposed'/.test(proposeBody[0]),
+    'the Phase 5 propose lane must still hardcode state: proposed');
+});
+
+test('PR-15B routes: member reads + CSRF-fronted writes, private surface only', () => {
+  const routes = read('src/server/cei/routes.js');
+  ok(/app\.get\(\s*'\/api\/vault\/workspaces\/:slug\/remediation-questions'/.test(routes),
+    'GET list route must be registered');
+  ok(/app\.get\(\s*'\/api\/vault\/workspaces\/:slug\/remediation-questions\/:id'/.test(routes),
+    'GET detail route must be registered');
+  const openBlock = routes.match(/app\.post\(\s*'\/api\/vault\/workspaces\/:slug\/remediation-questions'[\s\S]*?\);/);
+  ok(openBlock, 'POST open route must be registered');
+  ok(/requireVaultSession/.test(openBlock[0]) && /requireCsrf/.test(openBlock[0]),
+    'open must require session + CSRF');
+  const answerBlock = routes.match(/app\.post\(\s*'\/api\/vault\/workspaces\/:slug\/remediation-questions\/:id\/answer'[\s\S]*?\);/);
+  ok(answerBlock, 'POST answer route must be registered');
+  ok(/requireVaultSession/.test(answerBlock[0]) && /requireCsrf/.test(answerBlock[0]),
+    'answer must require session + CSRF');
+});
+
+test('PR-15B leaves intelligence as context and the catalog at six', () => {
+  // Re-assert the 15A walls from the 15B side: the intelligence module is
+  // untouched by the question layer, and no new exposure type appeared.
+  const intel = stripJsComments(read('src/server/cei/vuln-intel.js'));
+  ok(!/remediation/i.test(intel),
+    'vuln-intel.js must not know remediation questions exist (context stays context)');
+  const domain = read('src/server/cei/domain.js');
+  const listMatch = domain.match(/NATIVE_EXPOSURE_TYPES\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\)/);
+  const slugs = (listMatch[1].match(/'[a-z0-9-]+'/g) || []);
+  ok(slugs.length === 6, `native catalog must still have exactly 6 types, found ${slugs.length}`);
+  // The 0022 intelligence migration is history — 15B did not edit it.
+  const sql = readSqlNoComments(VULN_INTEL_MIGRATION);
+  ok(!/remediation/i.test(sql), '0022 must not be rewritten by 15B');
+});
+
+test('release-integrity guard knows the 0023 table and the new route family (PR-15B)', () => {
+  const guard = read('scripts/check-release-integrity.mjs');
+  ok(/component_remediation_questions/.test(guard),
+    'REQUIRED_TABLES must include component_remediation_questions (the 0023 prod gate is structural)');
+  ok(/remediation-questions/.test(guard),
+    'the runtime layer must probe the remediation-questions route family');
 });
 
 // ---------- wiring ----------

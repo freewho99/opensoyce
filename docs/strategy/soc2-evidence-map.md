@@ -58,7 +58,20 @@ Doctrine on the record: *Observation is not judgment. Repetition is not new evid
 - Structurally enforced: intelligence never mutates exposure status, never creates an exception/proposal/outcome, and the table has no status column — context has no lifecycle. Unmatched intelligence creates no records (`exposure_id` is NOT NULL by design)
 - *Vulnerability identification* on the public OTS surface (gate, OSV overlay, workflow-pattern scan) continues unchanged and never reads the private table
 
-**Honest scope of the join:** association is on-demand per exposure ("check vulnerability intelligence"), against OSV, for npm dependency exposures with an observed version. Continuous/at-ingest enrichment, scanner-output ingestion, malicious-package signal feeds, and license-risk intelligence remain parked (15A+ extensions / 15C). Turning attached intelligence into a reviewable remediation question is lane 15B — deliberately separate, because the question and the answer belong to humans.
+**Honest scope of the join:** association is on-demand per exposure ("check vulnerability intelligence"), against OSV, for npm dependency exposures with an observed version. Continuous/at-ingest enrichment, scanner-output ingestion, malicious-package signal feeds, and license-risk intelligence remain parked (15A+ extensions / 15C). Turning attached intelligence into a reviewable remediation question shipped as PR-15B — see Q3a.
+
+## Q3a — "A risky component was observed. What did the organization decide to do about it?"
+
+**Evidence (the question layer shipped by PR-15B, scoped to what shipped):**
+
+- `component_remediation_questions` — one record per remediation question opened on an observed dependency exposure: what was asked (`question_kind`: vulnerability review or component risk review), about what exactly (denormalized `package_name`, `observed_version`, `vuln_id`), anchored to what (`source_exposure_id`, required; `source_vuln_intel_id`, when intelligence prompted it), opened by whom and when
+- The human-selected direction: `selected_outcome` ∈ fix required / defer / propose exception / not applicable / needs owner review / replace or remove — with `answered_by` + `answered_at` required by SQL CHECK whenever a question is answered. The schema itself cannot record an answer without a human
+- The question detail page separates, visibly: the observation, the vulnerability context, the question, and the human-selected outcome — the structure of the evidence mirrors the structure of the doctrine
+- Structurally enforced: opening or answering a question never mutates exposure status, never creates an exception or proposal, never records a reviewer outcome event. When the human selects *propose exception*, the record stores the direction and the actual proposal still travels the Phase 5 exception lane with its own reviewer approval (Q4)
+
+Doctrine on the record: *the scanner observes; intelligence adds context; the system asks; the human decides; the record remembers. A remediation question is not a remediation decision.*
+
+**Honest gaps:** a recorded direction is not a completed remediation — nothing verifies that "fix required" was fixed (a fix path is not proof of fix; completion tracking is future work). `due_at` is recorded context with no overdue pressure (lane 16). The answered question is not yet exportable as an auditor packet (lane 17). OpenSoyce opens and records remediation questions for observed component risk; it does not remediate vulnerabilities, fix dependencies automatically, or close vulnerabilities.
 
 ## Q4 — "How do you know risk acceptance was reviewed, and by whom?"
 
@@ -121,10 +134,10 @@ The order is deliberate: prove the loop, translate the proof, then package it. A
 
 | Gap named above | Lane |
 |---|---|
-| Vulnerability intel joined into the private record | 15A scanner/intel observations |
-| Remediation decisions as first-class reviewable questions | 15B Remediation Question Loop |
+| Vulnerability intel joined into the private record | 15A scanner/intel observations — SHIPPED (Q3) |
+| Remediation decisions as first-class reviewable questions | 15B Remediation Question Loop — SHIPPED (Q3a); completion tracking remains future work |
 | Ecosystems beyond npm, SBOM formats | 15C |
-| Expiry enforcement, staleness pressure, review cadence | 16 lifecycle/reaper |
+| Expiry enforcement, staleness pressure, review cadence, due_at pressure | 16 lifecycle/reaper |
 | Auditor / customer packets, GRC-tool projection | 17 evidence exports |
 
 Each requires its own explicit scope block. This document authorizes none of them.

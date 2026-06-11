@@ -75,6 +75,8 @@ const VAULT_DASHBOARD_FILES = [
   'src/pages/vault/VaultEvidenceDetail.tsx',
   'src/pages/vault/VaultExposureList.tsx',
   'src/pages/vault/VaultExposureDetail.tsx',
+  'src/pages/vault/VaultRemediationQuestionList.tsx',
+  'src/pages/vault/VaultRemediationQuestionDetail.tsx',
   'src/components/VaultLayout.tsx',
   'src/components/VaultAuthGate.tsx',
   'src/shared/vault/api-client.ts',
@@ -574,6 +576,100 @@ test('CEI read surface adds no ingestion / upload hooks (PR-6B)', () => {
         `${rel} must not add an ingestion/upload hook (${banned})`);
     }
   }
+});
+
+// ---------- PR-15B: the Remediation Question Loop on the dashboard ----------
+
+test('PR-15B question detail separates observation / context / question / outcome', () => {
+  const src = readNoComments('src/pages/vault/VaultRemediationQuestionDetail.tsx');
+  // The four sections, visibly and deliberately separate.
+  ok(/Observation/.test(src), 'detail must render an "Observation" section');
+  ok(/Vulnerability context/.test(src), 'detail must render a "Vulnerability context" section');
+  ok(/Remediation question/.test(src), 'detail must render a "Remediation question" section');
+  ok(/Human-selected outcome/.test(src), 'detail must render a "Human-selected outcome" section');
+  // Doctrine copy: the question does not decide.
+  ok(/The question does not decide/.test(src),
+    'detail must carry the question-is-not-a-decision doctrine copy');
+  ok(/does not decide the answer/.test(src),
+    'vulnerability context must carry the context-only doctrine copy');
+  // Honest distinct states: context absent vs intelligence retired.
+  ok(/No vulnerability context/.test(src),
+    'detail must show an honest no-context state for component risk reviews');
+  ok(/VaultAuthGate/.test(src), 'detail must gate unauth through VaultAuthGate');
+});
+
+test('PR-15B answering records a direction — never an exception, never a decision verb', () => {
+  const src = readNoComments('src/pages/vault/VaultRemediationQuestionDetail.tsx');
+  ok(/answerRemediationQuestion/.test(src), 'detail must answer via the dedicated helper');
+  // The six human directions are offered; nothing else.
+  for (const outcome of ['fix_required', 'defer', 'propose_exception', 'not_applicable', 'needs_owner_review', 'replace_or_remove']) {
+    ok(src.includes(`'${outcome}'`), `detail must offer the ${outcome} direction`);
+  }
+  // The question page can NEVER reach the exception lane directly: no
+  // propose helper, no reviewer verbs, no decision vocabulary.
+  for (const banned of ['proposeException', 'approveException', 'rejectException', 'revokeException', 'extendException']) {
+    ok(!src.includes(banned), `question detail must not reference ${banned} — the exception lane is its own surface`);
+  }
+  ok(!/'BLOCK'|'WARN'|'ALLOW'/.test(src),
+    'question detail must not reference the decision vocabulary');
+  // propose_exception routes BACK to the source exposure page, where the
+  // Phase 5 propose card lives.
+  ok(/Continue on exposure/.test(src) && /\/exposures\//.test(src),
+    'propose_exception must link back to the exposure page (the Phase 5 lane), never propose inline');
+});
+
+test('PR-15B list page is read-only; questions are opened from the exposure detail', () => {
+  const src = readNoComments('src/pages/vault/VaultRemediationQuestionList.tsx');
+  ok(/listRemediationQuestions/.test(src), 'list must read via listRemediationQuestions');
+  ok(/VaultAuthGate/.test(src), 'list must gate unauth through VaultAuthGate');
+  ok(!/openRemediationQuestion|answerRemediationQuestion/.test(src),
+    'the list page is read-only — open lives on the exposure page, answer on the question page');
+  ok(/the human decides/.test(src), 'list must carry the human-decides doctrine copy');
+});
+
+test('PR-15B exposure page opens questions without touching anything else', () => {
+  const src = readNoComments('src/pages/vault/VaultExposureDetail.tsx');
+  ok(/openRemediationQuestion/.test(src), 'exposure detail must open questions via the dedicated helper');
+  // Opening a question is NOT the propose flow: the Phase 5 propose card
+  // still exists, separately, and the remediation section never calls it.
+  ok(/proposeException/.test(src),
+    'the Phase 5 propose card must still exist on the exposure page (15B does not replace it)');
+  ok(!/answerRemediationQuestion/.test(src),
+    'the exposure page must not answer questions — the human decides on the question page');
+  ok(/Opening a question does not change this exposure/.test(src),
+    'the remediation section must carry the no-mutation doctrine copy');
+});
+
+test('PR-15B api-client: reads are GET, writes hit only the remediation-questions paths', () => {
+  const api = read('src/shared/vault/api-client.ts');
+  // The outcome union is exactly the six approved directions.
+  const unionMatch = api.match(/export type RemediationOutcome\s*=([\s\S]*?);/);
+  ok(unionMatch, 'api-client must export the RemediationOutcome union');
+  const outcomes = (unionMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
+  const expected = ['fix_required', 'defer', 'propose_exception', 'not_applicable', 'needs_owner_review', 'replace_or_remove'];
+  ok(JSON.stringify([...outcomes].sort()) === JSON.stringify([...expected].sort()),
+    `RemediationOutcome must be exactly ${JSON.stringify(expected)}, found ${JSON.stringify(outcomes)}`);
+  const listBlock = api.match(/export async function listRemediationQuestions[\s\S]*?\n}/);
+  ok(listBlock, 'listRemediationQuestions not found');
+  ok(!/method:\s*['"](POST|PATCH|DELETE)['"]/.test(listBlock[0]), 'list helper must be a GET');
+  const getBlock = api.match(/export async function getRemediationQuestion[\s\S]*?\n}/);
+  ok(getBlock, 'getRemediationQuestion not found');
+  ok(!/method:\s*['"](POST|PATCH|DELETE)['"]/.test(getBlock[0]), 'get helper must be a GET');
+  for (const fn of ['openRemediationQuestion', 'answerRemediationQuestion']) {
+    const block = api.match(new RegExp(`export async function ${fn}[\\s\\S]*?\\n}`));
+    ok(block, `${fn} not found`);
+    ok(/remediation-questions/.test(block[0]) && /method:\s*['"]POST['"]/.test(block[0]),
+      `${fn} must POST to a remediation-questions path only`);
+    ok(!/exceptions/.test(block[0]), `${fn} must never touch the exception lane`);
+  }
+});
+
+test('PR-15B routes are wired in App.tsx under VaultLayout', () => {
+  const app = read('src/App.tsx');
+  ok(/path=":slug\/remediation-questions" element=\{<VaultRemediationQuestionList \/>\}/.test(app),
+    'App.tsx must register the remediation-questions list route');
+  ok(/path=":slug\/remediation-questions\/:id" element=\{<VaultRemediationQuestionDetail \/>\}/.test(app),
+    'App.tsx must register the remediation-questions detail route');
 });
 
 // ---------- 5. Evidence private-read links + masking honesty ----------

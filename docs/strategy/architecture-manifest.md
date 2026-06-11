@@ -57,7 +57,8 @@ do-not-claim:
 | Release Integrity Guard | implemented | PR-INTEGRITY-1 | PR #106 / `3da3cf0` | `scripts/check-release-integrity.mjs` — 4 layers (static shape / schema presence / runtime presence / provider config), read-only by construction, target-coherent, strict release-gate mode; see [`release-integrity-guard.md`](./release-integrity-guard.md) |
 | Production CEI decision loop proof | implemented | PR-PROOF-1 | PR #107 / `771cabb` | First category artifact: [`production-cei-decision-loop-proof.md`](../proof/production-cei-decision-loop-proof.md) + 7 production screenshots; proof-package artifact #7; honest-edges section; no compliance claims |
 | SOC 2 evidence map | implemented | PR-14B | PR #108 / `1035f85` | Doc-level map of trust records to audit-relevant evidence questions — [`soc2-evidence-map.md`](./soc2-evidence-map.md); buyer/auditor language, honest gaps per lane, NO compliance claims; the bridge from proof artifact to evidence exports (lane 17) |
-| Vulnerability-intelligence observations | implemented | PR-15A | this PR | Migration 0022 `component_exposure_vulnerabilities` — intel as CONTEXT attached to dependency exposures (Option B: context table, native catalog stays at 6); on-demand OSV version-query association; 7C dedupe discipline; structurally cannot decide anything; closes the evidence-map Q3 seam for the shipped scope |
+| Vulnerability-intelligence observations | implemented | PR-15A | PR #109 / `5449aae` | Migration 0022 `component_exposure_vulnerabilities` — intel as CONTEXT attached to dependency exposures (Option B: context table, native catalog stays at 6); on-demand OSV version-query association; 7C dedupe discipline; structurally cannot decide anything; closes the evidence-map Q3 seam for the shipped scope |
+| Remediation Question Loop | implemented | PR-15B | this PR | Migration 0023 `component_remediation_questions` — the QUESTION layer on observed component risk: opened from a dependency exposure or its attached intelligence; six bounded human directions (fix / defer / propose-exception / not-applicable / owner-review / replace-or-remove); answer-coherence CHECK (no answer without a human); propose_exception routes through the Phase 5 lane (no FK to vault_exceptions); no auto-remediation, no policy engine, no overdue transition (due_at is recorded context; lane 16 owns pressure) |
 
 **Phase 5 is CLOSED.** See [`phase-5-closeout.md`](./phase-5-closeout.md) for the full handoff record.
 
@@ -72,7 +73,7 @@ _(none — PR-7D closed the packaging lane; further lanes are parked and each re
 | Artifact | Status | Lane | Purpose |
 |---|---:|---|---|
 | 15A+ intelligence extensions | parked | 15A+ | Continuous/at-ingest enrichment, scanner-output ingestion, malicious-package signal feeds, license-risk intelligence; PR-15A shipped on-demand OSV association only |
-| Remediation Question Loop | parked | 15B | Vulnerability observations → reviewable decisions (fix / defer / except / reject / owner-review / not-applicable); the canonical Phase 7 idea, human-decided |
+| 15B+ remediation extensions | parked | 15B+ | PR-15B shipped the question loop (open + human answer); remediation COMPLETION tracking (a fix path is not proof of fix), question cancellation flow, and due_at overdue pressure (lane 16) remain parked |
 | Broader ecosystems / SBOM | parked | 15C | pnpm / yarn / poetry / uv, CycloneDX/SPDX, scanner/SBOM input formats |
 | Expiry reaper + expired-outcome event | parked | 16 | active→expired transition; owns `exception_expired_from_exposure` + the actor-nullability decision |
 | Exposure status lifecycle | parked | 16 | `observed` → `resolved`, stale exposure, overdue remediation, exception review pressure |

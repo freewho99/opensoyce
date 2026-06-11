@@ -111,7 +111,7 @@ const REQUIRED_TABLES = [
   'vault_sessions', 'vault_evidence', 'vault_exceptions',
   'vault_timeline_events', 'vault_idempotency_keys', 'vault_device_codes',
   'component_exposure_types', 'component_exposures', 'component_exposure_events',
-  'component_exposure_vulnerabilities',
+  'component_exposure_vulnerabilities', 'component_remediation_questions',
 ];
 
 async function layer1Schema() {
@@ -181,6 +181,7 @@ async function layer2Runtime() {
   const probes = [
     ['GET /api/vault/me', await probe('/api/vault/me')],
     ['GET /api/vault/workspaces/__guard__/exposures', await probe('/api/vault/workspaces/__guard__/exposures')],
+    ['GET /api/vault/workspaces/__guard__/remediation-questions', await probe('/api/vault/workspaces/__guard__/remediation-questions')],
     ['POST /api/vault/workspaces (unauthenticated)', await probe('/api/vault/workspaces', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
     })],

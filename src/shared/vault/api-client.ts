@@ -463,6 +463,134 @@ export async function refreshExposureVulnIntel(slug: string, exposureId: string)
   });
 }
 
+// PR-15B: the Remediation Question Loop. A remediation question turns an
+// observed component risk (a dependency exposure, optionally with attached
+// vulnerability intelligence) into a reviewable operational question. The
+// system asks; the HUMAN decides; the record remembers. Opening a question
+// changes nothing else (no exposure status, no exception, no proposal);
+// answering records a direction, never a state transition. When the human
+// selects 'propose_exception', the actual proposal still travels the
+// existing Phase 5 exception lane (proposeException above) — these helpers
+// never touch /exceptions.
+export type RemediationQuestionKind = 'vulnerability_review' | 'component_risk_review';
+export type RemediationQuestionStatus = 'open' | 'answered' | 'cancelled';
+export type RemediationOutcome =
+  | 'fix_required'
+  | 'defer'
+  | 'propose_exception'
+  | 'not_applicable'
+  | 'needs_owner_review'
+  | 'replace_or_remove';
+
+export interface RemediationQuestionUser {
+  user_id: string;
+  github_login: string;
+  display_name: string | null;
+}
+
+export interface RemediationQuestionSourceExposure {
+  exposure_id: string;
+  exposure_type: string | null;
+  subject_kind: string;
+  subject_name: string;
+  source_kind: string;
+  source_ref: string | null;
+  status: ExposureStatus;
+}
+
+export interface RemediationQuestionSourceVulnIntel {
+  vuln_intel_id: string;
+  vuln_id: string;
+  source: string;
+  match_basis: string;
+  severity: string | null;
+  affected_range: string | null;
+  source_ref: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface RemediationQuestion {
+  question_id: string;
+  workspace_id: string;
+  source_exposure_id: string;
+  source_vuln_intel_id: string | null;
+  package_name: string;
+  observed_version: string | null;
+  vuln_id: string | null;
+  question_kind: RemediationQuestionKind;
+  status: RemediationQuestionStatus;
+  selected_outcome: RemediationOutcome | null;
+  created_by: RemediationQuestionUser | null;
+  answered_by: RemediationQuestionUser | null;
+  reason_public: string | null;
+  reason_private: string | null;
+  due_at: string | null;
+  created_at: string;
+  updated_at: string;
+  answered_at: string | null;
+  // Present on the detail read only (read-only embedded context).
+  source_exposure?: RemediationQuestionSourceExposure | null;
+  source_vuln_intel?: RemediationQuestionSourceVulnIntel | null;
+  visibility: 'private';
+}
+
+export interface RemediationQuestionListResponse {
+  questions: RemediationQuestion[];
+  total_count_estimate: number;
+  limit: number;
+  offset: number;
+  visibility: 'private';
+}
+
+export async function listRemediationQuestions(
+  slug: string,
+  query?: { status?: RemediationQuestionStatus; source_exposure_id?: string; limit?: number; offset?: number },
+) {
+  const params = new URLSearchParams();
+  if (query?.status) params.set('status', query.status);
+  if (query?.source_exposure_id) params.set('source_exposure_id', query.source_exposure_id);
+  if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query?.offset === 'number') params.set('offset', String(query.offset));
+  const qs = params.toString();
+  return vaultRequest<RemediationQuestionListResponse>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/remediation-questions${qs ? `?${qs}` : ''}`,
+  });
+}
+
+export async function getRemediationQuestion(slug: string, id: string) {
+  return vaultRequest<RemediationQuestion>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/remediation-questions/${encodeURIComponent(id)}`,
+  });
+}
+
+export interface OpenRemediationQuestionBody {
+  source_exposure_id: string;
+  source_vuln_intel_id?: string;
+  due_at?: string;
+}
+
+export async function openRemediationQuestion(slug: string, body: OpenRemediationQuestionBody) {
+  return vaultRequest<RemediationQuestion>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/remediation-questions`,
+    method: 'POST',
+    body,
+  });
+}
+
+export interface AnswerRemediationQuestionBody {
+  selected_outcome: RemediationOutcome;
+  reason_public?: string;
+  reason_private?: string;
+}
+
+export async function answerRemediationQuestion(slug: string, id: string, body: AnswerRemediationQuestionBody) {
+  return vaultRequest<RemediationQuestion>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/remediation-questions/${encodeURIComponent(id)}/answer`,
+    method: 'POST',
+    body,
+  });
+}
+
 // PR-6E: reviewer-side source-exposure context. Given a proposed exception,
 // list the CEI events that relate to it — each embeds the SOURCE exposure
 // (read-only). The exception review page uses this to show "this exception
