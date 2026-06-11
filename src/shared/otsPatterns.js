@@ -214,13 +214,13 @@ export const OTS_PATTERN_DEFINITIONS = [
   },
   {
     id: 'dangerous-release-permission',
-    name: 'Dangerous Release/Write Permission',
+    name: 'Workflow Write Access',
     category: 'ci-cd',
     defaultSeverity: 'high',
-    shortDescription: 'The workflow has explicit GITHUB_TOKEN write permissions for packages or releases in general steps.',
-    whyItMatters: 'If any dependency runs arbitrary code in a build with release-write permissions, it can overwrite official assets or release packages.',
+    shortDescription: 'A GitHub Actions workflow grants its token write access. Severity is tiered by what the scope can do: shipping code or minting cloud credentials is HIGH; bot housekeeping (labels, issues) or uploading scan results is LOW.',
+    whyItMatters: 'If a workflow that can push code or publish packages were hijacked (e.g. via a poisoned dependency), an attacker could ship a malicious release to everyone who installs this software. Scopes that only manage the repository (labels, issues, security-scan uploads) cannot reach shipped code, so they carry no downstream-user risk.',
     defaultPolicyImpact: 'warn',
-    recommendedAction: 'Restrict workflow permissions globally to read-only, and only enable write permissions on targeted deployment jobs.',
+    recommendedAction: 'Default workflow permissions to read-only and grant write scopes only on the specific jobs that need them. Treat contents / packages / actions / id-token write as the scopes to scrutinize; pull-requests / issues / security-events write are routine.',
     realWorldExamples: ['Backdooring release binaries during build'],
     coverageStatus: 'gate-active'
   },
@@ -603,6 +603,51 @@ export function workflowOrigin(row) {
   return row.workflowPath;
 }
 
+// Workflow GITHUB_TOKEN write scopes are NOT equally dangerous. A flat HIGH
+// for every scope made a CLA bot read as alarming as push-to-main, training
+// users to ignore the warning. Tier from the scopes the parser already
+// captured (`row.writeScopes`):
+//   HIGH   — can ship code / artifacts or escalate: contents, packages,
+//            actions (rewrite other workflows), id-token (mint OIDC creds),
+//            deployments, or write-all (`__all`).
+//   LOW    — repo housekeeping or security-posture uploads with no path to
+//            shipped code: pull-requests, issues, repository-projects,
+//            security-events.
+const HIGH_RISK_WRITE_SCOPES = new Set([
+  '__all',
+  'contents',
+  'packages',
+  'actions',
+  'id-token',
+  'deployments',
+]);
+
+/**
+ * Classify a dangerous-release-permission row by what its write scopes can
+ * actually do, returning the tiered severity plus audience-first framing for
+ * the evidence card. `security-events` / `pull-requests` / `issues` etc. fall
+ * through to the LOW tier — they manage the repo, not the shipped artifact.
+ *
+ * @param {string[]} writeScopes
+ * @returns {{ severity: 'high'|'low', audience: string, userImpact: string }}
+ */
+export function workflowPermissionRisk(writeScopes) {
+  const scopes = Array.isArray(writeScopes) ? writeScopes : [];
+  const isHigh = scopes.some((s) => HIGH_RISK_WRITE_SCOPES.has(s));
+  if (isHigh) {
+    return {
+      severity: 'high',
+      audience: 'Maintainers + downstream users',
+      userImpact: 'A hijack of this workflow could ship a malicious version to people who install this software.',
+    };
+  }
+  return {
+    severity: 'low',
+    audience: 'Maintainers only',
+    userImpact: 'None — these scopes manage the repository (labels, issues, scan results), not shipped code.',
+  };
+}
+
 /**
  * Quantify/detect OTS patterns matching a scanned dependency package row.
  * Maps signals (vulnerability fields, threat fields, capability profiles,
@@ -947,15 +992,22 @@ export function detectOtsPatternsForRow(row, context = {}) {
   // combine with pull-request-target-abuse or untrusted-workflow-input
   // for the real blocking decision (those patterns already do BLOCK).
   if (row.isWorkflowAction === true && row.dangerousReleasePermission === true) {
+    // Severity is tiered by what the write scopes can actually do (see
+    // workflowPermissionRisk). catalogSeverity stays 'high' — the pattern
+    // *class* is high-risk — while the emitted severity reflects this match.
+    const risk = workflowPermissionRisk(row.writeScopes);
     patterns.push({
       patternId: 'dangerous-release-permission',
-      severity: 'high',
+      severity: risk.severity,
+      catalogSeverity: 'high',
       policyImpact: 'warn',
       confidence: 0.84,
       evidence: [
         { label: 'Source', value: 'GitHub workflow' },
         { label: 'Origin', value: workflowOrigin(row) },
         { label: 'Write Scopes', value: Array.isArray(row.writeScopes) && row.writeScopes.length > 0 ? row.writeScopes.join(', ') : 'write-level scope detected' },
+        { label: 'Who it affects', value: risk.audience },
+        { label: 'User impact', value: risk.userImpact },
       ]
     });
   }

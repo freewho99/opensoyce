@@ -6,6 +6,7 @@ import {
   OTS_PATTERN_DEFINITIONS,
   OTS_PATTERN_PACKS,
   workflowOrigin,
+  workflowPermissionRisk,
 } from '../src/shared/otsPatterns.js';
 
 let passed = 0;
@@ -251,9 +252,52 @@ test('GitHub Actions detector coverage: dangerous-release-permission fires + WAR
   const p = patterns.find((x) => x.patternId === 'dangerous-release-permission');
   ok(p, 'dangerous-release-permission fires');
   eq(p.policyImpact, 'warn', 'WARN (catalog default; not auto-block on its own)');
+  eq(p.severity, 'high', 'contents write → HIGH tier');
+  eq(p.catalogSeverity, 'high', 'pattern class stays high-risk');
   // Evidence surfaces the write scopes
   const ev = p.evidence.find((e) => e.label === 'Write Scopes');
   ok(ev && ev.value.includes('contents'), 'evidence lists scopes');
+});
+
+test('dangerous-release-permission: code-shipping scope tiers HIGH', () => {
+  const r = workflowPermissionRisk(['contents']);
+  eq(r.severity, 'high', 'contents → HIGH');
+  eq(workflowPermissionRisk(['packages']).severity, 'high', 'packages → HIGH');
+  eq(workflowPermissionRisk(['actions']).severity, 'high', 'actions → HIGH');
+  eq(workflowPermissionRisk(['id-token']).severity, 'high', 'id-token → HIGH');
+  eq(workflowPermissionRisk(['__all']).severity, 'high', 'write-all → HIGH');
+  ok(/downstream users/i.test(r.audience), 'HIGH audience names downstream users');
+});
+
+test('dangerous-release-permission: housekeeping scope tiers LOW (no user impact)', () => {
+  eq(workflowPermissionRisk(['security-events']).severity, 'low', 'security-events → LOW');
+  eq(workflowPermissionRisk(['pull-requests']).severity, 'low', 'pull-requests → LOW');
+  eq(workflowPermissionRisk(['issues']).severity, 'low', 'issues → LOW');
+  const r = workflowPermissionRisk(['security-events']);
+  ok(/none/i.test(r.userImpact), 'LOW user impact is None');
+  ok(/maintainers only/i.test(r.audience), 'LOW audience is maintainers only');
+});
+
+test('dangerous-release-permission: mixed scopes tier HIGH if any scope ships code', () => {
+  eq(workflowPermissionRisk(['issues', 'contents']).severity, 'high', 'any HIGH scope wins');
+  eq(workflowPermissionRisk([]).severity, 'low', 'empty scopes → LOW (defensive)');
+});
+
+test('dangerous-release-permission: LOW-tier row emits low severity + audience evidence', () => {
+  const patterns = detectOtsPatternsForRow({
+    package: '.github/workflows/security.yml#analyze',
+    isWorkflowAction: true,
+    dangerousReleasePermission: true,
+    workflowPath: '.github/workflows/security.yml',
+    writeScopes: ['security-events'],
+  }, {});
+  const p = patterns.find((x) => x.patternId === 'dangerous-release-permission');
+  ok(p, 'fires');
+  eq(p.severity, 'low', 'security-events → LOW (was flat HIGH before tiering)');
+  const who = p.evidence.find((e) => e.label === 'Who it affects');
+  const impact = p.evidence.find((e) => e.label === 'User impact');
+  ok(who && /maintainers only/i.test(who.value), 'audience evidence present');
+  ok(impact && /none/i.test(impact.value), 'user-impact evidence present');
 });
 
 // ---------------------------------------------------------------------------
