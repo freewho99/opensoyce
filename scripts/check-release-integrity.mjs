@@ -83,7 +83,7 @@ function layer0Static() {
 
   // 0c. Every registered vault/CEI route literal lives under the deployed prefix.
   const literals = [];
-  for (const rel of ['src/server/vault/routes.js', 'src/server/cei/routes.js']) {
+  for (const rel of ['src/server/vault/routes.js', 'src/server/cei/routes.js', 'src/server/vault/resolution-routes.js']) {
     for (const m of read(rel).matchAll(/'(\/api\/[^']+)'/g)) literals.push(m[1]);
   }
   const outside = literals.filter((r) => !r.startsWith('/api/vault/'));
@@ -112,6 +112,7 @@ const REQUIRED_TABLES = [
   'vault_timeline_events', 'vault_idempotency_keys', 'vault_device_codes',
   'component_exposure_types', 'component_exposures', 'component_exposure_events',
   'component_exposure_vulnerabilities', 'component_remediation_questions',
+  'vault_exception_resolutions',
 ];
 
 async function layer1Schema() {
@@ -182,6 +183,7 @@ async function layer2Runtime() {
     ['GET /api/vault/me', await probe('/api/vault/me')],
     ['GET /api/vault/workspaces/__guard__/exposures', await probe('/api/vault/workspaces/__guard__/exposures')],
     ['GET /api/vault/workspaces/__guard__/remediation-questions', await probe('/api/vault/workspaces/__guard__/remediation-questions')],
+    ['GET /api/vault/workspaces/__guard__/exceptions/__guard__/resolutions', await probe('/api/vault/workspaces/__guard__/exceptions/__guard__/resolutions')],
     ['POST /api/vault/workspaces (unauthenticated)', await probe('/api/vault/workspaces', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
     })],

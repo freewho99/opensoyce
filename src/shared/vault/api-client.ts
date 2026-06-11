@@ -297,6 +297,56 @@ export async function revokeExceptionApi(slug: string, id: string, body: { revok
   });
 }
 
+// PR-16B: expired trust reviewer resolution. Expired trust creates review
+// pressure; reviewer resolution creates the next trust decision. A
+// resolution is a RECORD, not a state transition — the expired state is
+// time truth and never changes from this lane. 'renew' CITES a separate
+// exception created through the existing propose lane (these helpers never
+// create or extend trust); 'remediation_question' cites a 15B question.
+export type ResolutionOutcome =
+  | 'renew'
+  | 'revoke'
+  | 'remediation_required'
+  | 'resolved_externally'
+  | 'defer'
+  | 'remediation_question';
+
+export interface ExceptionResolution {
+  resolution_id: string;
+  workspace_id: string;
+  exception_id: string;
+  outcome: ResolutionOutcome;
+  resolved_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  reason_public: string;
+  reason_private: string | null;
+  renewed_exception_id: string | null;
+  linked_question_id: string | null;
+  created_at: string;
+  visibility: 'private';
+}
+
+export async function listExceptionResolutions(slug: string, exceptionId: string) {
+  return vaultRequest<{ resolutions: ExceptionResolution[]; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exceptions/${encodeURIComponent(exceptionId)}/resolutions`,
+  });
+}
+
+export interface ResolveExpiredExceptionBody {
+  outcome: ResolutionOutcome;
+  reason_public: string;
+  reason_private?: string;
+  renewed_exception_id?: string;
+  linked_question_id?: string;
+}
+
+export async function resolveExpiredException(slug: string, exceptionId: string, body: ResolveExpiredExceptionBody) {
+  return vaultRequest<ExceptionResolution>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exceptions/${encodeURIComponent(exceptionId)}/resolve`,
+    method: 'POST',
+    body,
+  });
+}
+
 // ---------- timeline ----------
 
 export async function listTimeline(slug: string, query?: { limit?: number; cursor?: string }) {

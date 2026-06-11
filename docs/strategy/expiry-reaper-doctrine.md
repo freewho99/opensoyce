@@ -1,7 +1,7 @@
-# Exception Expiry Doctrine (PR-16A)
+# Exception Expiry Doctrine (PR-16A / PR-16B)
 
-Status: implemented (PR-16A)
-Scope: how temporary accepted risk becomes visible again — and what the system deliberately does NOT do about it.
+Status: implemented (PR-16A pressure; PR-16B reviewer resolution)
+Scope: how temporary accepted risk becomes visible again, how a reviewer resolves it — and what the system deliberately does NOT do about it.
 
 ## The doctrine
 
@@ -44,8 +44,39 @@ This lane answers the auditor question "how do you prove accepted risk does not 
 
 OpenSoyce records when accepted component risk has passed its expiry window and needs review. OpenSoyce does NOT remediate expired risk, revoke risk automatically, prove a vulnerability is fixed, guarantee compliance, or provide SOC 2 compliance.
 
+## The resolution lane (PR-16B)
+
+```txt
+Expired trust creates review pressure.
+Reviewer resolution creates the next trust decision.
+The reaper does not decide.
+The reviewer decides.
+The record remembers.
+```
+
+Hard wall: **no auto-renew, no auto-revoke, no auto-remediate, no silent extension.**
+
+An expired exception is a REVIEW CASE, not just a state. The case lives in `vault_exception_resolutions` (migration 0025): append-only, reviewer-authored records — `resolved_by` is NOT NULL by schema; there is no system resolution — each carrying one of six bounded directions with a REQUIRED reason:
+
+- **renew** — cites a NEW exception created through the existing Phase 5 propose lane, which travels the existing approval lane with its own fresh expiry. The expired row is never revived or extended; citation coherence is a SQL CHECK, and a renewal cannot cite itself.
+- **revoke** — trust formally ended; do not renew. A recorded direction: the expired state (which already grants nothing) stands as time truth.
+- **remediation_required** — a human will fix or upgrade.
+- **resolved_externally** — the risk no longer applies; asserted by the reviewer, not proven by the system.
+- **defer** — reviewed; deliberately revisit later. The case stays open to re-resolution (which is why resolutions are append-only with no unique-per-exception constraint — every prior resolution remains on the record).
+- **remediation_question** — the 15B question lane owns the next step; cites an existing question, never creates one.
+
+The resolution module writes exactly one table. It never writes `vault_exceptions`, never touches exposures, CEI events, intelligence, or the timeline. Resolving requires the reviewer role — it is a trust decision about what happens next, exactly like approve/reject/revoke.
+
+The complete loop this closes:
+
+```txt
+approved with expiry → time passed → reaper observed (16A)
+→ review pressure visible → reviewer resolved (16B)
+→ the record remembers every step, and no step was decided by the system
+```
+
 ## Deliberately deferred
 
-- **Renewal / closeout path** — what a reviewer does WITH an expired exception (renew, revoke, remediate, close) is lane 16B, a decision lane with its own scope block.
-- **Scheduling** — the reaper is an explicit command (safe-by-default dry-run; `--execute` to act). Wiring it to a cron is an ops decision, not part of this PR.
+- **Scheduling** — the reaper is an explicit command (safe-by-default dry-run; `--execute` to act). Wiring it to a cron is an ops decision, not part of these PRs. The FIRST production reap is deliberately manual: the first live system mutation deserves human presence.
 - **Exposure staleness / remediation-question due_at pressure** — same doctrine, different records; future 16-lane work.
+- **Resolution surfacing on the list page** (unresolved-case markers in the Trust Expiry table) — polish; the detail page owns the case today.

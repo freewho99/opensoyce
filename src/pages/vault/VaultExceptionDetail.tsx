@@ -16,10 +16,14 @@ import {
   revokeExceptionApi,
   fetchWorkspace,
   listExceptionSourceEvents,
+  listExceptionResolutions,
+  resolveExpiredException,
   isOk,
   type VaultException,
   type VaultWorkspaceDetail,
   type ExceptionSourceEvent,
+  type ExceptionResolution,
+  type ResolutionOutcome,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
 
@@ -76,6 +80,19 @@ export default function VaultExceptionDetail() {
   // never blocks the review.
   const [sourceEvent, setSourceEvent] = React.useState<ExceptionSourceEvent | null>(null);
 
+  // PR-16B review case: append-only reviewer resolutions for an EXPIRED
+  // exception. Recording one never changes the exception row — the expired
+  // state is time truth. 'renew' cites a NEW proposal from the existing
+  // lane; this page never creates or extends trust from here.
+  const [resolutions, setResolutions] = React.useState<ExceptionResolution[]>([]);
+  const [resolutionOutcome, setResolutionOutcome] = React.useState<ResolutionOutcome | ''>('');
+  const [resolutionReason, setResolutionReason] = React.useState('');
+  const [resolutionReasonPrivate, setResolutionReasonPrivate] = React.useState('');
+  const [renewedExceptionId, setRenewedExceptionId] = React.useState('');
+  const [linkedQuestionId, setLinkedQuestionId] = React.useState('');
+  const [resolutionPending, setResolutionPending] = React.useState(false);
+  const [resolutionError, setResolutionError] = React.useState('');
+
   React.useEffect(() => {
     let cancelled = false;
     if (!slug || !id) return;
@@ -106,9 +123,41 @@ export default function VaultExceptionDetail() {
         );
         if (proposal) setSourceEvent(proposal);
       }
+      // PR-16B: the review-case record is a separate, best-effort read.
+      const resList = await listExceptionResolutions(slug, id);
+      if (cancelled) return;
+      if (isOk(resList)) setResolutions(resList.data.resolutions);
     })();
     return () => { cancelled = true; };
   }, [slug, id]);
+
+  async function handleResolve() {
+    if (!resolutionOutcome) {
+      setResolutionError('Select a direction — expired trust waits for a reviewer, not the system.');
+      return;
+    }
+    if (!resolutionReason.trim()) {
+      setResolutionError('A reason is required — a resolution without a reason is not evidence.');
+      return;
+    }
+    setResolutionError('');
+    setResolutionPending(true);
+    const res = await resolveExpiredException(slug, id, {
+      outcome: resolutionOutcome,
+      reason_public: resolutionReason.trim(),
+      reason_private: resolutionReasonPrivate || undefined,
+      renewed_exception_id: resolutionOutcome === 'renew' ? renewedExceptionId.trim() : undefined,
+      linked_question_id: resolutionOutcome === 'remediation_question' ? linkedQuestionId.trim() : undefined,
+    });
+    setResolutionPending(false);
+    if (!isOk(res)) { setResolutionError(res.message); return; }
+    setResolutions((prev) => [res.data, ...prev]);
+    setResolutionOutcome('');
+    setResolutionReason('');
+    setResolutionReasonPrivate('');
+    setRenewedExceptionId('');
+    setLinkedQuestionId('');
+  }
 
   async function handleApprove() {
     setActionError(''); setActionPending(true);
@@ -202,6 +251,165 @@ export default function VaultExceptionDetail() {
             the original decision below is preserved, and a reviewer still
             decides what happens next.
           </p>
+        </section>
+      )}
+
+      {/* PR-16B: the review case. Expired trust creates review pressure;
+          reviewer resolution creates the next trust decision. Recording a
+          resolution NEVER changes this exception — the expired state is
+          time truth. Renew cites a NEW proposal from the existing propose
+          lane; remediation_question cites a 15B question. Append-only:
+          every prior resolution stays on the record. */}
+      {isExpired && (
+        <section className="mb-8 border border-slate-700 bg-slate-800/40 p-4">
+          <h2 className="text-sm font-mono font-bold mb-2 uppercase tracking-wider text-slate-300">
+            Reviewer resolution
+          </h2>
+          <p className="text-xs font-mono text-slate-400 mb-3">
+            The reaper observed that time passed; it decided nothing. What
+            happens next is a reviewer decision, recorded here. Resolving
+            does not change this exception&apos;s state — renewing means a new
+            proposal through the existing exception lane, with its own
+            review and its own expiry.
+          </p>
+
+          {resolutions.length > 0 && (
+            <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono mb-4">
+              {resolutions.map((r) => (
+                <li key={r.resolution_id} className="px-3 py-2 space-y-1">
+                  <p>
+                    <span className="text-emerald-200">{r.outcome.replace(/_/g, ' ')}</span>
+                    <span className="text-slate-500 ml-2">
+                      by {r.resolved_by ? `@${r.resolved_by.github_login}` : '—'} · {r.created_at.slice(0, 19).replace('T', ' ')}
+                    </span>
+                  </p>
+                  <p className="text-slate-300">{r.reason_public}</p>
+                  {r.reason_private && <p className="text-slate-500">[private] {r.reason_private}</p>}
+                  {r.renewed_exception_id && (
+                    <p>
+                      <Link
+                        to={`/vault/${slug}/exceptions/${r.renewed_exception_id}`}
+                        className="text-slate-400 hover:text-slate-100 underline"
+                      >
+                        renewal proposal {r.renewed_exception_id.slice(0, 8)}
+                      </Link>
+                    </p>
+                  )}
+                  {r.linked_question_id && (
+                    <p>
+                      <Link
+                        to={`/vault/${slug}/remediation-questions/${r.linked_question_id}`}
+                        className="text-slate-400 hover:text-slate-100 underline"
+                      >
+                        remediation question {r.linked_question_id.slice(0, 8)}
+                      </Link>
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {resolutions.length === 0 && (
+            <p className="text-xs font-mono text-amber-200/80 mb-4">
+              Unresolved review case — no reviewer direction recorded yet.
+            </p>
+          )}
+
+          {isReviewerOrOwner ? (
+            <div className="space-y-3">
+              {resolutionError && (
+                <p className="text-xs font-mono text-red-300" role="alert">{resolutionError}</p>
+              )}
+              <fieldset>
+                <legend className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+                  direction (append-only; the record keeps every resolution)
+                </legend>
+                <div className="space-y-1">
+                  {([
+                    ['renew', 'Cite a NEW proposal from the existing exception lane — it gets its own review and expiry.'],
+                    ['revoke', 'Trust formally ended; do not renew. Records the direction; the expired state stands.'],
+                    ['remediation_required', 'A human will fix or upgrade the component.'],
+                    ['resolved_externally', 'The risk no longer applies — asserted by you, not proven by the system.'],
+                    ['defer', 'Reviewed; deliberately revisit later. The case stays open to re-resolution.'],
+                    ['remediation_question', 'Hand the next step to the question lane — cite an existing question.'],
+                  ] as Array<[ResolutionOutcome, string]>).map(([value, hint]) => (
+                    <label key={value} className="flex items-baseline gap-2 text-xs font-mono text-slate-200">
+                      <input
+                        type="radio"
+                        name="resolution-outcome"
+                        value={value}
+                        checked={resolutionOutcome === value}
+                        onChange={() => setResolutionOutcome(value)}
+                      />
+                      <span>
+                        {value.replace(/_/g, ' ')}
+                        <span className="text-slate-500 ml-2">{hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {resolutionOutcome === 'renew' && (
+                <label className="block">
+                  <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+                    renewed exception id (propose it first via the existing lane, then cite it here)
+                  </span>
+                  <input
+                    type="text"
+                    value={renewedExceptionId}
+                    onChange={(e) => setRenewedExceptionId(e.target.value)}
+                    placeholder="uuid of the NEW proposed exception"
+                    className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+                  />
+                </label>
+              )}
+              {resolutionOutcome === 'remediation_question' && (
+                <label className="block">
+                  <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+                    remediation question id (open it from the source exposure first, then cite it here)
+                  </span>
+                  <input
+                    type="text"
+                    value={linkedQuestionId}
+                    onChange={(e) => setLinkedQuestionId(e.target.value)}
+                    placeholder="uuid of the existing question"
+                    className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+                  />
+                </label>
+              )}
+              <label className="block">
+                <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">reason (required, 280 max)</span>
+                <input
+                  type="text"
+                  value={resolutionReason}
+                  onChange={(e) => setResolutionReason(e.target.value)}
+                  maxLength={280}
+                  className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">private reason (optional)</span>
+                <textarea
+                  value={resolutionReasonPrivate}
+                  onChange={(e) => setResolutionReasonPrivate(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleResolve}
+                disabled={resolutionPending}
+                className="px-4 py-2 text-sm font-mono bg-slate-100 text-slate-900 hover:bg-white disabled:opacity-50"
+              >
+                {resolutionPending ? 'Recording...' : 'Record reviewer resolution'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs font-mono text-slate-500">
+              Resolving expired trust requires the reviewer or owner role.
+            </p>
+          )}
         </section>
       )}
 

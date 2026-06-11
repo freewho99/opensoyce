@@ -42,6 +42,7 @@ import {
   handleApproveDeviceCode,
 } from './cli.js';
 import { registerCeiRoutes } from '../cei/routes.js';
+import { registerResolutionRoutes } from './resolution-routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -194,4 +195,10 @@ export function registerVaultRoutes(app) {
   // CSRF middleware and the 404-on-non-member doctrine. Native exposure
   // types only; no ingestion, no dashboard, no custom types.
   registerCeiRoutes(app);
+
+  // ---------- Expired trust reviewer resolution (PR-16B) ----------
+  // The review-case lane for expired exceptions: append-only reviewer
+  // resolutions, never a state transition. Same session + CSRF middleware,
+  // same 404-on-non-member doctrine.
+  registerResolutionRoutes(app);
 }
