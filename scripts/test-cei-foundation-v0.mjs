@@ -380,10 +380,10 @@ test('event_kind allowlist: 0019 opened with ONLY the proposal kind (PR-6D, hist
     `0019 event_kind allowlist must be exactly ['exception_proposed_from_exposure'], found ${JSON.stringify(kinds)}`);
 });
 
-test('event_kind allowlist: 0020 + events.js carry EXACTLY the 6F kind set (PR-6F)', () => {
-  // The live allowlist is the 6D proposal kind + the three reviewer-outcome
-  // kinds — no more (no expired until the reaper scope block), no fewer,
-  // and migration + app constant must agree.
+test('event_kind allowlist: 0020 stays the historical 6F set; events.js now carries 16A\'s five', () => {
+  // 0020 is history — it must STILL carry exactly the 4 kinds 6F shipped.
+  // 16A widened the LIVE allowlist via 0024 (the reaper scope block 6F
+  // deferred to), never by rewriting 0020.
   const sql = readSqlNoComments(OUTCOMES_MIGRATION);
   const checkMatch = sql.match(/check\s*\(\s*event_kind\s+in\s*\(([^)]*)\)/i);
   ok(checkMatch, '0020 must re-add an IN (...) CHECK on event_kind');
@@ -396,8 +396,8 @@ test('event_kind allowlist: 0020 + events.js carry EXACTLY the 6F kind set (PR-6
   const evMatch = domain.match(/export const EVENT_KINDS\s*=\s*Object\.freeze\(\[([^\]]*)\]/);
   ok(evMatch, 'events.js must export a frozen EVENT_KINDS array');
   const evKinds = (evMatch[1].match(/'[a-z_]+'/g) || []).map((s) => s.replace(/'/g, ''));
-  ok(JSON.stringify([...evKinds].sort()) === JSON.stringify([...ALL_EVENT_KINDS].sort()),
-    'events.js EVENT_KINDS must match the 0020 migration allowlist exactly');
+  ok(JSON.stringify([...evKinds].sort()) === JSON.stringify([...ALL_EVENT_KINDS, 'exception_expired_from_exposure'].sort()),
+    'events.js EVENT_KINDS must be the 6F set plus the 16A expired kind (matching 0024)');
   // The drop is LOUD: no "if exists" — a constraint-name mismatch must fail
   // the migration, not leave the old single-value CHECK silently rejecting
   // every outcome insert.
@@ -562,18 +562,24 @@ test('outcome recording is best-effort — a failed audit row never blocks the d
     'no sendError may follow an outcome-record call — the decision already committed');
 });
 
-test('no expired kind + actor still required until the reaper scope block (PR-6F)', () => {
-  // exception_expired_from_exposure is DELIBERATELY absent: nothing in the
-  // application transitions active -> expired (no reaper), and the event
-  // table requires an actor while expiry has none. Both arrive together.
+test('the expired kind + actor nullability arrived TOGETHER in 0024, not in 0020 (PR-16A)', () => {
+  // 6F's deferral note said both belong to the reaper scope block. 16A is
+  // that scope block: 0020 stays historical (no expired kind, no actor
+  // change), and 0024 delivers both at once — the kind, and nullability
+  // scoped to that kind only.
   const sql = readSqlNoComments(OUTCOMES_MIGRATION);
   ok(!/exception_expired_from_exposure/.test(sql),
-    '0020 must not include the expired kind (reaper scope)');
+    '0020 must still not include the expired kind (it is history)');
   ok(!/actor_user_id/.test(sql),
-    '0020 must not touch actor_user_id nullability (actor stays required)');
+    '0020 must still not touch actor_user_id nullability');
+  const reaperSql = readSqlNoComments('supabase/migrations/0024_cei_expired_event_kind.sql');
+  ok(/exception_expired_from_exposure/.test(reaperSql),
+    '0024 must carry the expired kind');
+  ok(/alter column actor_user_id drop not null/.test(reaperSql),
+    '0024 must carry the actor-nullability change (they arrive together)');
   const events = stripJsComments(read('src/server/cei/events.js'));
-  ok(!/exception_expired_from_exposure/.test(events),
-    'events.js must not carry the expired kind yet');
+  ok(/recordExpiredFromExposure/.test(events),
+    'events.js must now carry the expired recorder (PR-16A)');
 });
 
 test('PR-6F preserves the firewall: only the events CHECK changes', () => {
