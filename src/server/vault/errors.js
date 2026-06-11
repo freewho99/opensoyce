@@ -48,6 +48,8 @@ export const ERROR_CODES = Object.freeze({
   exposure_source_invalid: 'exposure-source-invalid',
   exposure_status_invalid: 'exposure-status-invalid',
   exposure_not_found: 'exposure-not-found',
+  // PR-15B additions (Remediation Question Loop):
+  remediation_question_conflict: 'remediation-question-conflict',
 });
 
 export function sendError(res, status, code, message, extras) {

@@ -27,6 +27,7 @@ import {
   listExposureEvents,
   listExposureVulnIntel,
   refreshExposureVulnIntel,
+  openRemediationQuestion,
   isOk,
   type ComponentExposure,
   type ComponentExposureEvent,
@@ -105,6 +106,14 @@ export default function VaultExposureDetail() {
   const [intelError, setIntelError] = React.useState('');
   const [intelChecked, setIntelChecked] = React.useState(false);
 
+  // PR-15B remediation questions. Opening one creates a QUESTION record
+  // only: no exposure write, no exception, no proposal, no CEI event. The
+  // human answers on the question page; propose_exception still travels
+  // the Phase 5 lane below.
+  const [questionPending, setQuestionPending] = React.useState(false);
+  const [questionError, setQuestionError] = React.useState('');
+  const [openedQuestionId, setOpenedQuestionId] = React.useState<string | null>(null);
+
   const refreshEvents = React.useCallback(async () => {
     if (!slug || !id) return;
     const res = await listExposureEvents(slug, id);
@@ -127,6 +136,21 @@ export default function VaultExposureDetail() {
     setIntelChecked(true);
     if (!isOk(res)) { setIntelError(res.message); return; }
     setVulnIntel(res.data.intel);
+  }
+
+  // PR-15B: open a remediation question about this observation — from the
+  // component itself, or from one attached intelligence finding. The server
+  // derives the question kind from what it is anchored to.
+  async function handleOpenQuestion(vulnIntelId?: string) {
+    setQuestionError('');
+    setQuestionPending(true);
+    const res = await openRemediationQuestion(slug, {
+      source_exposure_id: id,
+      ...(vulnIntelId ? { source_vuln_intel_id: vulnIntelId } : {}),
+    });
+    setQuestionPending(false);
+    if (!isOk(res)) { setQuestionError(res.message); return; }
+    setOpenedQuestionId(res.data.question_id);
   }
 
   React.useEffect(() => {
@@ -341,6 +365,16 @@ export default function VaultExposureDetail() {
                   {typeof iv.metadata?.summary === 'string' && iv.metadata.summary && (
                     <span className="text-slate-400 basis-full">{iv.metadata.summary}</span>
                   )}
+                  {/* PR-15B: turn this finding into a reviewable question.
+                      Creates a question record only — nothing else changes. */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenQuestion(iv.vuln_intel_id)}
+                    disabled={questionPending}
+                    className="px-2 py-0.5 text-[10px] font-mono border border-slate-600 text-slate-300 hover:bg-slate-800 disabled:opacity-50 shrink-0"
+                  >
+                    open remediation question
+                  </button>
                 </li>
               ))}
             </ul>
@@ -358,6 +392,56 @@ export default function VaultExposureDetail() {
           >
             {intelPending ? 'checking…' : vulnIntel.length > 0 ? 'Re-check vulnerability intelligence' : 'Check vulnerability intelligence'}
           </button>
+        </section>
+      )}
+
+      {/* PR-15B: the Remediation Question Loop. Opening a question turns
+          observed component risk into a reviewable operational question.
+          It changes nothing else: no exposure status, no exception, no
+          proposal, no reviewer outcome. The human answers on the question
+          page; if they choose propose_exception, the actual proposal still
+          travels the Trust decision lane below. */}
+      {exposure.exposure_type === 'dependency-exposure' && (
+        <section className="mb-8">
+          <h2 className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2">
+            Remediation question
+          </h2>
+          <p className="text-xs font-mono text-slate-400 mb-3">
+            [PRIVATE] The system asks; the human decides; the record remembers.
+            Opening a question does not change this exposure or create any
+            exception.
+          </p>
+          {questionError && <p className="mb-2 text-xs font-mono text-red-300" role="alert">{questionError}</p>}
+          {openedQuestionId ? (
+            <div className="border border-emerald-700 bg-emerald-900/30 p-3">
+              <p className="text-sm font-mono text-emerald-200">Remediation question opened.</p>
+              <p className="mt-2 text-xs font-mono">
+                <Link
+                  to={`/vault/${slug}/remediation-questions/${openedQuestionId}`}
+                  className="text-emerald-200 underline hover:text-white"
+                >
+                  Answer remediation question {openedQuestionId.slice(0, 8)}
+                </Link>
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleOpenQuestion()}
+                disabled={questionPending}
+                className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              >
+                {questionPending ? 'opening…' : 'Open remediation question'}
+              </button>
+              <Link
+                to={`/vault/${slug}/remediation-questions`}
+                className="text-xs font-mono text-slate-400 hover:text-slate-100 underline"
+              >
+                view all remediation questions
+              </Link>
+            </div>
+          )}
         </section>
       )}
 
