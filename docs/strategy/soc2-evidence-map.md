@@ -103,7 +103,13 @@ Nothing auto-decides. The exposure suggested; the human proposed; the reviewer d
 
 Doctrine: *expiry is time evidence, not reviewer judgment — the reaper observes that time passed; it does not decide the risk.* See [`expiry-reaper-doctrine.md`](./expiry-reaper-doctrine.md).
 
-**Honest gaps:** the reaper is an explicit command (safe-by-default dry-run), not a scheduled job — unattended enforcement cadence is an ops decision not yet wired. What a reviewer does WITH an expired exception (renew / revoke / remediate / close) is lane 16B. The live exception from the proof run (`b777fb25`, expires 2026-07-10) is the first real-world reap candidate.
+**Evidence (the resolution lane shipped by PR-16B):**
+
+- `vault_exception_resolutions` — the expired exception as a REVIEW CASE: append-only, reviewer-authored resolutions (`resolved_by` NOT NULL by schema — no system resolution exists), each with a required reason and one of six bounded directions: renew / revoke / remediation required / resolved externally / defer / remediation question
+- **Renewal is never silent**: "renew" must cite a NEW exception created through the existing propose lane and approved through the existing reviewer lane with its own fresh expiry — citation coherence is a SQL CHECK, a renewal cannot cite itself, and the resolution module structurally cannot write `vault_exceptions` (no revive, no extension)
+- The full loop is now recorded end to end: approval with required expiry → time elapsed → system observed (16A) → reviewer resolved (16B) — with the original decision preserved at every step
+
+**Honest gaps:** the reaper is an explicit command (safe-by-default dry-run), not a scheduled job — unattended enforcement cadence is an ops decision not yet wired; the first production reap is deliberately manual (human presence for the first live system mutation). A recorded resolution direction is not a completed action — nothing verifies "remediation required" was remediated. The live exception from the proof run (`b777fb25`, expires 2026-07-10) is the first real-world reap-and-resolve candidate.
 
 ## Q6 — "Can you trace a decision back to the observation that prompted it?"
 
@@ -146,8 +152,9 @@ The order is deliberate: prove the loop, translate the proof, then package it. A
 | Vulnerability intel joined into the private record | 15A scanner/intel observations — SHIPPED (Q3) |
 | Remediation decisions as first-class reviewable questions | 15B Remediation Question Loop — SHIPPED (Q3a); completion tracking remains future work |
 | Ecosystems beyond npm, SBOM formats | 15C |
-| Expiry reaper + review pressure | 16A — SHIPPED (Q5); renewal/closeout is 16B; scheduling is an ops decision |
-| Reviewer renewal / closeout of expired trust; staleness + due_at pressure | 16B+ lifecycle |
+| Expiry reaper + review pressure | 16A — SHIPPED (Q5); scheduling is an ops decision |
+| Reviewer resolution of expired trust | 16B — SHIPPED (Q5); resolution-completion verification remains future work |
+| Staleness + due_at pressure | 16+ lifecycle |
 | Auditor / customer packets, GRC-tool projection | 17 evidence exports |
 
 Each requires its own explicit scope block. This document authorizes none of them.
