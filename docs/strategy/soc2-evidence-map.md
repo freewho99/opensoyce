@@ -22,7 +22,7 @@ The do-not-claim firewall in [`architecture-manifest.md`](./architecture-manifes
 
 Each entry is a question a buyer, security reviewer, or auditor actually asks, mapped to the records that answer it — and, where the answer is partial, an honest gap with the lane that owns it. The credibility engine is honesty: the gaps make the evidence stronger, not weaker, because they prove the map describes what exists rather than what is aspired to.
 
-Live proof behind this map: [Production CEI Decision Loop Proof](../proof/production-cei-decision-loop-proof.md) — every record type referenced below was produced by production on 2026-06-10 and screenshotted.
+Live proof behind this map: [Production CEI Decision Loop Proof](../proof/production-cei-decision-loop-proof.md) — every record type referenced below was produced by production on 2026-06-10 and screenshotted. And [Production Full-Chain Evidence Export Proof](../proof/production-full-chain-evidence-export-proof.md) — the full chain through expiry, reaper, reviewer resolution, and the 17A export ran on production on 2026-06-11; the resulting bundle ([verbatim](../proof/artifacts/pr-proof-2/lodash-full-chain-evidence-export.md)) answers Q1–Q7 for one component in a single document.
 
 ---
 

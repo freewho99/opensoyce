@@ -1,0 +1,5 @@
+exception expiry reaper — EXECUTE at 2026-06-11T06:36:32.675Z
+
+DONE  package lodash (888aae0f, scheduled 2026-06-11T05:04:17.099+00:00) — expired; CEI relationship event recorded (system actor)
+
+reaped 1/1 — CEI events: 1 recorded, 0 already recorded, 0 not exposure-born
