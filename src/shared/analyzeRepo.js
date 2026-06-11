@@ -76,6 +76,20 @@ export async function analyzeRepo(owner, repo, headers, opts = {}) {
     throw new Error('RATE_LIMIT_HIT');
   }
   if (!repoRes.ok) {
+    // Log the real upstream status so a misconfigured token (401) or an SSO /
+    // secondary-rate-limit (403) is distinguishable in logs from a genuine
+    // GitHub outage — all three otherwise collapse into an opaque 502.
+    if (repoRes.status === 401) {
+      console.error(
+        `[analyzeRepo] GitHub 401 for ${owner}/${repo} — GITHUB_TOKEN is missing, expired, or invalid (check Vercel env)`
+      );
+    } else {
+      console.error(
+        `[analyzeRepo] GitHub upstream ${repoRes.status} for ${owner}/${repo} ` +
+          `(x-ratelimit-remaining=${repoRes.headers.get('x-ratelimit-remaining')}, ` +
+          `retry-after=${repoRes.headers.get('retry-after')})`
+      );
+    }
     throw new Error('UPSTREAM_ERROR');
   }
 
