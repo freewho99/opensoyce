@@ -129,7 +129,16 @@ Doctrine: the exposure suggests a trust decision; it does not become one. The tr
 - This map, as the index from question to record
 - The release integrity guard (`check:release-integrity`) — evidence that the production system itself is verified to be able to produce the record (schema, runtime, configuration)
 
-**Honest gap:** there is no export bundle. Auditor packets, customer-security-review packets, and Vanta/Drata-style projections are lane 17 — they project FROM the records this map describes, which is why the records came first.
+**Evidence (the export bundle shipped by PR-17A, scoped to what shipped):**
+
+- A private, workspace-scoped **evidence export bundle** for one component trust-decision chain: GET `/api/vault/workspaces/:slug/exposures/:id/evidence-export`, with a view/copy/download affordance on the exposure detail page
+- The bundle answers, from existing records only: what component was observed (Q1/Q2) → what risk context was known (Q3) → what remediation question was asked and who answered it (Q3a) → who made the trust decision (Q4) → was risk accepted temporarily and when did it expire (Q5) → how was the review pressure resolved (Q5/16B) → what receipts prove each step (Q6) — nine sections, Markdown + JSON, record ids and timestamps preserved verbatim
+- Structurally read-only: generating an export performs selects only — no CEI event, no timeline event, no state change; the record is identical after the export. Missing chain links are reported as "not present in the record", never fabricated. Severity is reproduced in the source's vocabulary. Private reasoning (`reason_private`) is never exported
+- Every bundle carries its own **honest edges**: what it proves, what it does not prove, and which sections are absent — the non-claims travel with the evidence
+
+Doctrine: *export is not certification; export is not a decision; export is a faithful view of the record.* See [`evidence-export-doctrine.md`](./evidence-export-doctrine.md).
+
+**Honest gaps:** one chain per export — no workspace-wide packet, no multi-component roll-up. No PDF. No Vanta/Drata projection, no auditor portal, no customer portal — the bundle is generated for a workspace member who hands it to their reviewer. A formal control-ID-by-control-ID matrix remains out of scope. The export proves what was recorded; it does not prove remediation happened or certify compliance.
 
 ---
 
@@ -155,6 +164,6 @@ The order is deliberate: prove the loop, translate the proof, then package it. A
 | Expiry reaper + review pressure | 16A — SHIPPED (Q5); scheduling is an ops decision |
 | Reviewer resolution of expired trust | 16B — SHIPPED (Q5); resolution-completion verification remains future work |
 | Staleness + due_at pressure | 16+ lifecycle |
-| Auditor / customer packets, GRC-tool projection | 17 evidence exports |
+| Auditor / customer evidence bundle (one chain) | 17A — SHIPPED (Q7); workspace-wide packets, PDF, GRC-tool projection remain future lanes |
 
 Each requires its own explicit scope block. This document authorizes none of them.
