@@ -1,0 +1,29 @@
+PR-PROOF-4 — production rollup evidence packet success receipt (READ-ONLY)
+
+GET https://www.opensoyce.com/api/vault/workspaces/opensoyce/evidence-packet
+HTTP 200 · generated_at 2026-06-12T04:35:30.630Z
+selection: workspace / Workspace evidence packet
+format: opensoyce-evidence-packet v1 · visibility: private
+
+state rollup:
+  chains_included = 2
+  decision_bearing_chains = 2
+  observation_only_chains_selected = 0
+  evidence_recorded = 1
+  awaiting_evidence = 0
+  active_temporary_trust = 1
+  expired_exceptions_pending_review = 0
+  expired_exceptions_resolved = 1
+  chains_with_missing_sections = 1
+  observation_only_exposures = 4
+  exception_states_observed = ["active","expired"]
+
+chains: 2 · observation-only inventory: 4
+packet honest-edges non_claims: 6
+packet honest-edges per_chain gaps: 1
+
+chains (read-only composition of existing records):
+  3.1 package lodash@4.17.20 · case evidence_recorded · exceptions [888aae0f:expired(resolved)]
+  3.2 package express@4.21.2 · case no_remediation_direction · exceptions [b777fb25:active]
+
+b777fb25 was READ by the rollup route (GET only) and NOT mutated.

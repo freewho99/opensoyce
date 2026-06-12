@@ -1,0 +1,5 @@
+PR-PROOF-4 — packet route probe receipt
+
+Unauthenticated GET https://www.opensoyce.com/api/vault/workspaces/__guard__/evidence-packet
+-> HTTP 401 {"error":"auth-required","message":"log in to access /api/vault"}
+route deployed AND private: CONFIRMED
