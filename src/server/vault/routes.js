@@ -48,6 +48,7 @@ import { registerRemediationEvidenceRoutes } from './remediation-evidence-routes
 import { registerEvidenceRollupRoutes } from './evidence-rollup-routes.js';
 import { registerTrustRecordRoutes } from './trust-record-routes.js';
 import { registerEvidenceVerificationRoutes } from './evidence-verification-routes.js';
+import { registerAgentDraftRoutes } from './agent-draft-routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -241,4 +242,11 @@ export function registerVaultRoutes(app) {
   // check time. Inconclusive is an honest answer. Same session + CSRF
   // middleware, same 404-on-non-member doctrine.
   registerEvidenceVerificationRoutes(app);
+
+  // ---------- Trust Agent evidence drafter (PR-18A) ----------
+  // The agent drafts; the human decides. Drafts are records; approval is
+  // a separate human action; agent output is never evidence until a
+  // human records it through the existing lane. Session-only, no
+  // autonomous runs, no public surface.
+  registerAgentDraftRoutes(app);
 }

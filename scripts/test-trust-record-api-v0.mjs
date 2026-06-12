@@ -144,6 +144,8 @@ test('read-only by construction: token auth is mounted on GET routes only (PR-17
     'src/server/vault/evidence-export-routes.js',
     'src/server/vault/remediation-evidence-routes.js',
     'src/server/vault/evidence-rollup-routes.js',
+    'src/server/vault/evidence-verification-routes.js',
+    'src/server/vault/agent-draft-routes.js',
     'src/server/cei/routes.js',
   ];
   for (const rel of registrars) {
@@ -262,11 +264,11 @@ test('webhook payload vocabulary is evidence-based; banned verdict values never 
   const src = read(WEBHOOKS);
   ok(!/'fixed'|'verified_safe'|'certified'|'compliant'|'approved_release'/.test(stripJsComments(src)),
     'no verdict vocabulary in the webhook module');
-  // PR-EV-1 added evidence_verification.checked — still record-change
-  // events only, never verdicts.
+  // PR-EV-1 added evidence_verification.checked; PR-18A added the draft
+  // lifecycle — still record-change events only, never verdicts.
   ok(JSON.stringify(WEBHOOK_EVENT_TYPES)
-    === JSON.stringify(['exception.expired', 'reviewer_resolution.recorded', 'remediation_evidence.recorded', 'evidence_verification.checked']),
-    'event types are exactly the four record-change events');
+    === JSON.stringify(['exception.expired', 'reviewer_resolution.recorded', 'remediation_evidence.recorded', 'evidence_verification.checked', 'agent_draft.created', 'agent_draft.approved', 'agent_draft.rejected']),
+    'event types are exactly the seven record-change events');
 });
 
 test('webhook signature is present and independently verifiable (PR-17C)', () => {
