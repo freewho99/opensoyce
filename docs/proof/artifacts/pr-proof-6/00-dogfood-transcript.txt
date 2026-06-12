@@ -1,0 +1,13 @@
+1. run check: 201 | kind=internal_exposure_reference status=check_passed
+   summary: internal_record_linked: the cited exposure exists in this workspace and observes lodash@4.17.21, later than the original 4.17.20. This does not claim the vulnerability is fixed.
+   checked_by=@freewho99 at 2026-06-12T09:34:54.771171+00:00
+   detail.version_comparison={"later":true,"different":true,"comparable":true}
+   non_claim: A passing citation check does not certify remediation or prove absence of vulnerabilities.
+2. history: 200 | checks=1
+3. bundle: 200 | content sections=9 | citation_checks.present=true (1 check)
+   missing: []
+   headings: 9=true 10=true 11=true
+   EV-1 non-claim in document: true
+4. packet: 200 | chain bundle citation_checks.present=true
+5. banned certification language absent: true
+6. b777fb25: active expires_at=2026-07-10T17:32:32.433+00:00 (untouched)

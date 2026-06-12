@@ -1,0 +1,36 @@
+{
+  "check_id": "71f6655a-ec69-46b0-8ec9-597f5b080d3a",
+  "workspace_id": "7cf6a34b-c00f-441b-a0c0-62a248f5c640",
+  "evidence_id": "eccefc1a-9a86-4a62-9f24-63ce44dd4501",
+  "exception_id": "888aae0f-eb07-4eec-a16a-a093294b8c76",
+  "source_exposure_id": "65d32e84-a27c-4855-a60b-c6b0be47f285",
+  "related_resolution_id": "c2d42dd3-9b8b-481e-b2c5-7592ec7a8253",
+  "evidence_type": "fixed_version_observed",
+  "evidence_ref": "lodash@4.17.21 observed through follow-up CLI ingest (exposure 28f6c108-60ec-4841-88c9-85af11ab086f)",
+  "check_kind": "internal_exposure_reference",
+  "check_status": "check_passed",
+  "checked_by": {
+    "user_id": "a95395e5-d59e-4d98-9928-511d730f2512",
+    "github_login": "freewho99",
+    "display_name": null
+  },
+  "checked_at": "2026-06-12T09:34:54.771171+00:00",
+  "summary_public": "internal_record_linked: the cited exposure exists in this workspace and observes lodash@4.17.21, later than the original 4.17.20. This does not claim the vulnerability is fixed.",
+  "status_reason": null,
+  "detail": {
+    "result": "internal_record_linked",
+    "cited_subject": "package lodash",
+    "cited_version": "4.17.21",
+    "original_version": "4.17.20",
+    "cited_exposure_id": "28f6c108-60ec-4841-88c9-85af11ab086f",
+    "version_comparison": {
+      "later": true,
+      "different": true,
+      "comparable": true
+    },
+    "cited_first_seen_at": "2026-06-12T03:25:39.001924+00:00",
+    "original_exposure_id": "65d32e84-a27c-4855-a60b-c6b0be47f285"
+  },
+  "non_claim": "A passing citation check does not certify remediation or prove absence of vulnerabilities.",
+  "visibility": "private"
+}
