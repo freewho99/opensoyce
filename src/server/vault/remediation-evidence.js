@@ -22,6 +22,11 @@
 import { vaultDb } from './db.js';
 import { sendError, ERROR_CODES } from './errors.js';
 import { resolveWorkspaceForMember, requireRole } from './rbac.js';
+// PR-17C: webhook NOTIFICATION only — the delivery module owns all
+// webhook reads/writes; this module still writes exactly one table.
+// Best-effort: a delivery failure never affects the evidence record,
+// which has already been recorded.
+import { deliverWorkspaceWebhooks } from './webhooks.js';
 
 const MAX_EVIDENCE_REF = 512;
 const MAX_PUBLIC_REASON = 280;
@@ -313,5 +318,33 @@ export async function handleRecordRemediationEvidence(req, res) {
   if (insertError) {
     return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'remediation evidence insert failed');
   }
-  res.status(201).json(shapeEvidenceRow(Array.isArray(inserted) && inserted[0]));
+  const insertedRow = Array.isArray(inserted) && inserted[0];
+
+  // PR-17C notification echo (best-effort, after the record stands).
+  // remediation_evidence is its own field, distinct from any reviewer
+  // direction — the evidence says what a human cited as having happened.
+  if (insertedRow) {
+    await deliverWorkspaceWebhooks(supabase, {
+      eventType: 'remediation_evidence.recorded',
+      workspace: { workspace_id: workspace.workspace_id, slug },
+      occurredAt: insertedRow.created_at,
+      actor: insertedRow.recorded_by_user
+        ? { github_login: insertedRow.recorded_by_user.github_login }
+        : null,
+      recordIds: {
+        exception_id: exceptionId,
+        evidence_id: insertedRow.evidence_id,
+        resolution_id: insertedRow.related_resolution_id || undefined,
+        exposure_id: insertedRow.source_exposure_id || undefined,
+      },
+      state: 'evidence_recorded',
+      remediationEvidence: {
+        evidence_type: insertedRow.evidence_type,
+        evidence_ref: insertedRow.evidence_ref,
+        related_resolution_id: insertedRow.related_resolution_id || null,
+      },
+    });
+  }
+
+  res.status(201).json(shapeEvidenceRow(insertedRow));
 }

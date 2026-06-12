@@ -21,6 +21,12 @@
 import { vaultDb } from './db.js';
 import { sendError, ERROR_CODES } from './errors.js';
 import { resolveWorkspaceForMember, requireRole } from './rbac.js';
+// PR-17C: webhook NOTIFICATION only — the delivery module owns all
+// webhook reads/writes; this module still writes exactly one table.
+// A webhook notifies that a record changed; it does not certify the
+// meaning of the change. Best-effort: a delivery failure never affects
+// the resolution, which has already been recorded.
+import { deliverWorkspaceWebhooks } from './webhooks.js';
 
 const MAX_PUBLIC_REASON = 280;
 const MAX_PRIVATE_REASON = 10000;
@@ -224,5 +230,29 @@ export async function handleResolveExpiredException(req, res) {
   if (insertError) {
     return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'resolution insert failed');
   }
-  res.status(201).json(shapeResolutionRow(Array.isArray(inserted) && inserted[0]));
+  const insertedRow = Array.isArray(inserted) && inserted[0];
+
+  // PR-17C notification echo (best-effort, after the record stands).
+  // reviewer_direction is its own field — a direction is what the
+  // reviewer decided should happen, never remediation evidence.
+  if (insertedRow) {
+    await deliverWorkspaceWebhooks(supabase, {
+      eventType: 'reviewer_resolution.recorded',
+      workspace: { workspace_id: workspace.workspace_id, slug },
+      occurredAt: insertedRow.created_at,
+      actor: insertedRow.resolved_by_user
+        ? { github_login: insertedRow.resolved_by_user.github_login }
+        : null,
+      recordIds: {
+        exception_id: exceptionId,
+        resolution_id: insertedRow.resolution_id,
+        renewed_exception_id: insertedRow.renewed_exception_id || undefined,
+        question_id: insertedRow.linked_question_id || undefined,
+      },
+      state: outcome,
+      reviewerDirection: outcome,
+    });
+  }
+
+  res.status(201).json(shapeResolutionRow(insertedRow));
 }

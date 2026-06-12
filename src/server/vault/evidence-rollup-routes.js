@@ -16,14 +16,17 @@
 // session-gated like every other vault read.
 
 import { setPrivateCacheHeaders } from './cache.js';
-import { requireVaultSession } from './auth.js';
+// PR-17C: the packet is part of the stable Trust Record API — readable
+// by a session (membership semantics unchanged) or a read-only API
+// token. Still no public surface.
+import { requireVaultReader } from './reader-auth.js';
 import { handleGetEvidencePacket } from './evidence-rollup.js';
 
 export function registerEvidenceRollupRoutes(app) {
   app.get(
     '/api/vault/workspaces/:slug/evidence-packet',
     setPrivateCacheHeaders,
-    requireVaultSession,
+    requireVaultReader,
     handleGetEvidencePacket,
   );
 }

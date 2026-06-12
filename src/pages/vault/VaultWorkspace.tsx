@@ -8,9 +8,18 @@ import { Link, useParams } from 'react-router-dom';
 import {
   fetchWorkspace,
   getEvidencePacket,
+  listApiTokens,
+  mintApiTokenRequest,
+  revokeApiToken,
+  listWebhooks,
+  createWebhook,
+  disableWebhook,
   isOk,
   type VaultWorkspaceDetail,
   type EvidencePacketResponse,
+  type VaultApiToken,
+  type VaultWebhook,
+  type WebhookEventType,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
 
@@ -62,6 +71,77 @@ export default function VaultWorkspace() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  // PR-17C: Trust Record API tokens + webhook subscriptions (owner-only
+  // admin). Tokens are READ-ONLY machine credentials; the raw token and
+  // the webhook signing secret are each shown exactly once at creation.
+  const [apiTokens, setApiTokens] = React.useState<VaultApiToken[]>([]);
+  const [webhooks, setWebhooks] = React.useState<VaultWebhook[]>([]);
+  const [adminLoaded, setAdminLoaded] = React.useState(false);
+  const [adminError, setAdminError] = React.useState('');
+  const [tokenName, setTokenName] = React.useState('');
+  const [mintedToken, setMintedToken] = React.useState<string | null>(null);
+  const [webhookUrl, setWebhookUrl] = React.useState('');
+  const [webhookEvents, setWebhookEvents] = React.useState<WebhookEventType[]>([]);
+  const [createdSecret, setCreatedSecret] = React.useState<string | null>(null);
+  const [adminPending, setAdminPending] = React.useState(false);
+
+  const isOwner = detail?.membership.role === 'owner';
+
+  React.useEffect(() => {
+    if (!isOwner || adminLoaded || !slug) return;
+    let cancelled = false;
+    (async () => {
+      const [tokens, hooks] = await Promise.all([listApiTokens(slug), listWebhooks(slug)]);
+      if (cancelled) return;
+      if (isOk(tokens)) setApiTokens(tokens.data.tokens);
+      if (isOk(hooks)) setWebhooks(hooks.data.webhooks);
+      setAdminLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [isOwner, adminLoaded, slug]);
+
+  async function handleMintToken() {
+    if (!tokenName.trim()) { setAdminError('Token name is required.'); return; }
+    setAdminError(''); setAdminPending(true);
+    const res = await mintApiTokenRequest(slug, tokenName.trim());
+    setAdminPending(false);
+    if (!isOk(res)) { setAdminError(res.message); return; }
+    setMintedToken(res.data.raw_token);
+    setApiTokens((prev) => [res.data.token, ...prev]);
+    setTokenName('');
+  }
+
+  async function handleRevokeToken(tokenId: string) {
+    setAdminError(''); setAdminPending(true);
+    const res = await revokeApiToken(slug, tokenId);
+    setAdminPending(false);
+    if (!isOk(res)) { setAdminError(res.message); return; }
+    setApiTokens((prev) => prev.map((t) => (t.token_id === tokenId ? res.data.token : t)));
+  }
+
+  async function handleCreateWebhook() {
+    if (!webhookUrl.trim() || webhookEvents.length === 0) {
+      setAdminError('A target URL and at least one event type are required.');
+      return;
+    }
+    setAdminError(''); setAdminPending(true);
+    const res = await createWebhook(slug, { target_url: webhookUrl.trim(), event_types: webhookEvents });
+    setAdminPending(false);
+    if (!isOk(res)) { setAdminError(res.message); return; }
+    setCreatedSecret(res.data.signing_secret);
+    setWebhooks((prev) => [res.data.webhook, ...prev]);
+    setWebhookUrl('');
+    setWebhookEvents([]);
+  }
+
+  async function handleDisableWebhook(subscriptionId: string) {
+    setAdminError(''); setAdminPending(true);
+    const res = await disableWebhook(slug, subscriptionId);
+    setAdminPending(false);
+    if (!isOk(res)) { setAdminError(res.message); return; }
+    setWebhooks((prev) => prev.map((w) => (w.subscription_id === subscriptionId ? res.data.webhook : w)));
   }
 
   React.useEffect(() => {
@@ -236,6 +316,160 @@ export default function VaultWorkspace() {
           </div>
         )}
       </section>
+
+      {/* PR-17C: Trust Record API + webhooks (owner admin). The API
+          exposes records; it does not create new trust conclusions. A
+          webhook notifies that a record changed; it does not certify the
+          meaning of the change. Raw token / signing secret are shown
+          exactly once. */}
+      {isOwner && (
+        <section className="mb-8 border border-slate-700 bg-slate-800/40 p-4 max-w-3xl">
+          <h2 className="text-sm font-mono font-bold mb-2 uppercase tracking-wider text-slate-300">
+            Trust Record API &amp; webhooks
+          </h2>
+          <p className="text-xs font-mono text-slate-400 mb-3">
+            [PRIVATE] Read-only API tokens let external systems consume this
+            workspace&apos;s trust records (<span className="text-slate-200">Authorization: Bearer osy_…</span>).
+            Webhooks notify your endpoint when a record changes — they do not
+            certify the meaning of the change.
+          </p>
+          {adminError && <p className="mb-2 text-xs font-mono text-red-300" role="alert">{adminError}</p>}
+
+          <h3 className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2">Read-only API tokens</h3>
+          {mintedToken && (
+            <div className="mb-3 border border-emerald-700 bg-emerald-900/30 p-3">
+              <p className="text-xs font-mono text-emerald-200">
+                Token minted — store it now; it is shown once and cannot be retrieved again.
+              </p>
+              <pre className="mt-2 font-mono text-xs text-emerald-100 break-all whitespace-pre-wrap">{mintedToken}</pre>
+              <button
+                type="button"
+                onClick={() => setMintedToken(null)}
+                className="mt-2 px-2 py-0.5 text-[10px] font-mono border border-emerald-700 text-emerald-200 hover:bg-emerald-900/40"
+              >
+                I stored it — dismiss
+              </button>
+            </div>
+          )}
+          {apiTokens.length > 0 && (
+            <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono mb-3">
+              {apiTokens.map((t) => (
+                <li key={t.token_id} className="px-3 py-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="text-slate-100">{t.token_name}</span>
+                  <span className="text-slate-500">scope: {t.scope}</span>
+                  <span className="text-slate-500">created {t.created_at.slice(0, 10)}</span>
+                  {t.last_used_at && <span className="text-slate-500">last used {t.last_used_at.slice(0, 10)}</span>}
+                  {t.revoked_at ? (
+                    <span className="text-red-300">revoked</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleRevokeToken(t.token_id)}
+                      disabled={adminPending}
+                      className="px-2 py-0.5 text-[10px] font-mono border border-slate-600 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      revoke
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-center gap-2 mb-5">
+            <input
+              type="text"
+              value={tokenName}
+              onChange={(e) => setTokenName(e.target.value)}
+              placeholder="token name (e.g. ci-reader)"
+              maxLength={80}
+              className="flex-1 bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+            />
+            <button
+              type="button"
+              onClick={handleMintToken}
+              disabled={adminPending}
+              className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Mint read-only token
+            </button>
+          </div>
+
+          <h3 className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2">Webhook subscriptions</h3>
+          {createdSecret && (
+            <div className="mb-3 border border-emerald-700 bg-emerald-900/30 p-3">
+              <p className="text-xs font-mono text-emerald-200">
+                Webhook created — store the signing secret now; it is shown once.
+                Verify deliveries with HMAC-SHA256 over the raw body
+                (X-OpenSoyce-Webhook-Signature).
+              </p>
+              <pre className="mt-2 font-mono text-xs text-emerald-100 break-all whitespace-pre-wrap">{createdSecret}</pre>
+              <button
+                type="button"
+                onClick={() => setCreatedSecret(null)}
+                className="mt-2 px-2 py-0.5 text-[10px] font-mono border border-emerald-700 text-emerald-200 hover:bg-emerald-900/40"
+              >
+                I stored it — dismiss
+              </button>
+            </div>
+          )}
+          {webhooks.length > 0 && (
+            <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono mb-3">
+              {webhooks.map((w) => (
+                <li key={w.subscription_id} className="px-3 py-2 space-y-1">
+                  <p className="text-slate-100 break-all">{w.target_url}</p>
+                  <p className="text-slate-500">
+                    {w.event_types.join(', ')} · created {w.created_at.slice(0, 10)}
+                    {w.disabled_at ? (
+                      <span className="text-red-300 ml-2">disabled</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDisableWebhook(w.subscription_id)}
+                        disabled={adminPending}
+                        className="ml-2 px-2 py-0.5 text-[10px] font-mono border border-slate-600 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        disable
+                      </button>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+              placeholder="https://your-endpoint.example.com/opensoyce"
+              maxLength={512}
+              className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+            />
+            <div className="flex flex-wrap gap-3">
+              {(['exception.expired', 'reviewer_resolution.recorded', 'remediation_evidence.recorded'] as WebhookEventType[]).map((ev) => (
+                <label key={ev} className="flex items-baseline gap-1 text-xs font-mono text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={webhookEvents.includes(ev)}
+                    onChange={(e) => setWebhookEvents((prev) => (
+                      e.target.checked ? [...prev, ev] : prev.filter((x) => x !== ev)
+                    ))}
+                  />
+                  {ev}
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={handleCreateWebhook}
+              disabled={adminPending}
+              className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Create webhook
+            </button>
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm font-mono font-bold mb-3 uppercase tracking-wider text-slate-400">Members</h2>

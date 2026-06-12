@@ -50,6 +50,10 @@
 
 import dotenv from 'dotenv';
 import { recordExpiredFromExposure } from '../src/server/cei/events.js';
+// PR-17C: webhook NOTIFICATION only — a webhook notifies that a record
+// changed; it does not certify the meaning of the change. Best-effort:
+// a delivery failure never affects the transition, which already stands.
+import { deliverWorkspaceWebhooks } from '../src/server/vault/webhooks.js';
 
 dotenv.config();
 
@@ -94,6 +98,21 @@ async function main() {
   let eventsAlready = 0;
   let eventsSkipped = 0;
   let failed = 0;
+  let webhooksDelivered = 0;
+
+  // Workspace slug lookup for webhook payloads (read-only, cached per run).
+  const slugCache = new Map();
+  async function workspaceSlug(workspaceId) {
+    if (slugCache.has(workspaceId)) return slugCache.get(workspaceId);
+    const { data: ws } = await supabase
+      .from('vault_workspaces')
+      .select('slug')
+      .eq('workspace_id', workspaceId)
+      .limit(1);
+    const slug = (Array.isArray(ws) && ws[0] && ws[0].slug) || null;
+    slugCache.set(workspaceId, slug);
+    return slug;
+  }
 
   for (const row of due) {
     const label = `${row.subject_kind} ${row.subject_name} (${row.exception_id.slice(0, 8)}, scheduled ${row.expires_at})`;
@@ -149,13 +168,29 @@ async function main() {
       eventsRecorded += 1;
       console.log(`DONE  ${label} — expired; CEI relationship event recorded (system actor)`);
     }
+
+    // PR-17C webhook echo (best-effort, never affects the transition).
+    // Expiry is time evidence — the actor is the system; the state speaks
+    // the evidence vocabulary: the case now awaits a reviewer.
+    const delivery = await deliverWorkspaceWebhooks(supabase, {
+      eventType: 'exception.expired',
+      workspace: { workspace_id: row.workspace_id, slug: await workspaceSlug(row.workspace_id) },
+      occurredAt: nowIso,
+      actor: { kind: 'system' },
+      recordIds: { exception_id: row.exception_id },
+      state: 'expired_pending_review',
+    });
+    if (delivery.delivered > 0) {
+      webhooksDelivered += delivery.delivered;
+      console.log(`      webhook notified ${delivery.delivered} subscription${delivery.delivered === 1 ? '' : 's'}`);
+    }
   }
 
   if (!execute) {
     console.log(`\n${due.length} exception${due.length === 1 ? '' : 's'} due for review. Dry-run: nothing transitioned.`);
     process.exit(0);
   }
-  console.log(`\nreaped ${expired}/${due.length} — CEI events: ${eventsRecorded} recorded, ${eventsAlready} already recorded, ${eventsSkipped} not exposure-born${failed ? `, ${failed} FAILED` : ''}`);
+  console.log(`\nreaped ${expired}/${due.length} — CEI events: ${eventsRecorded} recorded, ${eventsAlready} already recorded, ${eventsSkipped} not exposure-born${webhooksDelivered ? `; webhooks delivered: ${webhooksDelivered}` : ''}${failed ? `, ${failed} FAILED` : ''}`);
   process.exit(failed > 0 ? 1 : 0);
 }
 
