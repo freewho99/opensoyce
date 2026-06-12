@@ -83,7 +83,7 @@ function layer0Static() {
 
   // 0c. Every registered vault/CEI route literal lives under the deployed prefix.
   const literals = [];
-  for (const rel of ['src/server/vault/routes.js', 'src/server/cei/routes.js', 'src/server/vault/resolution-routes.js', 'src/server/vault/evidence-export-routes.js', 'src/server/vault/remediation-evidence-routes.js', 'src/server/vault/evidence-rollup-routes.js', 'src/server/vault/trust-record-routes.js']) {
+  for (const rel of ['src/server/vault/routes.js', 'src/server/cei/routes.js', 'src/server/vault/resolution-routes.js', 'src/server/vault/evidence-export-routes.js', 'src/server/vault/remediation-evidence-routes.js', 'src/server/vault/evidence-rollup-routes.js', 'src/server/vault/trust-record-routes.js', 'src/server/vault/evidence-verification-routes.js']) {
     for (const m of read(rel).matchAll(/'(\/api\/[^']+)'/g)) literals.push(m[1]);
   }
   const outside = literals.filter((r) => !r.startsWith('/api/vault/'));
@@ -114,6 +114,7 @@ const REQUIRED_TABLES = [
   'component_exposure_vulnerabilities', 'component_remediation_questions',
   'vault_exception_resolutions', 'component_remediation_evidence',
   'vault_api_tokens', 'vault_webhook_subscriptions', 'vault_webhook_deliveries',
+  'evidence_verification_checks',
 ];
 
 async function layer1Schema() {
@@ -189,6 +190,7 @@ async function layer2Runtime() {
     ['GET /api/vault/workspaces/__guard__/exceptions/__guard__/remediation-evidence', await probe('/api/vault/workspaces/__guard__/exceptions/__guard__/remediation-evidence')],
     ['GET /api/vault/workspaces/__guard__/evidence-packet', await probe('/api/vault/workspaces/__guard__/evidence-packet')],
     ['GET /api/vault/workspaces/__guard__/trust-records', await probe('/api/vault/workspaces/__guard__/trust-records')],
+    ['GET /api/vault/workspaces/__guard__/remediation-evidence/__guard__/verification-checks', await probe('/api/vault/workspaces/__guard__/remediation-evidence/__guard__/verification-checks')],
     ['POST /api/vault/workspaces (unauthenticated)', await probe('/api/vault/workspaces', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
     })],

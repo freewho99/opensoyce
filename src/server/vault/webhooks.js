@@ -26,6 +26,10 @@ export const WEBHOOK_EVENT_TYPES = Object.freeze([
   'exception.expired',
   'reviewer_resolution.recorded',
   'remediation_evidence.recorded',
+  // PR-EV-1: a citation check was recorded. The state speaks the check
+  // vocabulary (check_passed / check_failed / check_inconclusive) —
+  // never a verdict about remediation.
+  'evidence_verification.checked',
 ]);
 
 export const WEBHOOK_SIGNATURE_HEADER = 'X-OpenSoyce-Webhook-Signature';
@@ -107,6 +111,15 @@ export function buildWebhookPayload(event) {
       evidence_type: event.remediationEvidence.evidence_type,
       evidence_ref: event.remediationEvidence.evidence_ref,
       related_resolution_id: event.remediationEvidence.related_resolution_id || null,
+    };
+  }
+  // PR-EV-1: a citation check result. Distinct from direction AND from
+  // evidence — a check is a system observation about a citation, made at
+  // a point in time, never a verdict.
+  if (event.verificationCheck !== undefined) {
+    payload.verification_check = {
+      check_kind: event.verificationCheck.check_kind,
+      check_status: event.verificationCheck.check_status,
     };
   }
   return payload;

@@ -262,9 +262,11 @@ test('webhook payload vocabulary is evidence-based; banned verdict values never 
   const src = read(WEBHOOKS);
   ok(!/'fixed'|'verified_safe'|'certified'|'compliant'|'approved_release'/.test(stripJsComments(src)),
     'no verdict vocabulary in the webhook module');
+  // PR-EV-1 added evidence_verification.checked — still record-change
+  // events only, never verdicts.
   ok(JSON.stringify(WEBHOOK_EVENT_TYPES)
-    === JSON.stringify(['exception.expired', 'reviewer_resolution.recorded', 'remediation_evidence.recorded']),
-    'v0 event types are exactly the three record-change events');
+    === JSON.stringify(['exception.expired', 'reviewer_resolution.recorded', 'remediation_evidence.recorded', 'evidence_verification.checked']),
+    'event types are exactly the four record-change events');
 });
 
 test('webhook signature is present and independently verifiable (PR-17C)', () => {

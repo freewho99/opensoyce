@@ -20,6 +20,8 @@ import {
   resolveExpiredException,
   listRemediationEvidence,
   recordRemediationEvidence,
+  listVerificationChecks,
+  runVerificationCheck,
   isOk,
   type VaultException,
   type VaultWorkspaceDetail,
@@ -28,6 +30,8 @@ import {
   type ResolutionOutcome,
   type RemediationEvidence,
   type RemediationEvidenceType,
+  type EvidenceVerificationCheck,
+  type VerificationCheckKind,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
 
@@ -109,6 +113,44 @@ export default function VaultExceptionDetail() {
   const [evidenceReasonPrivate, setEvidenceReasonPrivate] = React.useState('');
   const [evidencePending, setEvidencePending] = React.useState(false);
   const [evidenceError, setEvidenceError] = React.useState('');
+
+  // PR-EV-1 citation checks: append-only system observations about cited
+  // references at check time. A passing check confirms the citation, not
+  // the remediation; inconclusive is an honest answer.
+  const [checksByEvidence, setChecksByEvidence] = React.useState<Record<string, EvidenceVerificationCheck[]>>({});
+  const [checkKindByEvidence, setCheckKindByEvidence] = React.useState<Record<string, VerificationCheckKind>>({});
+  const [checkPending, setCheckPending] = React.useState(false);
+  const [checkError, setCheckError] = React.useState('');
+
+  React.useEffect(() => {
+    if (!slug || evidenceRows.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const results: Awaited<ReturnType<typeof listVerificationChecks>>[] = await Promise.all(
+        evidenceRows.map((ev) => listVerificationChecks(slug, ev.evidence_id)),
+      );
+      if (cancelled) return;
+      const next: Record<string, EvidenceVerificationCheck[]> = {};
+      results.forEach((res, i) => {
+        if (isOk(res)) next[evidenceRows[i].evidence_id] = res.data.checks;
+      });
+      setChecksByEvidence(next);
+    })();
+    return () => { cancelled = true; };
+  }, [slug, evidenceRows]);
+
+  async function handleRunCheck(evidenceId: string) {
+    const kind = checkKindByEvidence[evidenceId] || 'internal_exposure_reference';
+    setCheckError('');
+    setCheckPending(true);
+    const res = await runVerificationCheck(slug, evidenceId, kind);
+    setCheckPending(false);
+    if (!isOk(res)) { setCheckError(res.message); return; }
+    setChecksByEvidence((prev) => ({
+      ...prev,
+      [evidenceId]: [res.data, ...(prev[evidenceId] || [])],
+    }));
+  }
 
   React.useEffect(() => {
     let cancelled = false;
@@ -502,6 +544,55 @@ export default function VaultExceptionDetail() {
                   <p className="text-slate-300">ref: <span className="text-slate-100">{ev.evidence_ref}</span></p>
                   <p className="text-slate-300">{ev.reason_public}</p>
                   {ev.reason_private && <p className="text-slate-500">[private] {ev.reason_private}</p>}
+
+                  {/* PR-EV-1: Citation checks. A check confirms the cited
+                      reference was reachable and matched the expected
+                      shape at check time — it never asserts remediation.
+                      Inconclusive is an honest answer. */}
+                  <div className="mt-2 border-t border-slate-800 pt-2">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Citation checks</p>
+                    {(checksByEvidence[ev.evidence_id] || []).length > 0 ? (
+                      <ul className="space-y-1 mb-2">
+                        {(checksByEvidence[ev.evidence_id] || []).slice(0, 3).map((c) => (
+                          <li key={c.check_id} className="text-slate-400">
+                            <span className={
+                              c.check_status === 'check_passed' ? 'text-emerald-300'
+                                : c.check_status === 'check_failed' ? 'text-red-300' : 'text-amber-300'
+                            }>
+                              {c.check_status.replace(/_/g, ' ')}
+                            </span>
+                            <span className="text-slate-500 ml-2">{c.check_kind.replace(/_/g, ' ')} · {c.checked_at.slice(0, 19).replace('T', ' ')}</span>
+                            <span className="block text-slate-400">{c.summary_public}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-slate-500 mb-2">No citation checks run yet — checks are optional observations.</p>
+                    )}
+                    {checkError && <p className="mb-1 text-red-300" role="alert">{checkError}</p>}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={checkKindByEvidence[ev.evidence_id] || 'internal_exposure_reference'}
+                        onChange={(e) => setCheckKindByEvidence((prev) => ({ ...prev, [ev.evidence_id]: e.target.value as VerificationCheckKind }))}
+                        className="bg-slate-900 border border-slate-700 px-2 py-0.5 font-mono text-[10px] text-slate-100"
+                      >
+                        <option value="internal_exposure_reference">internal exposure reference</option>
+                        <option value="github_reference_reachable">github reference reachable</option>
+                        <option value="source_rescan_no_longer_matches">source rescan no longer matches</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleRunCheck(ev.evidence_id)}
+                        disabled={checkPending}
+                        className="px-2 py-0.5 text-[10px] font-mono border border-slate-600 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {checkPending ? 'checking…' : 'Run citation check'}
+                      </button>
+                      <span className="text-[10px] text-slate-500">
+                        A passing check confirms the citation, not the remediation.
+                      </span>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>

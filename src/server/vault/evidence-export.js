@@ -49,6 +49,7 @@ export const BUNDLE_DOES_NOT_PROVE = Object.freeze([
   'This export is not a compliance certification, and OpenSoyce does not certify controls.',
   'It does not prove a vulnerability was remediated — a recorded direction is not a completed action.',
   'Remediation evidence, where present, is human-cited: OpenSoyce validates that evidence is present and referenced; it does not verify the fix.',
+  'A passing citation check does not certify remediation or prove absence of vulnerabilities.',
   'It does not prove the absence of vulnerabilities — "no intelligence recorded" means the record holds none, not that none exist.',
   'It does not replace an auditor or guarantee acceptance by any customer security review.',
 ]);
@@ -97,7 +98,7 @@ export function buildEvidenceBundle(records) {
   const {
     workspace, exposure, intel = [], questions = [], ceiEvents = [],
     exceptions = [], resolutions = [], remediationEvidence = [],
-    timelineEvents = [], generatedAt,
+    verificationChecks = [], timelineEvents = [], generatedAt,
   } = records;
 
   const observedVersion = exposure.metadata && typeof exposure.metadata.version === 'string'
@@ -286,6 +287,27 @@ export function buildEvidenceBundle(records) {
           created_at: ev.created_at,
         })),
       },
+      citation_checks: {
+        present: verificationChecks.length > 0,
+        // PR-EV-1 distinction, stated in the data: the reviewer DIRECTED,
+        // a human CITED, and the system CHECKED the citation — three
+        // records, none of them a verdict.
+        note: verificationChecks.length > 0
+          ? 'Citation checks are system observations about cited references at check time. A passing citation check does not certify remediation or prove absence of vulnerabilities.'
+          : (remediationEvidence.length > 0
+            ? 'No citation checks have been run on this chain’s evidence. Checks are optional observations; their absence is reported, not hidden.'
+            : 'No remediation evidence exists on this chain; there are no citations to check.'),
+        checks: verificationChecks.map((c) => ({
+          check_id: c.check_id,
+          evidence_id: c.evidence_id,
+          check_kind: c.check_kind,
+          check_status: c.check_status,
+          checked_by: shapeUser(c.checked_by),
+          checked_at: c.checked_at,
+          summary_public: c.summary_public,
+          status_reason: c.status_reason || null,
+        })),
+      },
       receipts: {
         present: ceiEvents.length > 0 || timelineEvents.length > 0,
         cei_events: ceiEvents.map((ev) => ({
@@ -310,6 +332,7 @@ export function buildEvidenceBundle(records) {
           exception_ids: exceptions.map((ex) => ex.exception_id),
           resolution_ids: resolutions.map((r) => r.resolution_id),
           remediation_evidence_ids: remediationEvidence.map((ev) => ev.evidence_id),
+          verification_check_ids: verificationChecks.map((c) => c.check_id),
         },
       },
     },
@@ -498,9 +521,29 @@ export function renderEvidenceBundleMarkdown(bundle) {
   }
   lines.push('');
 
-  // 9. Receipt trail
+  // 9. Citation checks (PR-EV-1). After the evidence, before the
+  // receipts: the reviewer DIRECTED (7), a human CITED (8), the system
+  // CHECKED the citation (9) — three records, none a verdict.
+  const cc = s.citation_checks;
+  lines.push('## 9. Citation checks');
+  lines.push('');
+  lines.push(cc.note);
+  lines.push('');
+  if (cc.present) {
+    for (const c of cc.checks) {
+      lines.push(`- Check \`${c.check_id}\` on evidence \`${c.evidence_id}\` — kind: \`${c.check_kind}\` · status: \`${c.check_status}\``);
+      lines.push(`  - checked by ${c.checked_by ? userLabel(c.checked_by) : 'system'} at ${c.checked_at}`);
+      lines.push(`  - ${c.summary_public}`);
+      if (c.status_reason) lines.push(`  - reason: ${c.status_reason}`);
+    }
+    lines.push('');
+    lines.push('A passing citation check does not certify remediation or prove absence of vulnerabilities.');
+  }
+  lines.push('');
+
+  // 10. Receipt trail
   const rc = s.receipts;
-  lines.push('## 9. Receipt trail');
+  lines.push('## 10. Receipt trail');
   lines.push('');
   if (!rc.present) {
     lines.push(`Receipt events: ${NOT_PRESENT}.`);
@@ -530,10 +573,11 @@ export function renderEvidenceBundleMarkdown(bundle) {
   lines.push(`- exceptions: ${rc.record_ids.exception_ids.length ? rc.record_ids.exception_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
   lines.push(`- resolutions: ${rc.record_ids.resolution_ids.length ? rc.record_ids.resolution_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
   lines.push(`- remediation evidence: ${rc.record_ids.remediation_evidence_ids.length ? rc.record_ids.remediation_evidence_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
+  lines.push(`- citation checks: ${rc.record_ids.verification_check_ids.length ? rc.record_ids.verification_check_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
   lines.push('');
 
-  // 10. Honest edges
-  lines.push('## 10. Honest edges');
+  // 11. Honest edges
+  lines.push('## 11. Honest edges');
   lines.push('');
   lines.push('What this export proves:');
   lines.push('');
@@ -694,6 +738,22 @@ export async function loadEvidenceBundleForExposure(supabase, workspace, slug, e
     evidenceRowsRaw = Array.isArray(data) ? data : [];
   }
 
+  // PR-EV-1: citation checks recorded against that evidence.
+  let checkRowsRaw = [];
+  if (evidenceRowsRaw.length > 0) {
+    const { data, error } = await supabase
+      .from('evidence_verification_checks')
+      .select('*, checked_by_user:checked_by(user_id, github_login, display_name)')
+      .eq('workspace_id', workspace.workspace_id)
+      .in('evidence_id', evidenceRowsRaw.map((ev) => ev.evidence_id))
+      .order('checked_at', { ascending: true })
+      .limit(MAX_ROWS);
+    if (error) {
+      return { error: 'evidence export: citation check read failed' };
+    }
+    checkRowsRaw = Array.isArray(data) ? data : [];
+  }
+
   // The Phase 5 timeline receipts for those exceptions.
   let timelineRowsRaw = [];
   if (exceptionIds.length > 0) {
@@ -800,6 +860,16 @@ export async function loadEvidenceBundleForExposure(supabase, workspace, slug, e
       related_question_id: ev.related_question_id || null,
       source_vuln_intel_id: ev.source_vuln_intel_id || null,
       created_at: ev.created_at,
+    })),
+    verificationChecks: checkRowsRaw.map((c) => ({
+      check_id: c.check_id,
+      evidence_id: c.evidence_id,
+      check_kind: c.check_kind,
+      check_status: c.check_status,
+      checked_by: c.checked_by_user || null,
+      checked_at: c.checked_at,
+      summary_public: c.summary_public,
+      status_reason: c.status_reason || null,
     })),
     timelineEvents: timelineRowsRaw.map((ev) => ({
       event_id: ev.event_id,

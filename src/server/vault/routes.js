@@ -47,6 +47,7 @@ import { registerEvidenceExportRoutes } from './evidence-export-routes.js';
 import { registerRemediationEvidenceRoutes } from './remediation-evidence-routes.js';
 import { registerEvidenceRollupRoutes } from './evidence-rollup-routes.js';
 import { registerTrustRecordRoutes } from './trust-record-routes.js';
+import { registerEvidenceVerificationRoutes } from './evidence-verification-routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -233,4 +234,11 @@ export function registerVaultRoutes(app) {
   // routes stay session-only. Make the record portable, not more
   // opinionated. No public surface.
   registerTrustRecordRoutes(app);
+
+  // ---------- Evidence citation verification (PR-EV-1) ----------
+  // Checks citations; never certifies truth. A passing check means the
+  // cited reference was reachable and matched the expected shape at
+  // check time. Inconclusive is an honest answer. Same session + CSRF
+  // middleware, same 404-on-non-member doctrine.
+  registerEvidenceVerificationRoutes(app);
 }

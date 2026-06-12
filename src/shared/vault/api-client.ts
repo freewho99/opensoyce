@@ -404,6 +404,54 @@ export async function recordRemediationEvidence(slug: string, exceptionId: strin
   });
 }
 
+// PR-EV-1: evidence citation verification. A check is a system
+// observation about a cited reference at check time — check_passed means
+// the citation was reachable and matched the expected shape, never that
+// anything was remediated. Inconclusive is an honest answer.
+export type VerificationCheckKind =
+  | 'internal_exposure_reference'
+  | 'github_reference_reachable'
+  | 'source_rescan_no_longer_matches';
+
+export type VerificationCheckStatus =
+  | 'check_passed'
+  | 'check_failed'
+  | 'check_inconclusive';
+
+export interface EvidenceVerificationCheck {
+  check_id: string;
+  workspace_id: string;
+  evidence_id: string;
+  exception_id: string | null;
+  source_exposure_id: string | null;
+  related_resolution_id: string | null;
+  evidence_type: string;
+  evidence_ref: string;
+  check_kind: VerificationCheckKind;
+  check_status: VerificationCheckStatus;
+  checked_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  checked_at: string;
+  summary_public: string;
+  status_reason: string | null;
+  detail: Record<string, unknown>;
+  non_claim: string;
+  visibility: 'private';
+}
+
+export async function listVerificationChecks(slug: string, evidenceId: string) {
+  return vaultRequest<{ checks: EvidenceVerificationCheck[]; non_claim: string; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/remediation-evidence/${encodeURIComponent(evidenceId)}/verification-checks`,
+  });
+}
+
+export async function runVerificationCheck(slug: string, evidenceId: string, checkKind: VerificationCheckKind) {
+  return vaultRequest<EvidenceVerificationCheck>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/remediation-evidence/${encodeURIComponent(evidenceId)}/verification-checks`,
+    method: 'POST',
+    body: { check_kind: checkKind },
+  });
+}
+
 // ---------- timeline ----------
 
 export async function listTimeline(slug: string, query?: { limit?: number; cursor?: string }) {

@@ -78,7 +78,13 @@ Doctrine on the record: *the scanner observes; intelligence adds context; the sy
 - No verdict vocabulary anywhere: the system validates that evidence is *present and referenced*; it does not verify the fix and never declares anything fixed. The claim, exactly: not "we fixed the vuln" — "we recorded evidence that the human says closes the remediation loop"
 - The evidence export reproduces remediation evidence in its own section, after the reviewer direction, with the distinction stated in the document itself
 
-**Honest gaps:** recorded evidence is human-cited — OpenSoyce does not verify that the cited PR merged, the version shipped, or the re-scan was run (evidence verification is future work, deliberately). `due_at` is recorded context with no overdue pressure (lane 16). OpenSoyce opens and records remediation questions and human-cited remediation evidence for observed component risk; it does not remediate vulnerabilities, fix dependencies automatically, or close vulnerabilities.
+**Evidence (citation checks shipped by PR-EV-1, scoped to what shipped):**
+
+- `evidence_verification_checks` — append-only system observations about cited references at check time: did the cited internal exposure exist (same component, different/later version, shape not safety)? was the cited GitHub PR/commit reachable (`pr_merged_observed` labeled exactly as observed)? did the named source still return the named advisory for the cited fixed version (source vocabulary + timestamp)?
+- Three statuses only: `check_passed` / `check_failed` / **`check_inconclusive` — an honest first-class answer**. Re-running appends; evidence rows are never mutated
+- The export now separates four records: the reviewer **direction**, the human-cited **evidence**, the system's **citation check**, and the receipts — none of them a verdict
+
+**Honest gaps:** a passing citation check does not certify remediation or prove absence of vulnerabilities — it confirms the citation was reachable and matched the expected shape at check time. `due_at` is recorded context with no overdue pressure (lane 16). OpenSoyce opens and records remediation questions, human-cited remediation evidence, and citation checks for observed component risk; it does not remediate vulnerabilities, fix dependencies automatically, or close vulnerabilities.
 
 ## Q4 — "How do you know risk acceptance was reviewed, and by whom?"
 

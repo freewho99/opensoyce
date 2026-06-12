@@ -235,8 +235,9 @@ test('full chain: bundle separates the 9 sections and the markdown renders them 
     '## 6. Expiry pressure',
     '## 7. Reviewer resolution',
     '## 8. Remediation evidence',
-    '## 9. Receipt trail',
-    '## 10. Honest edges',
+    '## 9. Citation checks',
+    '## 10. Receipt trail',
+    '## 11. Honest edges',
   ];
   let last = -1;
   for (const h of headings) {
@@ -244,9 +245,62 @@ test('full chain: bundle separates the 9 sections and the markdown renders them 
     ok(idx > last, `markdown must contain "${h}" after the previous section`);
     last = idx;
   }
-  for (const key of ['observation', 'vulnerability_context', 'remediation_questions', 'exceptions', 'expiry_pressure', 'resolutions', 'remediation_evidence', 'receipts']) {
+  for (const key of ['observation', 'vulnerability_context', 'remediation_questions', 'exceptions', 'expiry_pressure', 'resolutions', 'remediation_evidence', 'citation_checks', 'receipts']) {
     ok(bundle.sections[key], `bundle must carry the ${key} section`);
   }
+});
+
+test('citation checks render after evidence, never as a verdict (PR-EV-1)', () => {
+  const records = fullChain();
+  records.resolutions = [{
+    resolution_id: 'f1000000-0000-0000-0000-00000000000a',
+    exception_id: records.exceptions[0].exception_id,
+    outcome: 'remediation_required',
+    resolved_by: { user_id: 'u2', github_login: 'rev', display_name: null },
+    reason_public: 'fix it',
+    renewed_exception_id: null,
+    linked_question_id: null,
+    created_at: '2026-06-09T00:00:00.000Z',
+  }];
+  records.remediationEvidence = [{
+    evidence_id: 'aa000000-0000-0000-0000-00000000000a',
+    exception_id: records.exceptions[0].exception_id,
+    evidence_type: 'fixed_version_observed',
+    evidence_ref: 'pkg@2.0.0 observed',
+    recorded_by: { user_id: 'u3', github_login: 'closer', display_name: null },
+    reason_public: 'done',
+    related_resolution_id: 'f1000000-0000-0000-0000-00000000000a',
+    related_question_id: null,
+    source_vuln_intel_id: null,
+    created_at: '2026-06-10T00:00:00.000Z',
+  }];
+  records.verificationChecks = [{
+    check_id: 'cc000000-0000-0000-0000-00000000000c',
+    evidence_id: 'aa000000-0000-0000-0000-00000000000a',
+    check_kind: 'internal_exposure_reference',
+    check_status: 'check_passed',
+    checked_by: { user_id: 'u3', github_login: 'closer', display_name: null },
+    checked_at: '2026-06-12T00:00:00.000Z',
+    summary_public: 'internal_record_linked: the cited exposure exists in this workspace.',
+    status_reason: null,
+  }];
+  const bundle = buildEvidenceBundle(records);
+  ok(bundle.sections.citation_checks.present === true, 'checks section present');
+  ok(bundle.sections.receipts.record_ids.verification_check_ids.length === 1, 'check id in the receipt trail');
+  const md = renderEvidenceBundleMarkdown(bundle);
+  ok(md.indexOf('## 8. Remediation evidence') < md.indexOf('## 9. Citation checks'),
+    'checks follow the evidence');
+  ok(md.indexOf('## 9. Citation checks') < md.indexOf('## 10. Receipt trail'),
+    'checks precede the receipt trail');
+  ok(md.includes('cc000000-0000-0000-0000-00000000000c'), 'check id verbatim');
+  ok(md.includes('`check_passed`'), 'check vocabulary in the document');
+  ok(/A passing citation check does not certify remediation or prove absence of vulnerabilities\./.test(md),
+    'the EV-1 non-claim must render');
+  // A chain WITHOUT checks still works and says so honestly.
+  const bare = buildEvidenceBundle({ ...records, verificationChecks: [] });
+  ok(bare.sections.citation_checks.present === false, 'no checks -> not present');
+  const bareMd = renderEvidenceBundleMarkdown(bare);
+  ok(/No citation checks have been run/.test(bareMd), 'absence of checks is reported, not hidden');
 });
 
 test('remediation case status pairs direction to evidence PER EXCEPTION, not chain-wide (PR-16C/17B)', () => {
