@@ -45,6 +45,7 @@ import { registerCeiRoutes } from '../cei/routes.js';
 import { registerResolutionRoutes } from './resolution-routes.js';
 import { registerEvidenceExportRoutes } from './evidence-export-routes.js';
 import { registerRemediationEvidenceRoutes } from './remediation-evidence-routes.js';
+import { registerEvidenceRollupRoutes } from './evidence-rollup-routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -217,4 +218,11 @@ export function registerVaultRoutes(app) {
   // no 'fixed' vocabulary anywhere. Same session + CSRF middleware, same
   // 404-on-non-member doctrine.
   registerRemediationEvidenceRoutes(app);
+
+  // ---------- Rollup evidence bundles (PR-17B) ----------
+  // Composition of existing per-chain bundles into one packet. A rollup
+  // composes existing truth; it does not create new truth. Read-only,
+  // same session middleware, same 404-on-non-member doctrine. No public
+  // surface.
+  registerEvidenceRollupRoutes(app);
 }

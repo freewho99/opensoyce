@@ -469,6 +469,68 @@ export async function getEvidenceExport(slug: string, exposureId: string) {
   });
 }
 
+// ---------- rollup evidence packet (PR-17B) ----------
+//
+// A rollup is composition, not certification: it composes existing
+// per-chain bundles into one packet and asserts nothing new. One helper,
+// one GET — generating a packet mutates nothing.
+
+export interface EvidencePacketStateRollup {
+  chains_included: number;
+  decision_bearing_chains: number;
+  observation_only_chains_selected: number;
+  evidence_recorded: number;
+  awaiting_evidence: number;
+  active_temporary_trust: number;
+  expired_exceptions_pending_review: number;
+  expired_exceptions_resolved: number;
+  chains_with_missing_sections: number;
+  observation_only_exposures: number;
+  exception_states_observed: string[];
+}
+
+export interface EvidencePacket {
+  format: 'opensoyce-evidence-packet';
+  version: number;
+  generated_at: string;
+  visibility: 'private';
+  workspace: { slug: string; display_name: string | null };
+  selection: {
+    mode: 'workspace' | 'selected-exposures' | 'source-ref';
+    label: string;
+    source_ref: string | null;
+    requested_exposure_ids: string[] | null;
+  };
+  packet_scope: string;
+  state_rollup: EvidencePacketStateRollup;
+  chains: Array<{ summary: Record<string, unknown>; bundle: EvidenceBundle }>;
+  observation_inventory: Array<Record<string, unknown>>;
+  soc2_question_map: { note: string; questions: Array<Record<string, unknown>> };
+  honest_edges: {
+    non_claims: string[];
+    per_chain_non_claims: string[];
+    chain_gaps: Array<{ exposure_id: string; subject: string; missing: string[] }>;
+    limitations: string[];
+    chains_not_included: Array<{ exposure_id: string; subject_kind: string; subject_name: string; observed_version: string | null }>;
+  };
+}
+
+export interface EvidencePacketResponse {
+  packet: EvidencePacket;
+  markdown: string;
+  visibility: 'private';
+}
+
+export async function getEvidencePacket(slug: string, opts?: { exposureIds?: string[]; sourceRef?: string }) {
+  const params = new URLSearchParams();
+  if (opts?.exposureIds && opts.exposureIds.length > 0) params.set('exposure_ids', opts.exposureIds.join(','));
+  if (opts?.sourceRef) params.set('source_ref', opts.sourceRef);
+  const qs = params.toString();
+  return vaultRequest<EvidencePacketResponse>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/evidence-packet${qs ? `?${qs}` : ''}`,
+  });
+}
+
 // ---------- CLI device-code approval ----------
 
 export async function approveCliCode(userCode: string) {
