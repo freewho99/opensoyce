@@ -30,6 +30,12 @@ export const WEBHOOK_EVENT_TYPES = Object.freeze([
   // vocabulary (check_passed / check_failed / check_inconclusive) —
   // never a verdict about remediation.
   'evidence_verification.checked',
+  // PR-18A: Trust Agent draft lifecycle. A draft is a suggestion record;
+  // approval/rejection is a separate human action. None of these events
+  // is a trust decision.
+  'agent_draft.created',
+  'agent_draft.approved',
+  'agent_draft.rejected',
 ]);
 
 export const WEBHOOK_SIGNATURE_HEADER = 'X-OpenSoyce-Webhook-Signature';
@@ -120,6 +126,15 @@ export function buildWebhookPayload(event) {
     payload.verification_check = {
       check_kind: event.verificationCheck.check_kind,
       check_status: event.verificationCheck.check_status,
+    };
+  }
+  // PR-18A: a Trust Agent draft. Distinct from everything above — a
+  // draft is a suggestion derived from records; the status says whether
+  // a human has decided on the DRAFT, never on the trust.
+  if (event.agentDraft !== undefined) {
+    payload.agent_draft = {
+      draft_kind: event.agentDraft.draft_kind,
+      draft_status: event.agentDraft.draft_status,
     };
   }
   return payload;

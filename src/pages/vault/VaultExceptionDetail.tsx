@@ -22,6 +22,10 @@ import {
   recordRemediationEvidence,
   listVerificationChecks,
   runVerificationCheck,
+  createAgentDraft,
+  listAgentDrafts,
+  approveAgentDraft,
+  rejectAgentDraft,
   isOk,
   type VaultException,
   type VaultWorkspaceDetail,
@@ -32,6 +36,8 @@ import {
   type RemediationEvidenceType,
   type EvidenceVerificationCheck,
   type VerificationCheckKind,
+  type AgentDraft,
+  type AgentDraftKind,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
 
@@ -121,6 +127,57 @@ export default function VaultExceptionDetail() {
   const [checkKindByEvidence, setCheckKindByEvidence] = React.useState<Record<string, VerificationCheckKind>>({});
   const [checkPending, setCheckPending] = React.useState(false);
   const [checkError, setCheckError] = React.useState('');
+
+  // PR-18A Trust Agent drafts. The agent drafts; the human decides.
+  // Approving a draft never creates evidence — "Use draft to record
+  // evidence" only PREFILLS the existing evidence form; the human still
+  // records it through that lane.
+  const [agentDrafts, setAgentDrafts] = React.useState<AgentDraft[]>([]);
+  const [draftKind, setDraftKind] = React.useState<AgentDraftKind>('trust_record_summary');
+  const [draftPending, setDraftPending] = React.useState(false);
+  const [draftError, setDraftError] = React.useState('');
+  const [expandedDraft, setExpandedDraft] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!slug || !id) return;
+    let cancelled = false;
+    (async () => {
+      const res = await listAgentDrafts(slug, { exceptionId: id });
+      if (cancelled) return;
+      if (isOk(res)) setAgentDrafts(res.data.drafts);
+    })();
+    return () => { cancelled = true; };
+  }, [slug, id]);
+
+  async function handleCreateDraft() {
+    setDraftError('');
+    setDraftPending(true);
+    const res = await createAgentDraft(slug, { draft_kind: draftKind, exception_id: id });
+    setDraftPending(false);
+    if (!isOk(res)) { setDraftError(res.message); return; }
+    setAgentDrafts((prev) => [res.data, ...prev]);
+    setExpandedDraft(res.data.draft_id);
+  }
+
+  async function handleDecideDraft(draftId: string, decision: 'approve' | 'reject') {
+    setDraftError('');
+    setDraftPending(true);
+    const res = decision === 'approve'
+      ? await approveAgentDraft(slug, draftId)
+      : await rejectAgentDraft(slug, draftId);
+    setDraftPending(false);
+    if (!isOk(res)) { setDraftError(res.message); return; }
+    setAgentDrafts((prev) => prev.map((d) => (d.draft_id === draftId ? res.data : d)));
+  }
+
+  function handleUseDraftForEvidence(draft: AgentDraft) {
+    // PREFILL ONLY: the human reviews and records through the existing
+    // 16C evidence form. Nothing is recorded by this click.
+    const f = draft.suggested_fields as { evidence_type?: string; evidence_ref?: string; reason_public_draft?: string };
+    if (f.evidence_type) setEvidenceType(f.evidence_type as RemediationEvidenceType);
+    if (f.evidence_ref) setEvidenceRef(f.evidence_ref);
+    if (f.reason_public_draft) setEvidenceReason(f.reason_public_draft);
+  }
 
   React.useEffect(() => {
     if (!slug || evidenceRows.length === 0) return;
@@ -677,6 +734,112 @@ export default function VaultExceptionDetail() {
           </div>
         </section>
       )}
+
+      {/* PR-18A: Trust Agent. The agent drafts; the human decides. A
+          draft is a suggestion record — approving it is a human action on
+          the DRAFT, never on the trust; recording evidence still happens
+          through the existing evidence form, by a human. */}
+      <section className="mb-8 border border-slate-700 bg-slate-800/40 p-4">
+        <h2 className="text-sm font-mono font-bold mb-2 uppercase tracking-wider text-slate-300">
+          Trust Agent
+        </h2>
+        <p className="text-xs font-mono text-slate-400 mb-3">
+          [PRIVATE] The agent drafts summaries and candidate-evidence
+          suggestions from existing records. Human review required — a
+          draft is not a trust decision, not evidence, and not
+          certification.
+        </p>
+        {draftError && <p className="mb-2 text-xs font-mono text-red-300" role="alert">{draftError}</p>}
+
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <select
+            value={draftKind}
+            onChange={(e) => setDraftKind(e.target.value as AgentDraftKind)}
+            className="bg-slate-900 border border-slate-700 px-2 py-1 font-mono text-xs text-slate-100"
+          >
+            <option value="trust_record_summary">trust record summary</option>
+            <option value="missing_evidence_gap_summary">missing evidence gap summary</option>
+            <option value="remediation_evidence_suggestion">remediation evidence suggestion</option>
+            <option value="evidence_packet_summary">evidence packet summary</option>
+          </select>
+          <button
+            type="button"
+            onClick={handleCreateDraft}
+            disabled={draftPending}
+            className="px-3 py-1 text-xs font-mono border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {draftPending ? 'drafting…' : 'Draft with Trust Agent'}
+          </button>
+        </div>
+
+        {agentDrafts.length > 0 && (
+          <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono">
+            {agentDrafts.map((d) => (
+              <li key={d.draft_id} className="px-3 py-2 space-y-1">
+                <p className="flex flex-wrap items-baseline gap-x-2">
+                  <span className={
+                    d.draft_status === 'approved' ? 'text-emerald-300'
+                      : d.draft_status === 'rejected' ? 'text-red-300' : 'text-amber-300'
+                  }>
+                    [{d.draft_status}]
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDraft(expandedDraft === d.draft_id ? null : d.draft_id)}
+                    className="text-slate-100 underline hover:text-white text-left"
+                  >
+                    {d.draft_title}
+                  </button>
+                  <span className="text-slate-500">
+                    agent draft · requested by {d.requested_by ? `@${d.requested_by.github_login}` : '—'} · {d.created_at.slice(0, 16).replace('T', ' ')}
+                  </span>
+                </p>
+                {expandedDraft === d.draft_id && (
+                  <div className="space-y-2">
+                    <pre className="text-slate-300 whitespace-pre-wrap border border-slate-800 p-2 max-h-64 overflow-y-auto">{d.draft_body}</pre>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {d.draft_status === 'drafted' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleDecideDraft(d.draft_id, 'approve')}
+                            disabled={draftPending}
+                            className="px-2 py-0.5 text-[10px] font-mono border border-emerald-700 text-emerald-200 hover:bg-emerald-900/30 disabled:opacity-50"
+                          >
+                            Approve draft
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDecideDraft(d.draft_id, 'reject')}
+                            disabled={draftPending}
+                            className="px-2 py-0.5 text-[10px] font-mono border border-red-800 text-red-300 hover:bg-red-900/20 disabled:opacity-50"
+                          >
+                            Reject draft
+                          </button>
+                        </>
+                      )}
+                      {d.draft_kind === 'remediation_evidence_suggestion'
+                        && (d.suggested_fields as { evidence_ref?: string }).evidence_ref
+                        && hasRemediationDirection && (
+                        <button
+                          type="button"
+                          onClick={() => handleUseDraftForEvidence(d)}
+                          className="px-2 py-0.5 text-[10px] font-mono border border-slate-600 text-slate-300 hover:bg-slate-800"
+                        >
+                          Use draft to record evidence (prefills the form — you still record it)
+                        </button>
+                      )}
+                      <span className="text-[10px] text-slate-500">Human review required.</span>
+                    </div>
+                    {d.approved_by && <p className="text-slate-500">approved by @{d.approved_by.github_login} at {d.approved_at}</p>}
+                    {d.rejected_by && <p className="text-slate-500">rejected by @{d.rejected_by.github_login} at {d.rejected_at}</p>}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mb-8 text-sm">
         <div>

@@ -452,6 +452,86 @@ export async function runVerificationCheck(slug: string, evidenceId: string, che
   });
 }
 
+// PR-18A: Trust Agent drafts. The agent drafts; the human decides.
+// A draft is a suggestion record derived from existing records — it is
+// not evidence, not a decision, and never becomes either without a
+// separate human action through the existing lanes.
+export type AgentDraftKind =
+  | 'remediation_evidence_suggestion'
+  | 'trust_record_summary'
+  | 'evidence_packet_summary'
+  | 'missing_evidence_gap_summary'
+  | 'citation_check_summary';
+
+export type AgentDraftStatus = 'drafted' | 'approved' | 'rejected' | 'superseded';
+
+export interface AgentDraft {
+  draft_id: string;
+  workspace_id: string;
+  source_exposure_id: string | null;
+  exception_id: string | null;
+  related_resolution_id: string | null;
+  related_evidence_id: string | null;
+  related_check_id: string | null;
+  draft_kind: AgentDraftKind;
+  draft_status: AgentDraftStatus;
+  generated_by_kind: 'agent';
+  requested_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  approved_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  rejected_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  created_at: string;
+  approved_at: string | null;
+  rejected_at: string | null;
+  draft_title: string;
+  draft_body: string;
+  suggested_fields: Record<string, unknown>;
+  source_record_ids: Record<string, unknown>;
+  non_claim: string;
+  model_metadata: Record<string, unknown>;
+  visibility: 'private';
+}
+
+export interface CreateAgentDraftBody {
+  draft_kind: AgentDraftKind;
+  exposure_id?: string;
+  exception_id?: string;
+  evidence_id?: string;
+}
+
+export async function createAgentDraft(slug: string, body: CreateAgentDraftBody) {
+  return vaultRequest<AgentDraft>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/agent-drafts`,
+    method: 'POST',
+    body,
+  });
+}
+
+export async function listAgentDrafts(slug: string, query?: { status?: AgentDraftStatus; exceptionId?: string }) {
+  const params = new URLSearchParams();
+  if (query?.status) params.set('status', query.status);
+  if (query?.exceptionId) params.set('exception_id', query.exceptionId);
+  const qs = params.toString();
+  return vaultRequest<{ drafts: AgentDraft[]; non_claim: string; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/agent-drafts${qs ? `?${qs}` : ''}`,
+  });
+}
+
+export async function approveAgentDraft(slug: string, draftId: string) {
+  return vaultRequest<AgentDraft>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/agent-drafts/${encodeURIComponent(draftId)}/approve`,
+    method: 'POST',
+    body: {},
+  });
+}
+
+export async function rejectAgentDraft(slug: string, draftId: string) {
+  return vaultRequest<AgentDraft>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/agent-drafts/${encodeURIComponent(draftId)}/reject`,
+    method: 'POST',
+    body: {},
+  });
+}
+
 // ---------- timeline ----------
 
 export async function listTimeline(slug: string, query?: { limit?: number; cursor?: string }) {
