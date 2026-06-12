@@ -1,0 +1,16 @@
+1. capture endpoint created (one-time, user-authorized): webhook.site/<uuid redacted in artifact>
+2. subscription: 201 id=deabb7e0-e126-4e6c-8f8f-127df30a1a85 events=["remediation_evidence.recorded"] secret_shown_once=true (held in-memory only) header=X-OpenSoyce-Webhook-Signature
+3. trigger evidence: 201 evidence_id=a74873ec-7af8-4ec8-b054-7a8ef63e1a8d type=fixed_version_observed
+4. deliveries captured: 1 (constraint: exactly one)
+   method=POST sig_present=true event_header=remediation_evidence.recorded id_header_present=true
+5. subscription disabled immediately: 200 disabled_at=true
+6. HMAC verification (local crypto): SIGNATURE VALID
+7. payload: event_type=remediation_evidence.recorded state=evidence_recorded actor=@freewho99
+   remediation_evidence.evidence_type=fixed_version_observed cites resolution=c2d42dd3-9b8b-481e-b2c5-7592ec7a8253
+   reviewer_direction field absent on an evidence event: true
+   non_claim present: true
+   record_ids: {"exception_id":"888aae0f-eb07-4eec-a16a-a093294b8c76","evidence_id":"a74873ec-7af8-4ec8-b054-7a8ef63e1a8d","resolution_id":"c2d42dd3-9b8b-481e-b2c5-7592ec7a8253","exposure_id":"65d32e84-a27c-4855-a60b-c6b0be47f285"}
+   no reason text in payload: true
+   banned verdict values absent: true
+8. delivery log: 200 | ok=true status_code=200 event=remediation_evidence.recorded
+   b777fb25: active expires_at=2026-07-10T17:32:32.433+00:00 (untouched)

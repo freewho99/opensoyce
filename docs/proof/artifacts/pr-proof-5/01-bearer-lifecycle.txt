@@ -1,0 +1,9 @@
+1. mint: 201 token_name=proof5-ci-reader scope=read raw_shown_once=true (raw token held in-memory only)
+2. Bearer GET /trust-records: 200 | records=2 inventory=4 non_claims=6
+3. Bearer GET single chain: 200 | lodash@4.17.20 case=evidence_recorded
+   Bearer GET packet: 200 | states=["active","expired"]
+4. Bearer POST /resolve (write): 401 {"error":"auth-required","message":"log in to access /api/vault"} <- token not honored on writes
+   Bearer POST /api-tokens (write): 401 <- a token cannot mint tokens
+   Bearer GET other workspace: 404 <- indistinguishable 404
+   bogus Bearer: 401 <- fails closed (was 503 pre-0027)
+5. revoke: 200 revoked_at=true | Bearer after revoke: 401 <- immediate
