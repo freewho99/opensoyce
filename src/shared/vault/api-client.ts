@@ -347,6 +347,63 @@ export async function resolveExpiredException(slug: string, exceptionId: string,
   });
 }
 
+// PR-16C: the Fix Evidence Loop. A recorded direction is not completed
+// remediation — a human records cited evidence that they say closes the
+// remediation loop. Append-only; the case status is DERIVED (a
+// remediation_required direction opens it; evidence rows mark it
+// evidence_recorded). These helpers never declare anything fixed.
+export type RemediationEvidenceType =
+  | 'fixed_version_observed'
+  | 'pr_or_commit_reference'
+  | 'rescan_no_longer_matches'
+  | 'manual_remediation_note';
+
+export type RemediationCaseStatus =
+  | 'no_remediation_direction'
+  | 'awaiting_evidence'
+  | 'evidence_recorded';
+
+export interface RemediationEvidence {
+  evidence_id: string;
+  workspace_id: string;
+  exception_id: string;
+  source_exposure_id: string | null;
+  source_vuln_intel_id: string | null;
+  related_question_id: string | null;
+  related_resolution_id: string | null;
+  evidence_type: RemediationEvidenceType;
+  evidence_ref: string;
+  recorded_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  reason_public: string;
+  reason_private: string | null;
+  created_at: string;
+  visibility: 'private';
+}
+
+export async function listRemediationEvidence(slug: string, exceptionId: string) {
+  return vaultRequest<{ evidence: RemediationEvidence[]; case_status: RemediationCaseStatus; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exceptions/${encodeURIComponent(exceptionId)}/remediation-evidence`,
+  });
+}
+
+export interface RecordRemediationEvidenceBody {
+  evidence_type: RemediationEvidenceType;
+  evidence_ref: string;
+  reason_public: string;
+  reason_private?: string;
+  related_resolution_id?: string;
+  related_question_id?: string;
+  source_vuln_intel_id?: string;
+}
+
+export async function recordRemediationEvidence(slug: string, exceptionId: string, body: RecordRemediationEvidenceBody) {
+  return vaultRequest<RemediationEvidence>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/exceptions/${encodeURIComponent(exceptionId)}/remediation-evidence`,
+    method: 'POST',
+    body,
+  });
+}
+
 // ---------- timeline ----------
 
 export async function listTimeline(slug: string, query?: { limit?: number; cursor?: string }) {
@@ -394,6 +451,7 @@ export interface EvidenceBundle {
     exceptions: EvidenceBundleSection;
     expiry_pressure: EvidenceBundleSection;
     resolutions: EvidenceBundleSection;
+    remediation_evidence: EvidenceBundleSection;
     receipts: EvidenceBundleSection;
   };
   honest_edges: { proves: string[]; does_not_prove: string[]; missing: string[] };

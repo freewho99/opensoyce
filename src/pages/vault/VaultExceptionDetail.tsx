@@ -18,12 +18,16 @@ import {
   listExceptionSourceEvents,
   listExceptionResolutions,
   resolveExpiredException,
+  listRemediationEvidence,
+  recordRemediationEvidence,
   isOk,
   type VaultException,
   type VaultWorkspaceDetail,
   type ExceptionSourceEvent,
   type ExceptionResolution,
   type ResolutionOutcome,
+  type RemediationEvidence,
+  type RemediationEvidenceType,
 } from '../../shared/vault/api-client';
 import VaultAuthGate from '../../components/VaultAuthGate';
 
@@ -93,6 +97,19 @@ export default function VaultExceptionDetail() {
   const [resolutionPending, setResolutionPending] = React.useState(false);
   const [resolutionError, setResolutionError] = React.useState('');
 
+  // PR-16C Fix Evidence Loop: human-cited remediation evidence for a
+  // remediation_required direction. Append-only; recording evidence never
+  // changes the exception, the resolution, or the question — the system
+  // validates that evidence is present and cited; it does not verify the
+  // fix and never declares anything fixed.
+  const [evidenceRows, setEvidenceRows] = React.useState<RemediationEvidence[]>([]);
+  const [evidenceType, setEvidenceType] = React.useState<RemediationEvidenceType | ''>('');
+  const [evidenceRef, setEvidenceRef] = React.useState('');
+  const [evidenceReason, setEvidenceReason] = React.useState('');
+  const [evidenceReasonPrivate, setEvidenceReasonPrivate] = React.useState('');
+  const [evidencePending, setEvidencePending] = React.useState(false);
+  const [evidenceError, setEvidenceError] = React.useState('');
+
   React.useEffect(() => {
     let cancelled = false;
     if (!slug || !id) return;
@@ -127,6 +144,11 @@ export default function VaultExceptionDetail() {
       const resList = await listExceptionResolutions(slug, id);
       if (cancelled) return;
       if (isOk(resList)) setResolutions(resList.data.resolutions);
+      // PR-16C: the remediation evidence record is a separate, best-effort
+      // read. A failure here never blocks the review.
+      const evList = await listRemediationEvidence(slug, id);
+      if (cancelled) return;
+      if (isOk(evList)) setEvidenceRows(evList.data.evidence);
     })();
     return () => { cancelled = true; };
   }, [slug, id]);
@@ -157,6 +179,36 @@ export default function VaultExceptionDetail() {
     setResolutionReasonPrivate('');
     setRenewedExceptionId('');
     setLinkedQuestionId('');
+  }
+
+  async function handleRecordEvidence() {
+    if (!evidenceType) {
+      setEvidenceError('Select an evidence type.');
+      return;
+    }
+    if (!evidenceRef.trim()) {
+      setEvidenceError('An evidence reference is required — evidence without a reference is a claim, and a claim cannot close the loop.');
+      return;
+    }
+    if (!evidenceReason.trim()) {
+      setEvidenceError('A reason is required — say why this evidence closes the remediation loop.');
+      return;
+    }
+    setEvidenceError('');
+    setEvidencePending(true);
+    const res = await recordRemediationEvidence(slug, id, {
+      evidence_type: evidenceType,
+      evidence_ref: evidenceRef.trim(),
+      reason_public: evidenceReason.trim(),
+      reason_private: evidenceReasonPrivate || undefined,
+    });
+    setEvidencePending(false);
+    if (!isOk(res)) { setEvidenceError(res.message); return; }
+    setEvidenceRows((prev) => [res.data, ...prev]);
+    setEvidenceType('');
+    setEvidenceRef('');
+    setEvidenceReason('');
+    setEvidenceReasonPrivate('');
   }
 
   async function handleApprove() {
@@ -218,6 +270,10 @@ export default function VaultExceptionDetail() {
   // and reviewer are preserved below; the reviewer decides what happens
   // next (renewal/closeout is its own future lane).
   const isExpired = exception.state === 'expired';
+  // PR-16C: the remediation case is DERIVED, never stored — a
+  // remediation_required direction opens it; evidence rows mark it
+  // evidence recorded. Neither word is a verdict about the vulnerability.
+  const hasRemediationDirection = resolutions.some((r) => r.outcome === 'remediation_required');
   const isPastDue = isActive
     && !!exception.expires_at
     && new Date(exception.expires_at).getTime() < Date.now();
@@ -410,6 +466,124 @@ export default function VaultExceptionDetail() {
               Resolving expired trust requires the reviewer or owner role.
             </p>
           )}
+        </section>
+      )}
+
+      {/* PR-16C: the Fix Evidence Loop. Shown when a reviewer direction of
+          remediation_required exists. A recorded direction is not completed
+          remediation — a human records cited evidence that they say closes
+          the remediation loop. Append-only; nothing else changes; the
+          system validates that evidence is present and cited, it does not
+          verify the fix. Certification language is banned from this
+          surface — every label states what was recorded, never a system
+          verdict. */}
+      {hasRemediationDirection && (
+        <section className="mb-8 border border-slate-700 bg-slate-800/40 p-4">
+          <h2 className="text-sm font-mono font-bold mb-2 uppercase tracking-wider text-slate-300">
+            Remediation evidence
+          </h2>
+          <p className="text-xs font-mono text-slate-400 mb-3">
+            The reviewer directed <span className="text-slate-200">remediation required</span>.
+            A recorded direction is not completed remediation — close the loop
+            by citing evidence. OpenSoyce records the evidence a human says
+            closes the remediation loop; it does not verify the fix.
+          </p>
+
+          {evidenceRows.length > 0 ? (
+            <ul className="border border-slate-800 divide-y divide-slate-800 text-xs font-mono mb-4">
+              {evidenceRows.map((ev) => (
+                <li key={ev.evidence_id} className="px-3 py-2 space-y-1">
+                  <p>
+                    <span className="text-emerald-200">{ev.evidence_type.replace(/_/g, ' ')}</span>
+                    <span className="text-slate-500 ml-2">
+                      recorded by {ev.recorded_by ? `@${ev.recorded_by.github_login}` : '—'} · {ev.created_at.slice(0, 19).replace('T', ' ')}
+                    </span>
+                  </p>
+                  <p className="text-slate-300">ref: <span className="text-slate-100">{ev.evidence_ref}</span></p>
+                  <p className="text-slate-300">{ev.reason_public}</p>
+                  {ev.reason_private && <p className="text-slate-500">[private] {ev.reason_private}</p>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs font-mono text-amber-200/80 mb-4">
+              Awaiting evidence — the direction is recorded; no remediation
+              evidence has been cited yet.
+            </p>
+          )}
+
+          <div className="space-y-3">
+            {evidenceError && (
+              <p className="text-xs font-mono text-red-300" role="alert">{evidenceError}</p>
+            )}
+            <fieldset>
+              <legend className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+                evidence type (append-only; the record keeps every entry)
+              </legend>
+              <div className="space-y-1">
+                {([
+                  ['fixed_version_observed', 'A newer version was observed in the record — cite the observation.'],
+                  ['pr_or_commit_reference', 'Cite the PR or commit that remediated.'],
+                  ['rescan_no_longer_matches', 'A re-check against the source no longer asserts the advisory — cite it.'],
+                  ['manual_remediation_note', 'A human attests with a reference (ticket, doc, runbook).'],
+                ] as Array<[RemediationEvidenceType, string]>).map(([value, hint]) => (
+                  <label key={value} className="flex items-baseline gap-2 text-xs font-mono text-slate-200">
+                    <input
+                      type="radio"
+                      name="evidence-type"
+                      value={value}
+                      checked={evidenceType === value}
+                      onChange={() => setEvidenceType(value)}
+                    />
+                    <span>
+                      {value.replace(/_/g, ' ')}
+                      <span className="text-slate-500 ml-2">{hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <label className="block">
+              <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+                evidence reference (required — a claim without a citation cannot close the loop)
+              </span>
+              <input
+                type="text"
+                value={evidenceRef}
+                onChange={(e) => setEvidenceRef(e.target.value)}
+                placeholder="PR/commit URL, observed version, re-scan ref, ticket…"
+                maxLength={512}
+                className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">reason (required, 280 max)</span>
+              <input
+                type="text"
+                value={evidenceReason}
+                onChange={(e) => setEvidenceReason(e.target.value)}
+                maxLength={280}
+                className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-1">private note (optional)</span>
+              <textarea
+                value={evidenceReasonPrivate}
+                onChange={(e) => setEvidenceReasonPrivate(e.target.value)}
+                rows={3}
+                className="w-full bg-slate-900 border border-slate-700 px-3 py-1 font-mono text-xs text-slate-100"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleRecordEvidence}
+              disabled={evidencePending}
+              className="px-4 py-2 text-sm font-mono bg-slate-100 text-slate-900 hover:bg-white disabled:opacity-50"
+            >
+              {evidencePending ? 'Recording...' : 'Record remediation evidence'}
+            </button>
+          </div>
         </section>
       )}
 

@@ -48,6 +48,7 @@ export const BUNDLE_PROVES = Object.freeze([
 export const BUNDLE_DOES_NOT_PROVE = Object.freeze([
   'This export is not a compliance certification, and OpenSoyce does not certify controls.',
   'It does not prove a vulnerability was remediated — a recorded direction is not a completed action.',
+  'Remediation evidence, where present, is human-cited: OpenSoyce validates that evidence is present and referenced; it does not verify the fix.',
   'It does not prove the absence of vulnerabilities — "no intelligence recorded" means the record holds none, not that none exist.',
   'It does not replace an auditor or guarantee acceptance by any customer security review.',
 ]);
@@ -95,7 +96,8 @@ const NOT_PRESENT = 'not present in the record';
 export function buildEvidenceBundle(records) {
   const {
     workspace, exposure, intel = [], questions = [], ceiEvents = [],
-    exceptions = [], resolutions = [], timelineEvents = [], generatedAt,
+    exceptions = [], resolutions = [], remediationEvidence = [],
+    timelineEvents = [], generatedAt,
   } = records;
 
   const observedVersion = exposure.metadata && typeof exposure.metadata.version === 'string'
@@ -111,12 +113,20 @@ export function buildEvidenceBundle(records) {
   const expiryPresent = expiredExceptions.length > 0
     || expiredCeiEvents.length > 0 || expiredTimelineEvents.length > 0;
 
+  // PR-16C: the remediation case is DERIVED — a remediation_required
+  // direction opens it; evidence rows mark it evidence_recorded. Evidence
+  // is only "missing" when a direction made it due.
+  const remediationDirected = resolutions.some((r) => r.outcome === 'remediation_required');
+
   const missing = [];
   if (intel.length === 0) missing.push('vulnerability intelligence (no context rows recorded for this observation)');
   if (questions.length === 0) missing.push('remediation questions (none opened from this observation)');
   if (exceptions.length === 0) missing.push('exceptions (no trust decision was proposed from this observation)');
   if (!expiryPresent) missing.push('expiry pressure (no exception from this observation has expired)');
   if (resolutions.length === 0) missing.push('reviewer resolutions (no expired review case has been resolved)');
+  if (remediationDirected && remediationEvidence.length === 0) {
+    missing.push('remediation evidence (a remediation_required direction is recorded; no evidence has been cited yet)');
+  }
   if (ceiEvents.length === 0 && timelineEvents.length === 0) missing.push('receipt events (no CEI or timeline events recorded)');
 
   return {
@@ -239,6 +249,33 @@ export function buildEvidenceBundle(records) {
           created_at: r.created_at,
         })),
       },
+      remediation_evidence: {
+        present: remediationEvidence.length > 0,
+        // The honest distinction, stated in the data itself: the reviewer
+        // DIRECTION (section 7) is what a reviewer said should happen; the
+        // EVIDENCE below is what a human cited as having happened. Neither
+        // is a system verification.
+        note: remediationEvidence.length > 0
+          ? 'Remediation evidence is human-cited. OpenSoyce validates that evidence is present and referenced; it does not verify the fix.'
+          : (remediationDirected
+            ? 'A remediation_required direction is recorded; no remediation evidence has been cited yet. A recorded direction is not completed remediation.'
+            : 'No remediation_required direction is recorded on this chain; no remediation evidence is due.'),
+        case_status: remediationDirected
+          ? (remediationEvidence.length > 0 ? 'evidence_recorded' : 'awaiting_evidence')
+          : 'no_remediation_direction',
+        evidence: remediationEvidence.map((ev) => ({
+          evidence_id: ev.evidence_id,
+          exception_id: ev.exception_id,
+          evidence_type: ev.evidence_type,
+          evidence_ref: ev.evidence_ref,
+          recorded_by: shapeUser(ev.recorded_by),
+          reason_public: ev.reason_public,
+          related_resolution_id: ev.related_resolution_id || null,
+          related_question_id: ev.related_question_id || null,
+          source_vuln_intel_id: ev.source_vuln_intel_id || null,
+          created_at: ev.created_at,
+        })),
+      },
       receipts: {
         present: ceiEvents.length > 0 || timelineEvents.length > 0,
         cei_events: ceiEvents.map((ev) => ({
@@ -262,6 +299,7 @@ export function buildEvidenceBundle(records) {
           question_ids: questions.map((q) => q.question_id),
           exception_ids: exceptions.map((ex) => ex.exception_id),
           resolution_ids: resolutions.map((r) => r.resolution_id),
+          remediation_evidence_ids: remediationEvidence.map((ev) => ev.evidence_id),
         },
       },
     },
@@ -427,9 +465,32 @@ export function renderEvidenceBundleMarkdown(bundle) {
   }
   lines.push('');
 
-  // 8. Receipt trail
+  // 8. Remediation evidence (PR-16C). Placed directly after the reviewer
+  // resolution so the document reads: what the reviewer DIRECTED, then
+  // what a human CITED as having happened — distinct things, both records.
+  const re = s.remediation_evidence;
+  lines.push('## 8. Remediation evidence');
+  lines.push('');
+  lines.push(re.note);
+  lines.push('');
+  if (re.present) {
+    for (const ev of re.evidence) {
+      lines.push(`- Evidence \`${ev.evidence_id}\` on exception \`${ev.exception_id}\` — type: \`${ev.evidence_type}\``);
+      lines.push(`  - reference: ${ev.evidence_ref}`);
+      lines.push(`  - recorded by ${userLabel(ev.recorded_by)} at ${ev.created_at}`);
+      lines.push(`  - reason: ${ev.reason_public}`);
+      if (ev.related_resolution_id) lines.push(`  - answers reviewer direction \`${ev.related_resolution_id}\``);
+      if (ev.related_question_id) lines.push(`  - cites remediation question \`${ev.related_question_id}\``);
+      if (ev.source_vuln_intel_id) lines.push(`  - cites intelligence record \`${ev.source_vuln_intel_id}\``);
+    }
+    lines.push('');
+    lines.push('A recorded direction is not completed remediation; the evidence above is what a human cited as closing the loop.');
+  }
+  lines.push('');
+
+  // 9. Receipt trail
   const rc = s.receipts;
-  lines.push('## 8. Receipt trail');
+  lines.push('## 9. Receipt trail');
   lines.push('');
   if (!rc.present) {
     lines.push(`Receipt events: ${NOT_PRESENT}.`);
@@ -458,10 +519,11 @@ export function renderEvidenceBundleMarkdown(bundle) {
   lines.push(`- remediation questions: ${rc.record_ids.question_ids.length ? rc.record_ids.question_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
   lines.push(`- exceptions: ${rc.record_ids.exception_ids.length ? rc.record_ids.exception_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
   lines.push(`- resolutions: ${rc.record_ids.resolution_ids.length ? rc.record_ids.resolution_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
+  lines.push(`- remediation evidence: ${rc.record_ids.remediation_evidence_ids.length ? rc.record_ids.remediation_evidence_ids.map((x) => `\`${x}\``).join(', ') : NOT_PRESENT}`);
   lines.push('');
 
-  // 9. Honest edges
-  lines.push('## 9. Honest edges');
+  // 10. Honest edges
+  lines.push('## 10. Honest edges');
   lines.push('');
   lines.push('What this export proves:');
   lines.push('');
@@ -498,6 +560,8 @@ const QUESTION_SELECT =
   + ' answered_by_user:answered_by(user_id, github_login, display_name)';
 const RESOLUTION_SELECT =
   '*, resolved_by_user:resolved_by(user_id, github_login, display_name)';
+const RESOLUTION_LIKE_EVIDENCE_SELECT =
+  '*, recorded_by_user:recorded_by(user_id, github_login, display_name)';
 const TIMELINE_SELECT = '*, emitted_by_user:emitted_by(user_id, github_login, display_name)';
 
 // Bounded reads: an evidence chain bigger than these caps is exported up to
@@ -610,6 +674,22 @@ export async function handleGetEvidenceExport(req, res) {
     resolutionRowsRaw = Array.isArray(data) ? data : [];
   }
 
+  // PR-16C: human-cited remediation evidence on those exceptions.
+  let evidenceRowsRaw = [];
+  if (exceptionIds.length > 0) {
+    const { data, error } = await supabase
+      .from('component_remediation_evidence')
+      .select(RESOLUTION_LIKE_EVIDENCE_SELECT)
+      .eq('workspace_id', workspace.workspace_id)
+      .in('exception_id', exceptionIds)
+      .order('created_at', { ascending: true })
+      .limit(MAX_ROWS);
+    if (error) {
+      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: remediation evidence read failed');
+    }
+    evidenceRowsRaw = Array.isArray(data) ? data : [];
+  }
+
   // The Phase 5 timeline receipts for those exceptions.
   let timelineRowsRaw = [];
   if (exceptionIds.length > 0) {
@@ -704,6 +784,18 @@ export async function handleGetEvidenceExport(req, res) {
       renewed_exception_id: r.renewed_exception_id || null,
       linked_question_id: r.linked_question_id || null,
       created_at: r.created_at,
+    })),
+    remediationEvidence: evidenceRowsRaw.map((ev) => ({
+      evidence_id: ev.evidence_id,
+      exception_id: ev.exception_id,
+      evidence_type: ev.evidence_type,
+      evidence_ref: ev.evidence_ref,
+      recorded_by: ev.recorded_by_user || null,
+      reason_public: ev.reason_public,
+      related_resolution_id: ev.related_resolution_id || null,
+      related_question_id: ev.related_question_id || null,
+      source_vuln_intel_id: ev.source_vuln_intel_id || null,
+      created_at: ev.created_at,
     })),
     timelineEvents: timelineRowsRaw.map((ev) => ({
       event_id: ev.event_id,

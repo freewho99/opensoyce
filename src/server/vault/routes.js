@@ -44,6 +44,7 @@ import {
 import { registerCeiRoutes } from '../cei/routes.js';
 import { registerResolutionRoutes } from './resolution-routes.js';
 import { registerEvidenceExportRoutes } from './evidence-export-routes.js';
+import { registerRemediationEvidenceRoutes } from './remediation-evidence-routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -209,4 +210,11 @@ export function registerVaultRoutes(app) {
   // faithful view of the record. Same session middleware, same
   // 404-on-non-member doctrine. No public surface.
   registerEvidenceExportRoutes(app);
+
+  // ---------- Fix Evidence Loop: remediation evidence (PR-16C) ----------
+  // Human-cited evidence that the human says closes the remediation loop.
+  // Append-only; the case is derived from the 16B direction, never stored;
+  // no 'fixed' vocabulary anywhere. Same session + CSRF middleware, same
+  // 404-on-non-member doctrine.
+  registerRemediationEvidenceRoutes(app);
 }

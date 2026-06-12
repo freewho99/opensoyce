@@ -234,8 +234,9 @@ test('full chain: bundle separates the 9 sections and the markdown renders them 
     '## 5. Exception / accepted risk',
     '## 6. Expiry pressure',
     '## 7. Reviewer resolution',
-    '## 8. Receipt trail',
-    '## 9. Honest edges',
+    '## 8. Remediation evidence',
+    '## 9. Receipt trail',
+    '## 10. Honest edges',
   ];
   let last = -1;
   for (const h of headings) {
@@ -243,7 +244,7 @@ test('full chain: bundle separates the 9 sections and the markdown renders them 
     ok(idx > last, `markdown must contain "${h}" after the previous section`);
     last = idx;
   }
-  for (const key of ['observation', 'vulnerability_context', 'remediation_questions', 'exceptions', 'expiry_pressure', 'resolutions', 'receipts']) {
+  for (const key of ['observation', 'vulnerability_context', 'remediation_questions', 'exceptions', 'expiry_pressure', 'resolutions', 'remediation_evidence', 'receipts']) {
     ok(bundle.sections[key], `bundle must carry the ${key} section`);
   }
 });
@@ -302,9 +303,15 @@ test('severity stays in the source vocabulary; nothing maps it to a decision (PR
 test('bare observation: every absent section says not-present; nothing is fabricated (PR-17A)', () => {
   const bundle = buildEvidenceBundle(bareObservation());
   ok(bundle.sections.observation.present === true, 'the observation itself is present');
-  for (const key of ['vulnerability_context', 'remediation_questions', 'exceptions', 'expiry_pressure', 'resolutions', 'receipts']) {
+  for (const key of ['vulnerability_context', 'remediation_questions', 'exceptions', 'expiry_pressure', 'resolutions', 'remediation_evidence', 'receipts']) {
     ok(bundle.sections[key].present === false, `${key} must be marked not present`);
   }
+  // PR-16C: with no remediation_required direction, evidence is not DUE —
+  // it must not appear in the missing list (nothing was owed).
+  ok(!bundle.honest_edges.missing.some((m) => /remediation evidence/.test(m)),
+    'remediation evidence must not be "missing" when no direction made it due');
+  ok(bundle.sections.remediation_evidence.case_status === 'no_remediation_direction',
+    'derived case status must be no_remediation_direction');
   ok(bundle.honest_edges.missing.length >= 5,
     'the honest edges must enumerate the missing chain sections');
   const md = renderEvidenceBundleMarkdown(bundle);

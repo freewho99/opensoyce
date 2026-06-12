@@ -71,7 +71,14 @@ Doctrine on the record: *Observation is not judgment. Repetition is not new evid
 
 Doctrine on the record: *the scanner observes; intelligence adds context; the system asks; the human decides; the record remembers. A remediation question is not a remediation decision.*
 
-**Honest gaps:** a recorded direction is not a completed remediation — nothing verifies that "fix required" was fixed (a fix path is not proof of fix; completion tracking is future work). `due_at` is recorded context with no overdue pressure (lane 16). The answered question is not yet exportable as an auditor packet (lane 17). OpenSoyce opens and records remediation questions for observed component risk; it does not remediate vulnerabilities, fix dependencies automatically, or close vulnerabilities.
+**Evidence (the Fix Evidence Loop shipped by PR-16C, scoped to what shipped):**
+
+- `component_remediation_evidence` — append-only, human-cited evidence records on an exception whose reviewer direction is `remediation_required`: a REQUIRED evidence reference (schema CHECK — evidence without a citation is a claim, and a claim cannot close the loop), one of four bounded evidence-based types (`fixed_version_observed` / `pr_or_commit_reference` / `rescan_no_longer_matches` / `manual_remediation_note`), `recorded_by` NOT NULL (no system evidence exists), required reason, chain citations (resolution / question / intelligence, validated in-workspace, never created)
+- The remediation CASE is **derived, never stored**: a `remediation_required` resolution opens it; evidence rows mark it `evidence_recorded`. No historical record is mutated — not the question, not the exception, not the resolution
+- No verdict vocabulary anywhere: the system validates that evidence is *present and referenced*; it does not verify the fix and never declares anything fixed. The claim, exactly: not "we fixed the vuln" — "we recorded evidence that the human says closes the remediation loop"
+- The evidence export reproduces remediation evidence in its own section, after the reviewer direction, with the distinction stated in the document itself
+
+**Honest gaps:** recorded evidence is human-cited — OpenSoyce does not verify that the cited PR merged, the version shipped, or the re-scan was run (evidence verification is future work, deliberately). `due_at` is recorded context with no overdue pressure (lane 16). OpenSoyce opens and records remediation questions and human-cited remediation evidence for observed component risk; it does not remediate vulnerabilities, fix dependencies automatically, or close vulnerabilities.
 
 ## Q4 — "How do you know risk acceptance was reviewed, and by whom?"
 
@@ -109,7 +116,7 @@ Doctrine: *expiry is time evidence, not reviewer judgment — the reaper observe
 - **Renewal is never silent**: "renew" must cite a NEW exception created through the existing propose lane and approved through the existing reviewer lane with its own fresh expiry — citation coherence is a SQL CHECK, a renewal cannot cite itself, and the resolution module structurally cannot write `vault_exceptions` (no revive, no extension)
 - The full loop is now recorded end to end: approval with required expiry → time elapsed → system observed (16A) → reviewer resolved (16B) — with the original decision preserved at every step
 
-**Honest gaps:** the reaper is an explicit command (safe-by-default dry-run), not a scheduled job — unattended enforcement cadence is an ops decision not yet wired; the first production reap is deliberately manual (human presence for the first live system mutation). A recorded resolution direction is not a completed action — nothing verifies "remediation required" was remediated. The live exception from the proof run (`b777fb25`, expires 2026-07-10) is the first real-world reap-and-resolve candidate.
+**Honest gaps:** the reaper is an explicit command (safe-by-default dry-run), not a scheduled job — unattended enforcement cadence is an ops decision not yet wired; the first production reap is deliberately manual (human presence for the first live system mutation). A recorded resolution direction is not a completed action — when the direction is `remediation_required`, the Fix Evidence Loop (PR-16C, Q3a) records the human-cited evidence that follows; the system still does not verify the fix. The live exception from the proof run (`b777fb25`, expires 2026-07-10) is the first real-world reap-and-resolve candidate.
 
 ## Q6 — "Can you trace a decision back to the observation that prompted it?"
 
@@ -159,7 +166,8 @@ The order is deliberate: prove the loop, translate the proof, then package it. A
 | Gap named above | Lane |
 |---|---|
 | Vulnerability intel joined into the private record | 15A scanner/intel observations — SHIPPED (Q3) |
-| Remediation decisions as first-class reviewable questions | 15B Remediation Question Loop — SHIPPED (Q3a); completion tracking remains future work |
+| Remediation decisions as first-class reviewable questions | 15B Remediation Question Loop — SHIPPED (Q3a) |
+| Remediation evidence (human-cited loop closure) | 16C Fix Evidence Loop — SHIPPED (Q3a); evidence *verification* remains future work |
 | Ecosystems beyond npm, SBOM formats | 15C |
 | Expiry reaper + review pressure | 16A — SHIPPED (Q5); scheduling is an ops decision |
 | Reviewer resolution of expired trust | 16B — SHIPPED (Q5); resolution-completion verification remains future work |
