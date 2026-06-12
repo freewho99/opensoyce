@@ -1,0 +1,2 @@
+[PRIVATE] created dependency-exposure pkg lodash@4.17.21
+[PRIVATE] Ingested 1 dependency-exposure record (0 skipped as already ingested, 0 failed). Exposures observe; they do not decide.
