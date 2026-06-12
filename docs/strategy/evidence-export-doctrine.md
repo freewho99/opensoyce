@@ -94,9 +94,35 @@ Earned because the bundle is projected FROM live production records —
 observation, context, question, decision, pressure, resolution — not
 asserted beside them. The records came first; the export is their view.
 
+## The rollup layer (PR-17B)
+
+The packet lane composes multiple chains into one document:
+
+```txt
+GET /api/vault/workspaces/:slug/evidence-packet
+```
+
+Its doctrine extends this one without changing it:
+
+- **A rollup is composition, not certification.** 17B composes existing
+  truth; it does not create new truth. Every chain in a packet is built
+  by the same per-chain path as the single-chain export; the packet adds
+  counting, grouping, and formatting — never facts.
+- **Mixed states are the honest shape of a live record.** The state
+  rollup reports evidence-recorded, awaiting-evidence, active, expired
+  pending review, expired resolved, and observation-only counts
+  separately. There is no traffic light and no single verdict.
+- **Honest edges scale up.** Packet non-claims, per-chain gaps named per
+  chain, cap notes when bounded, and the selected-packet caveat: the
+  completeness of a caller-supplied selection is the caller's assertion,
+  not OpenSoyce's.
+- **The question map stays internal.** Packets speak the evidence map's
+  Q1–Q7 vocabulary and "may support review" — no official control IDs,
+  no certification verbs.
+
 ## Parked, deliberately
 
-Workspace-wide packets and multi-component roll-ups; PDF; Vanta/Drata
-projection; auditor/customer portals; control-ID matrices; export
-scheduling and delivery. Each requires its own explicit scope block. This
-document authorizes none of them.
+PDF; Vanta/Drata projection; auditor/customer portals; official
+control-ID matrices; a release schema; export scheduling and delivery.
+Each requires its own explicit scope block. This document authorizes
+none of them.

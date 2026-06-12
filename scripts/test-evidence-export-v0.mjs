@@ -249,6 +249,34 @@ test('full chain: bundle separates the 9 sections and the markdown renders them 
   }
 });
 
+test('remediation case status pairs direction to evidence PER EXCEPTION, not chain-wide (PR-16C/17B)', () => {
+  // Two directed exceptions A and B; evidence cites ONLY A. The chain must
+  // read awaiting_evidence (B is unanswered) — not evidence_recorded just
+  // because some evidence exists somewhere in the chain.
+  const records = fullChain();
+  const exA = records.exceptions[0].exception_id;
+  const exB = 'd9999999-9999-9999-9999-999999999999';
+  records.exceptions.push({
+    ...records.exceptions[0],
+    exception_id: exB,
+    expires_at: '2026-06-09T00:00:00.000Z',
+  });
+  records.resolutions = [
+    { resolution_id: 'f1000000-0000-0000-0000-00000000000a', exception_id: exA, outcome: 'remediation_required', resolved_by: { user_id: 'u2', github_login: 'rev', display_name: null }, reason_public: 'fix A', renewed_exception_id: null, linked_question_id: null, created_at: '2026-06-09T00:00:00.000Z' },
+    { resolution_id: 'f2000000-0000-0000-0000-00000000000b', exception_id: exB, outcome: 'remediation_required', resolved_by: { user_id: 'u2', github_login: 'rev', display_name: null }, reason_public: 'fix B', renewed_exception_id: null, linked_question_id: null, created_at: '2026-06-09T00:00:00.000Z' },
+  ];
+  records.remediationEvidence = [
+    { evidence_id: 'aa000000-0000-0000-0000-00000000000a', exception_id: exA, evidence_type: 'fixed_version_observed', evidence_ref: 'A fixed', recorded_by: { user_id: 'u3', github_login: 'closer', display_name: null }, reason_public: 'A done', related_resolution_id: 'f1000000-0000-0000-0000-00000000000a', related_question_id: null, source_vuln_intel_id: null, created_at: '2026-06-10T00:00:00.000Z' },
+  ];
+  const bundle = buildEvidenceBundle(records);
+  ok(bundle.sections.remediation_evidence.case_status === 'awaiting_evidence',
+    `B is directed but unanswered — case must be awaiting_evidence, found ${bundle.sections.remediation_evidence.case_status}`);
+  ok(bundle.honest_edges.missing.some((m) => /remediation evidence/.test(m) && m.includes(exB)),
+    'the missing list must name the still-unanswered exception B');
+  ok(!bundle.honest_edges.missing.some((m) => /remediation evidence/.test(m) && m.includes(exA)),
+    'exception A is answered and must not appear as missing');
+});
+
 test('record identity and timestamps are preserved verbatim (PR-17A)', () => {
   const records = fullChain();
   const bundle = buildEvidenceBundle(records);

@@ -145,7 +145,15 @@ Doctrine: the exposure suggests a trust decision; it does not become one. The tr
 
 Doctrine: *export is not certification; export is not a decision; export is a faithful view of the record.* See [`evidence-export-doctrine.md`](./evidence-export-doctrine.md).
 
-**Honest gaps:** one chain per export — no workspace-wide packet, no multi-component roll-up. No PDF. No Vanta/Drata projection, no auditor portal, no customer portal — the bundle is generated for a workspace member who hands it to their reviewer. A formal control-ID-by-control-ID matrix remains out of scope. The export proves what was recorded; it does not prove remediation happened or certify compliance.
+**Evidence (the rollup packet shipped by PR-17B, scoped to what shipped):**
+
+- A private, workspace-scoped **rollup evidence packet**: GET `/api/vault/workspaces/:slug/evidence-packet` (workspace, selected exposure ids, or source-ref selection), with a generate/copy/download affordance on the workspace home
+- **A rollup is composition, not certification**: every chain in the packet is built by the same per-chain path as the single-chain export — the packet adds counting, grouping, and formatting; it asserts nothing new. Decision-bearing chains appear in full; observation-only exposures appear as a compact inventory
+- **Mixed states stay visible**: the packet-level state rollup reports evidence-recorded / awaiting-evidence / active / expired-pending-review / expired-resolved / observation-only counts separately and never collapses them into a single verdict
+- **Honest edges scale up**: packet non-claims + per-chain gaps named per chain + cap notes ("this packet is a bounded view") + the selected-packet caveat (selection completeness is the caller's assertion)
+- The packet carries this map's **internal Q1–Q7 question vocabulary** ("may support review") and deliberately contains no official control IDs
+
+**Honest gaps:** no PDF. No Vanta/Drata projection, no auditor portal, no customer portal. No official SOC2 CC-series control mapping (requires separate authorization). No release schema — "release-level" is honest caller-driven selection, labeled a *Selected component packet*, never a release attestation. The export and the packet prove what was recorded; they do not prove remediation happened or certify compliance.
 
 ---
 
@@ -172,6 +180,7 @@ The order is deliberate: prove the loop, translate the proof, then package it. A
 | Expiry reaper + review pressure | 16A — SHIPPED (Q5); scheduling is an ops decision |
 | Reviewer resolution of expired trust | 16B — SHIPPED (Q5); resolution-completion verification remains future work |
 | Staleness + due_at pressure | 16+ lifecycle |
-| Auditor / customer evidence bundle (one chain) | 17A — SHIPPED (Q7); workspace-wide packets, PDF, GRC-tool projection remain future lanes |
+| Auditor / customer evidence bundle (one chain) | 17A — SHIPPED (Q7) |
+| Rollup evidence packets (workspace / selected / source-ref) | 17B — SHIPPED (Q7); PDF, GRC projection, official control mapping remain future lanes |
 
 Each requires its own explicit scope block. This document authorizes none of them.

@@ -114,9 +114,17 @@ export function buildEvidenceBundle(records) {
     || expiredCeiEvents.length > 0 || expiredTimelineEvents.length > 0;
 
   // PR-16C: the remediation case is DERIVED — a remediation_required
-  // direction opens it; evidence rows mark it evidence_recorded. Evidence
-  // is only "missing" when a direction made it due.
-  const remediationDirected = resolutions.some((r) => r.outcome === 'remediation_required');
+  // direction opens it; evidence rows mark it evidence_recorded. The
+  // pairing is PER EXCEPTION: a direction on exception A is not answered
+  // by evidence on exception B. Evidence is only "missing" when a
+  // direction made it due and no evidence cites that direction's
+  // exception.
+  const directedExceptionIds = new Set(
+    resolutions.filter((r) => r.outcome === 'remediation_required').map((r) => r.exception_id),
+  );
+  const evidencedExceptionIds = new Set(remediationEvidence.map((ev) => ev.exception_id));
+  const remediationDirected = directedExceptionIds.size > 0;
+  const unansweredDirectedIds = [...directedExceptionIds].filter((id) => !evidencedExceptionIds.has(id));
 
   const missing = [];
   if (intel.length === 0) missing.push('vulnerability intelligence (no context rows recorded for this observation)');
@@ -124,8 +132,8 @@ export function buildEvidenceBundle(records) {
   if (exceptions.length === 0) missing.push('exceptions (no trust decision was proposed from this observation)');
   if (!expiryPresent) missing.push('expiry pressure (no exception from this observation has expired)');
   if (resolutions.length === 0) missing.push('reviewer resolutions (no expired review case has been resolved)');
-  if (remediationDirected && remediationEvidence.length === 0) {
-    missing.push('remediation evidence (a remediation_required direction is recorded; no evidence has been cited yet)');
+  if (remediationDirected && unansweredDirectedIds.length > 0) {
+    missing.push(`remediation evidence (a remediation_required direction is recorded; ${unansweredDirectedIds.length} directed exception(s) have no evidence cited yet: ${unansweredDirectedIds.join(', ')})`);
   }
   if (ceiEvents.length === 0 && timelineEvents.length === 0) missing.push('receipt events (no CEI or timeline events recorded)');
 
@@ -256,12 +264,14 @@ export function buildEvidenceBundle(records) {
         // EVIDENCE below is what a human cited as having happened. Neither
         // is a system verification.
         note: remediationEvidence.length > 0
-          ? 'Remediation evidence is human-cited. OpenSoyce validates that evidence is present and referenced; it does not verify the fix.'
+          ? (unansweredDirectedIds.length > 0
+            ? 'Remediation evidence is human-cited and some directed exceptions remain unanswered — the evidence below answers only the exceptions it cites. OpenSoyce validates that evidence is present and referenced; it does not verify the fix.'
+            : 'Remediation evidence is human-cited. OpenSoyce validates that evidence is present and referenced; it does not verify the fix.')
           : (remediationDirected
             ? 'A remediation_required direction is recorded; no remediation evidence has been cited yet. A recorded direction is not completed remediation.'
             : 'No remediation_required direction is recorded on this chain; no remediation evidence is due.'),
         case_status: remediationDirected
-          ? (remediationEvidence.length > 0 ? 'evidence_recorded' : 'awaiting_evidence')
+          ? (unansweredDirectedIds.length === 0 ? 'evidence_recorded' : 'awaiting_evidence')
           : 'no_remediation_direction',
         evidence: remediationEvidence.map((ev) => ({
           evidence_id: ev.evidence_id,
@@ -570,22 +580,16 @@ const MAX_ROWS = 200;
 const MAX_EXCEPTIONS = 25;
 
 /**
- * GET /api/vault/workspaces/:slug/exposures/:id/evidence-export
+ * Load one component trust-decision chain and build its bundle. The single
+ * reusable per-chain path: the 17A single-chain export and the 17B rollup
+ * BOTH call this — per-chain logic exists exactly once. READ-ONLY: selects
+ * only; the record is unchanged by exporting it.
  *
- * Assemble the evidence bundle for one component trust-decision chain.
- * READ-ONLY: this handler performs selects only; the record is unchanged
- * by exporting it. Responds with both the JSON bundle and its Markdown
- * rendering. Private: session + workspace membership; 404-on-non-member.
+ * Returns { bundle } | { notFound: true } | { error: <stage message> }.
+ * The caller resolves workspace membership FIRST — this function trusts
+ * the workspace row it is handed and scopes every read to it.
  */
-export async function handleGetEvidenceExport(req, res) {
-  const slug = (req.params && req.params.slug) || '';
-  const exposureId = (req.params && req.params.id) || '';
-  const resolved = await resolveWorkspaceForMember(req, res, slug);
-  if (!resolved) return;
-  const { workspace } = resolved;
-
-  const supabase = vaultDb();
-
+export async function loadEvidenceBundleForExposure(supabase, workspace, slug, exposureId, generatedAt) {
   // The anchor: the observation itself.
   const { data: exposureRows, error: exposureError } = await supabase
     .from('component_exposures')
@@ -594,11 +598,11 @@ export async function handleGetEvidenceExport(req, res) {
     .eq('exposure_id', exposureId)
     .limit(1);
   if (exposureError) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: exposure read failed');
+    return { error: 'evidence export: exposure read failed' };
   }
   const exposureRow = Array.isArray(exposureRows) && exposureRows[0];
   if (!exposureRow) {
-    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+    return { notFound: true };
   }
 
   // Context: what the source asserted about this observation.
@@ -610,7 +614,7 @@ export async function handleGetEvidenceExport(req, res) {
     .order('last_seen_at', { ascending: false })
     .limit(MAX_ROWS);
   if (intelError) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: intelligence read failed');
+    return { error: 'evidence export: intelligence read failed' };
   }
 
   // Questions opened from this observation.
@@ -622,7 +626,7 @@ export async function handleGetEvidenceExport(req, res) {
     .order('created_at', { ascending: true })
     .limit(MAX_ROWS);
   if (questionError) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: question read failed');
+    return { error: 'evidence export: question read failed' };
   }
 
   // CEI relationship events — also the only place the exposure->exception
@@ -635,7 +639,7 @@ export async function handleGetEvidenceExport(req, res) {
     .order('created_at', { ascending: true })
     .limit(MAX_ROWS);
   if (ceiError) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: event read failed');
+    return { error: 'evidence export: event read failed' };
   }
   const ceiEvents = Array.isArray(ceiEventRows) ? ceiEventRows : [];
 
@@ -653,7 +657,7 @@ export async function handleGetEvidenceExport(req, res) {
       .in('exception_id', exceptionIds)
       .order('proposed_at', { ascending: true });
     if (error) {
-      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: exception read failed');
+      return { error: 'evidence export: exception read failed' };
     }
     exceptionRowsRaw = Array.isArray(data) ? data : [];
   }
@@ -669,7 +673,7 @@ export async function handleGetEvidenceExport(req, res) {
       .order('created_at', { ascending: true })
       .limit(MAX_ROWS);
     if (error) {
-      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: resolution read failed');
+      return { error: 'evidence export: resolution read failed' };
     }
     resolutionRowsRaw = Array.isArray(data) ? data : [];
   }
@@ -685,7 +689,7 @@ export async function handleGetEvidenceExport(req, res) {
       .order('created_at', { ascending: true })
       .limit(MAX_ROWS);
     if (error) {
-      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: remediation evidence read failed');
+      return { error: 'evidence export: remediation evidence read failed' };
     }
     evidenceRowsRaw = Array.isArray(data) ? data : [];
   }
@@ -701,7 +705,7 @@ export async function handleGetEvidenceExport(req, res) {
       .order('emitted_at', { ascending: true })
       .limit(MAX_ROWS);
     if (error) {
-      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence export: timeline read failed');
+      return { error: 'evidence export: timeline read failed' };
     }
     timelineRowsRaw = Array.isArray(data) ? data : [];
   }
@@ -805,12 +809,40 @@ export async function handleGetEvidenceExport(req, res) {
       emitted_by: ev.emitted_by_user || null,
       emitted_at: ev.emitted_at,
     })),
-    generatedAt: new Date().toISOString(),
+    generatedAt,
   });
 
+  return { bundle };
+}
+
+/**
+ * GET /api/vault/workspaces/:slug/exposures/:id/evidence-export
+ *
+ * Assemble the evidence bundle for one component trust-decision chain.
+ * READ-ONLY: this handler performs selects only; the record is unchanged
+ * by exporting it. Responds with both the JSON bundle and its Markdown
+ * rendering. Private: session + workspace membership; 404-on-non-member.
+ */
+export async function handleGetEvidenceExport(req, res) {
+  const slug = (req.params && req.params.slug) || '';
+  const exposureId = (req.params && req.params.id) || '';
+  const resolved = await resolveWorkspaceForMember(req, res, slug);
+  if (!resolved) return;
+  const { workspace } = resolved;
+
+  const supabase = vaultDb();
+  const result = await loadEvidenceBundleForExposure(
+    supabase, workspace, slug, exposureId, new Date().toISOString(),
+  );
+  if (result.error) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, result.error);
+  }
+  if (result.notFound) {
+    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+  }
   res.status(200).json({
-    bundle,
-    markdown: renderEvidenceBundleMarkdown(bundle),
+    bundle: result.bundle,
+    markdown: renderEvidenceBundleMarkdown(result.bundle),
     visibility: 'private',
   });
 }
