@@ -1,0 +1,25 @@
+{
+  "event_id": "811e7d9a-fcad-468e-bf1f-5907ca3b48a3",
+  "event_type": "remediation_evidence.recorded",
+  "workspace": {
+    "workspace_id": "7cf6a34b-c00f-441b-a0c0-62a248f5c640",
+    "slug": "opensoyce"
+  },
+  "occurred_at": "2026-06-12T09:05:04.911703+00:00",
+  "actor": {
+    "github_login": "freewho99"
+  },
+  "record_ids": {
+    "exception_id": "888aae0f-eb07-4eec-a16a-a093294b8c76",
+    "evidence_id": "a74873ec-7af8-4ec8-b054-7a8ef63e1a8d",
+    "resolution_id": "c2d42dd3-9b8b-481e-b2c5-7592ec7a8253",
+    "exposure_id": "65d32e84-a27c-4855-a60b-c6b0be47f285"
+  },
+  "state": "evidence_recorded",
+  "non_claim": "A webhook notifies that a record changed; it does not certify the meaning of the change.",
+  "remediation_evidence": {
+    "evidence_type": "fixed_version_observed",
+    "evidence_ref": "lodash@4.17.21 follow-up observation (exposure 28f6c108-60ec-4841-88c9-85af11ab086f) — PR-PROOF-5 webhook transport dogfood",
+    "related_resolution_id": "c2d42dd3-9b8b-481e-b2c5-7592ec7a8253"
+  }
+}
