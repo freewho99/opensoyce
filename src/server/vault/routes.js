@@ -46,6 +46,7 @@ import { registerResolutionRoutes } from './resolution-routes.js';
 import { registerEvidenceExportRoutes } from './evidence-export-routes.js';
 import { registerRemediationEvidenceRoutes } from './remediation-evidence-routes.js';
 import { registerEvidenceRollupRoutes } from './evidence-rollup-routes.js';
+import { registerTrustRecordRoutes } from './trust-record-routes.js';
 
 export function registerVaultRoutes(app) {
   // OAuth login is the only Vault route that does NOT require a session
@@ -225,4 +226,11 @@ export function registerVaultRoutes(app) {
   // same session middleware, same 404-on-non-member doctrine. No public
   // surface.
   registerEvidenceRollupRoutes(app);
+
+  // ---------- Trust Record API + webhooks (PR-17C) ----------
+  // The API exposes records; it does not create new trust conclusions.
+  // Stable reads accept a session OR a read-only API token; management
+  // routes stay session-only. Make the record portable, not more
+  // opinionated. No public surface.
+  registerTrustRecordRoutes(app);
 }

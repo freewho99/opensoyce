@@ -21,7 +21,10 @@
 
 import { vaultDb } from './db.js';
 import { sendError, ERROR_CODES } from './errors.js';
-import { resolveWorkspaceForMember } from './rbac.js';
+// PR-17C: the packet is part of the stable read API — a session member OR
+// a read-only API token may generate it. Membership semantics for
+// sessions are unchanged inside resolveWorkspaceForReader.
+import { resolveWorkspaceForReader } from './reader-auth.js';
 import {
   loadEvidenceBundleForExposure,
   BUNDLE_DOES_NOT_PROVE,
@@ -394,28 +397,17 @@ function shapeInventoryRow(row) {
 }
 
 /**
- * GET /api/vault/workspaces/:slug/evidence-packet
- *
- * Query (all optional):
- *   exposure_ids=<uuid,uuid,...>  selected-component packet
- *   source_ref=<ref>              packet scoped to one ingest source ref
- *   (neither)                     workspace packet
- *
- * READ-ONLY: selection + per-chain loads + pure composition. The record
- * is unchanged by generating a packet. Private: session + workspace
- * membership; 404-on-non-member.
+ * Parse + validate the packet selection query. Returns { requestedIds,
+ * sourceRef } or sends the 400 and returns null. Shared by the packet
+ * route and the 17C trust-record list.
  */
-export async function handleGetEvidencePacket(req, res) {
-  const slug = (req.params && req.params.slug) || '';
-  const resolved = await resolveWorkspaceForMember(req, res, slug);
-  if (!resolved) return;
-  const { workspace } = resolved;
-
+export function parsePacketSelection(req, res) {
   // Repeated query params parse to arrays — refuse rather than silently
   // widening a selected request into a whole-workspace packet.
   if ((req.query?.exposure_ids !== undefined && typeof req.query.exposure_ids !== 'string')
     || (req.query?.source_ref !== undefined && typeof req.query.source_ref !== 'string')) {
-    return sendError(res, 400, ERROR_CODES.bad_request, 'exposure_ids and source_ref must each be provided at most once');
+    sendError(res, 400, ERROR_CODES.bad_request, 'exposure_ids and source_ref must each be provided at most once');
+    return null;
   }
   const rawIds = typeof req.query?.exposure_ids === 'string' ? req.query.exposure_ids : '';
   const sourceRef = typeof req.query?.source_ref === 'string' ? req.query.source_ref : '';
@@ -423,19 +415,29 @@ export async function handleGetEvidencePacket(req, res) {
     ? [...new Set(rawIds.split(',').map((s) => s.trim()).filter(Boolean))]
     : [];
   if (requestedIds.length > 0 && requestedIds.some((id) => !UUID_RE.test(id))) {
-    return sendError(res, 400, ERROR_CODES.bad_request, 'exposure_ids must be a comma-separated list of UUIDs');
+    sendError(res, 400, ERROR_CODES.bad_request, 'exposure_ids must be a comma-separated list of UUIDs');
+    return null;
   }
   if (requestedIds.length > MAX_PACKET_CHAINS) {
-    return sendError(res, 400, ERROR_CODES.bad_request,
+    sendError(res, 400, ERROR_CODES.bad_request,
       `a packet covers at most ${MAX_PACKET_CHAINS} chains in full detail — request fewer exposure_ids per packet`);
+    return null;
   }
   if (sourceRef.length > 512) {
-    return sendError(res, 400, ERROR_CODES.bad_request, 'source_ref must be at most 512 characters');
+    sendError(res, 400, ERROR_CODES.bad_request, 'source_ref must be at most 512 characters');
+    return null;
   }
+  return { requestedIds, sourceRef };
+}
 
-  const supabase = vaultDb();
-  const generatedAt = new Date().toISOString();
-
+/**
+ * Select, load, and compose the evidence packet. The single selection +
+ * composition path: the packet route AND the 17C trust-record list both
+ * call this — selection logic exists exactly once. READ-ONLY.
+ *
+ * Returns { packet } | { notFound: true } | { error: <message> }.
+ */
+export async function composeEvidencePacket(supabase, workspace, slug, { requestedIds = [], sourceRef = '', generatedAt }) {
   // Scan the candidate exposures for this selection. Bounded read,
   // newest activity first.
   let scanQuery = supabase
@@ -455,11 +457,11 @@ export async function handleGetEvidencePacket(req, res) {
   }
   const { data: scanRows, error: scanError } = await scanQuery;
   if (scanError) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence packet: exposure scan failed');
+    return { error: 'evidence packet: exposure scan failed' };
   }
   const exposures = Array.isArray(scanRows) ? scanRows : [];
   if (requestedIds.length > 0 && exposures.length === 0) {
-    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+    return { notFound: true };
   }
   const exposureIds = exposures.map((e) => e.exposure_id);
   // Partially-resolved selections are DISCLOSED, never silently dropped:
@@ -486,7 +488,7 @@ export async function handleGetEvidencePacket(req, res) {
       .order('created_at', { ascending: false })
       .limit(1000);
     if (eventError) {
-      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence packet: event scan failed');
+      return { error: 'evidence packet: event scan failed' };
     }
     const events = Array.isArray(eventRows) ? eventRows : [];
     if (events.length === 1000) detectionSaturated = true;
@@ -499,7 +501,7 @@ export async function handleGetEvidencePacket(req, res) {
       .order('created_at', { ascending: false })
       .limit(1000);
     if (questionError) {
-      return sendError(res, 503, ERROR_CODES.vault_db_unavailable, 'evidence packet: question scan failed');
+      return { error: 'evidence packet: question scan failed' };
     }
     const questions = Array.isArray(questionRows) ? questionRows : [];
     if (questions.length === 1000) detectionSaturated = true;
@@ -545,7 +547,7 @@ export async function handleGetEvidencePacket(req, res) {
   ));
   const loadError = chainResults.find((r) => r.error);
   if (loadError) {
-    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, loadError.error);
+    return { error: loadError.error };
   }
   const chainBundles = chainResults.filter((r) => r.bundle).map((r) => r.bundle);
 
@@ -574,9 +576,44 @@ export async function handleGetEvidencePacket(req, res) {
     generatedAt,
   });
 
+  return { packet };
+}
+
+/**
+ * GET /api/vault/workspaces/:slug/evidence-packet
+ *
+ * Query (all optional):
+ *   exposure_ids=<uuid,uuid,...>  selected-component packet
+ *   source_ref=<ref>              packet scoped to one ingest source ref
+ *   (neither)                     workspace packet
+ *
+ * READ-ONLY: selection + per-chain loads + pure composition. The record
+ * is unchanged by generating a packet. Private: session (membership) OR
+ * read-only API token (PR-17C reader auth); 404-on-non-member either way.
+ */
+export async function handleGetEvidencePacket(req, res) {
+  const slug = (req.params && req.params.slug) || '';
+  const resolved = await resolveWorkspaceForReader(req, res, slug);
+  if (!resolved) return;
+  const { workspace } = resolved;
+
+  const selection = parsePacketSelection(req, res);
+  if (!selection) return;
+
+  const supabase = vaultDb();
+  const result = await composeEvidencePacket(supabase, workspace, slug, {
+    ...selection,
+    generatedAt: new Date().toISOString(),
+  });
+  if (result.error) {
+    return sendError(res, 503, ERROR_CODES.vault_db_unavailable, result.error);
+  }
+  if (result.notFound) {
+    return sendError(res, 404, ERROR_CODES.not_found, 'not found');
+  }
   res.status(200).json({
-    packet,
-    markdown: renderEvidencePacketMarkdown(packet),
+    packet: result.packet,
+    markdown: renderEvidencePacketMarkdown(result.packet),
     visibility: 'private',
   });
 }

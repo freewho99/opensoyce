@@ -531,6 +531,91 @@ export async function getEvidencePacket(slug: string, opts?: { exposureIds?: str
   });
 }
 
+// ---------- Trust Record API + webhooks (PR-17C) ----------
+//
+// The API exposes records; it does not create new trust conclusions.
+// Token and webhook MANAGEMENT is session + CSRF + owner; the dashboard
+// uses these helpers. Machine consumers use `Authorization: Bearer osy_…`
+// directly against the stable read endpoints — no helper needed here.
+
+export interface VaultApiToken {
+  token_id: string;
+  workspace_id: string;
+  token_name: string;
+  scope: 'read';
+  created_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  visibility: 'private';
+}
+
+export async function listApiTokens(slug: string) {
+  return vaultRequest<{ tokens: VaultApiToken[]; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/api-tokens`,
+  });
+}
+
+export async function mintApiTokenRequest(slug: string, tokenName: string) {
+  return vaultRequest<{ token: VaultApiToken; raw_token: string; raw_token_notice: string; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/api-tokens`,
+    method: 'POST',
+    body: { token_name: tokenName },
+  });
+}
+
+export async function revokeApiToken(slug: string, tokenId: string) {
+  return vaultRequest<{ token: VaultApiToken; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/api-tokens/${encodeURIComponent(tokenId)}/revoke`,
+    method: 'POST',
+    body: {},
+  });
+}
+
+export type WebhookEventType =
+  | 'exception.expired'
+  | 'reviewer_resolution.recorded'
+  | 'remediation_evidence.recorded';
+
+export interface VaultWebhook {
+  subscription_id: string;
+  workspace_id: string;
+  target_url: string;
+  event_types: WebhookEventType[];
+  created_by: { user_id: string; github_login: string; display_name: string | null } | null;
+  created_at: string;
+  disabled_at: string | null;
+  visibility: 'private';
+}
+
+export async function listWebhooks(slug: string) {
+  return vaultRequest<{ webhooks: VaultWebhook[]; event_types: WebhookEventType[]; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/webhooks`,
+  });
+}
+
+export async function createWebhook(slug: string, body: { target_url: string; event_types: WebhookEventType[] }) {
+  return vaultRequest<{
+    webhook: VaultWebhook;
+    signing_secret: string;
+    signing_secret_notice: string;
+    signature_header: string;
+    visibility: 'private';
+  }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/webhooks`,
+    method: 'POST',
+    body,
+  });
+}
+
+export async function disableWebhook(slug: string, subscriptionId: string) {
+  return vaultRequest<{ webhook: VaultWebhook; visibility: 'private' }>({
+    path: `/api/vault/workspaces/${encodeURIComponent(slug)}/webhooks/${encodeURIComponent(subscriptionId)}/disable`,
+    method: 'POST',
+    body: {},
+  });
+}
+
 // ---------- CLI device-code approval ----------
 
 export async function approveCliCode(userCode: string) {

@@ -407,7 +407,10 @@ test('rollup module is read-only and reuses the single per-chain path (PR-17B)',
     'resolution loading belongs to the per-chain path, not the rollup');
   ok(!/from\(['"]component_remediation_evidence['"]\)/.test(src),
     'evidence loading belongs to the per-chain path, not the rollup');
-  ok(/resolveWorkspaceForMember/.test(src), 'membership-gated');
+  // PR-17C: the packet joined the stable read API — a session member OR a
+  // read-only API token resolves through resolveWorkspaceForReader
+  // (membership semantics unchanged for sessions).
+  ok(/resolveWorkspaceForReader/.test(src), 'reader-gated (session membership or read-only token)');
   const summarySrc = stripJsComments(read(MODULE));
   ok(/summarizeChainBundle/.test(summarySrc), 'summaries are pure extraction from bundles');
 });
@@ -416,11 +419,13 @@ test('rollup module is read-only and reuses the single per-chain path (PR-17B)',
 // Routes, client, guard, wiring
 // ---------------------------------------------------------------------------
 
-test('packet route: own registrar, GET-only, session-gated, vault-prefixed (PR-17B)', () => {
+test('packet route: own registrar, GET-only, reader-gated, vault-prefixed (PR-17B)', () => {
   const routes = read(ROUTES);
   const getBlock = routes.match(/app\.get\(\s*'\/api\/vault\/workspaces\/:slug\/evidence-packet'[\s\S]*?\);/);
   ok(getBlock, 'GET evidence-packet route must be registered');
-  ok(/requireVaultSession/.test(getBlock[0]), 'packet must require a vault session — no public surface');
+  // PR-17C: reader auth = session OR read-only API token; still no
+  // public surface (unauthenticated -> 401 either way).
+  ok(/requireVaultReader/.test(getBlock[0]), 'packet must require a vault reader — no public surface');
   ok(!/app\.(post|patch|delete|put)\(/.test(routes), 'no mutating verb in the packet lane');
   const literals = [...routes.matchAll(/'(\/api\/[^']+)'/g)].map((m) => m[1]);
   ok(literals.length === 1 && literals[0].startsWith('/api/vault/'), 'one literal, private prefix');
