@@ -1,0 +1,26 @@
+{
+  "exception_id": "b777fb25-d024-4571-8e8f-5471e7653671",
+  "workspace_id": "7cf6a34b-c00f-441b-a0c0-62a248f5c640",
+  "subject_kind": "package",
+  "subject_name": "express",
+  "state": "active",
+  "original_action": "BLOCK",
+  "allowed_action": "WARN",
+  "proposed_by": "a95395e5-d59e-4d98-9928-511d730f2512",
+  "proposed_at": "2026-06-10T17:31:18.818234+00:00",
+  "reviewed_by": "a95395e5-d59e-4d98-9928-511d730f2512",
+  "reviewed_at": "2026-06-10T17:32:36.064+00:00",
+  "expires_at": "2026-07-10T17:32:32.433+00:00",
+  "reason_public": "Proposed from dependency-exposure exposure of express",
+  "reason_private": "Source: cli (c:\\tmp\\dogfood-deps.json).\nExposure: 92c698f4-1e25-4d6a-ac0e-ccd223d31889 (dependency-exposure), status observed.\nTrust boundary: {\n  \"manifest_kind\": \"explicit-json\",\n  \"package_manager\": \"npm\"\n}\nMetadata: {\n  \"dev\": false,\n  \"package\": \"express\",\n  \"version\": \"4.21.2\",\n  \"dependency_class\": \"prod\"\n}",
+  "proof_anchors": [
+    {
+      "href": "/api/vault/workspaces/opensoyce/exposures/92c698f4-1e25-4d6a-ac0e-ccd223d31889",
+      "label": "Proposed from component exposure 92c698f4",
+      "proofType": "live-surface"
+    }
+  ],
+  "revoked_at": null,
+  "revoked_by": null,
+  "revoke_reason": null
+}
